@@ -1,4 +1,4 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { 
   DollarSign, 
@@ -7,9 +7,9 @@ import {
   Calendar,
   LogOut,
   Menu,
-  X
+  X,
+  Truck, // 👈 nuevo icono
 } from 'lucide-react';
-import { useState } from 'react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -22,11 +22,22 @@ const navigationItems = [
   { id: 'agente', name: 'Agente', icon: Bot },
   { id: 'crm', name: 'CRM', icon: Users },
   { id: 'agenda', name: 'Agenda', icon: Calendar },
+  { id: 'envios', name: 'Envíos', icon: Truck }, // 👈 nuevo item
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) => {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Normalizador para el título
+  const pageTitle = (() => {
+    if (currentPage === 'crm') return 'CRM';
+    if (currentPage === 'envios') return 'Envíos';
+    if (currentPage === 'agenda') return 'Agenda';
+    if (currentPage === 'precios') return 'Precios';
+    if (currentPage === 'agente') return 'Agente';
+    return currentPage.charAt(0).toUpperCase() + currentPage.slice(1);
+  })();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -39,9 +50,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-200/50 transform transition-transform duration-300 md:translate-x-0 ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <div
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-200/50 transform transition-transform duration-300 md:translate-x-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200/50">
@@ -93,7 +106,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center">
                   <span className="text-white font-semibold text-sm">
-                    {user?.email.charAt(0).toUpperCase()}
+                    {user?.email?.charAt(0).toUpperCase?.()}
                   </span>
                 </div>
                 <span className="text-sm font-medium text-gray-700 truncate max-w-[120px]">
@@ -123,17 +136,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h1 className="text-2xl font-bold text-gray-800 capitalize">
-              {currentPage === 'crm' ? 'CRM' : currentPage}
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-800">{pageTitle}</h1>
             <div className="w-10 md:w-0" /> {/* Spacer for mobile */}
           </div>
         </header>
 
         {/* Page content */}
-        <main className="p-6">
-          {children}
-        </main>
+        <main className="p-6">{children}</main>
       </div>
     </div>
   );

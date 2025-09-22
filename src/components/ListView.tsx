@@ -63,12 +63,14 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   }, [clients]);
 
   const handleToggleColumn = (column: string) => {
-    const newVisible = visibleColumns.includes(column)
-      ? visibleColumns.filter(col => col !== column)
-      : [...visibleColumns, column];
-    setVisibleColumns(newVisible);
-    localStorage.setItem('crm-visible-columns', JSON.stringify(newVisible));
-  };
+    setVisibleColumns(prev => {
+      const newVisible = prev.includes(column)
+        ? prev.filter(col => col !== column)
+        : [...prev, column];
+      localStorage.setItem('crm-visible-columns', JSON.stringify(newVisible));
+      return newVisible;
+    });
+  }; 
 
   /** ===== Opciones dinámicas (según petición/data) ===== */
   const etapasOptions = useMemo(() => collectUnique(clients, 'estado_etapa'), [clients]);

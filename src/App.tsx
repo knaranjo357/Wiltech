@@ -6,6 +6,8 @@ import { PreciosPage } from './pages/PreciosPage';
 import { AgentePage } from './pages/AgentePage';
 import { CRMPage } from './pages/CRMPage';
 import { AgendaPage } from './pages/AgendaPage';
+import { EnviosPage  } from './pages/EnviosPage';
+
 
 function App() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -15,6 +17,7 @@ function App() {
     if (path === '/agente') return 'agente';
     if (path === '/crm') return 'crm';
     if (path === '/agenda') return 'agenda';
+    if (path === '/envios') return 'EnviosPage';
     return 'precios';
   });
 
@@ -26,6 +29,8 @@ function App() {
       else if (path === '/crm') setCurrentPage('crm');
       else if (path === '/agenda') setCurrentPage('agenda');
       else if (path === '/login') setCurrentPage('login');
+      else if (path === '/envios') setCurrentPage('envios');
+      
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -63,6 +68,8 @@ function App() {
         return <CRMPage />;
       case 'agenda':
         return <AgendaPage />;
+      case 'envios':
+        return <EnviosPage />;
       default:
         return <PreciosPage />;
     }
