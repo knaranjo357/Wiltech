@@ -73,6 +73,16 @@ const isYesterdayLocal = (s?: string | null) => {
   return sameLocalDay(d, y);
 };
 
+// Fechas futuras que no son hoy/mañana/ayer (>= pasado mañana 00:00)
+const isFutureBeyondTomorrowLocal = (s?: string | null) => {
+  const d = parseAgendaDate(s);
+  if (!d) return false;
+  const boundary = new Date();
+  boundary.setHours(0, 0, 0, 0);
+  boundary.setDate(boundary.getDate() + 2); // pasado mañana 00:00
+  return d.getTime() >= boundary.getTime();
+};
+
 const displayDate = (s?: string | null) => {
   const d = parseAgendaDate(s);
   if (!d) return 'Fecha inválida';
@@ -85,7 +95,7 @@ const displayDate = (s?: string | null) => {
 };
 /** ============================================================= */
 
-type DateFilter = 'today' | 'tomorrow' | 'yesterday' | 'custom';
+type DateFilter = 'today' | 'tomorrow' | 'yesterday' | 'custom' | 'future';
 
 export const AgendaPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -137,6 +147,11 @@ export const AgendaPage: React.FC = () => {
           isYesterdayLocal((c as any).fecha_agenda)
         );
         break;
+      case 'future':
+        filtered = clients.filter((c) =>
+          isFutureBeyondTomorrowLocal((c as any).fecha_agenda)
+        );
+        break;
       case 'custom':
         if (customDate) {
           const [y, m, d] = customDate.split('-').map(Number);
@@ -167,6 +182,9 @@ export const AgendaPage: React.FC = () => {
       .length,
     yesterday: clients.filter((c) => isYesterdayLocal((c as any).fecha_agenda))
       .length,
+    future: clients.filter((c) =>
+      isFutureBeyondTomorrowLocal((c as any).fecha_agenda)
+    ).length,
   };
 
   const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
@@ -211,6 +229,16 @@ export const AgendaPage: React.FC = () => {
               }`}
             >
               📋 Ayer ({stats.yesterday})
+            </button>
+            <button
+              onClick={() => setDateFilter('future')}
+              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                dateFilter === 'future'
+                  ? 'bg-gradient-to-r from-fuchsia-600 to-fuchsia-700 text-white shadow-lg scale-105'
+                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
+              }`}
+            >
+              🔮 Futuras ({stats.future})
             </button>
           </div>
 
@@ -330,6 +358,7 @@ export const AgendaPage: React.FC = () => {
                 {dateFilter === 'today' && 'No hay citas programadas para hoy'}
                 {dateFilter === 'tomorrow' && 'No hay citas programadas para mañana'}
                 {dateFilter === 'yesterday' && 'No hubo citas programadas ayer'}
+                {dateFilter === 'future' && 'No hay citas programadas en fechas futuras'}
                 {dateFilter === 'custom' && 'No hay citas para la fecha seleccionada'}
               </p>
             </div>
