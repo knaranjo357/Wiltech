@@ -5,24 +5,44 @@ import { ClientService } from '../services/clientService';
 import { formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 
-const hasEnvioInfo = (c: Client): boolean => {
-  // Prioriza existencia de cualquier campo de guía / envío
-  return Boolean(
-    (c.guia_nombre_completo && String(c.guia_nombre_completo).trim()) ||
-      (c.guia_cedula_id && String(c.guia_cedula_id).trim()) ||
-      (c.guia_telefono && String(c.guia_telefono).trim()) ||
-      (c.guia_direccion && String(c.guia_direccion).trim()) ||
-      (c.guia_ciudad && String(c.guia_ciudad).trim()) ||
-      (c.guia_departamento_estado && String(c.guia_departamento_estado).trim()) ||
-      (c.guia_email && String(c.guia_email).trim()) ||
-      (c.guia_numero_ida && String(c.guia_numero_ida).trim()) ||
-      (c.guia_numero_retorno && String(c.guia_numero_retorno).trim()) ||
-      (c.asegurado && String(c.asegurado).trim()) ||
-      (c.valor_seguro !== null && c.valor_seguro !== undefined && String(c.valor_seguro).trim())
-  );
+/** ================== Normalizadores & validaciones ================== */
+const normalize = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+
+/** Canoniza para comparar valores “no válidos” (sin tildes, signos, guiones/underscores, espacios múltiples) */
+const canon = (v: unknown) =>
+  String(v ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+/** “No aplica” no debe contar como valor válido (pediste excluir: "No aplica", "no_aplica", "no aplica", "no") */
+const isInvalidNoAplica = (v: unknown) => {
+  const c = canon(v);
+  return c === '' || c === 'no aplica' || c === 'no';
 };
 
-const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+/**
+ * Mostrar SOLO registros que tengan:
+ * - SEDE (agenda_ciudad_sede)
+ * - CIUDAD (guia_ciudad)
+ * - DIRECCIÓN (guia_direccion)
+ * Y además, que ninguno de esos tres sea "No aplica"/"no_aplica"/"no aplica"/"no".
+ */
+const hasSedeCiudadDireccionValid = (c: Client): boolean => {
+  const sede = c?.agenda_ciudad_sede != null ? String(c.agenda_ciudad_sede).trim() : '';
+  const ciudad = c?.guia_ciudad != null ? String(c.guia_ciudad).trim() : '';
+  const direccion = c?.guia_direccion != null ? String(c.guia_direccion).trim() : '';
+
+  if (!sede || !ciudad || !direccion) return false;
+  if (isInvalidNoAplica(sede) || isInvalidNoAplica(ciudad) || isInvalidNoAplica(direccion)) return false;
+
+  return true;
+};
 
 export const EnviosPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -30,10 +50,10 @@ export const EnviosPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const [cityFilter, setCityFilter] = useState<string>('');
-  const [sedeFilter, setSedeFilter] = useState<string>(''); // 👈 filtro por agenda_ciudad_sede
+  const [sedeFilter, setSedeFilter] = useState<string>('');
   const [search, setSearch] = useState<string>('');
 
-  const [viewClient, setViewClient] = useState<Client | null>(null); // 👈 modal
+  const [viewClient, setViewClient] = useState<Client | null>(null);
 
   const fetchClients = async () => {
     try {
@@ -41,7 +61,8 @@ export const EnviosPage: React.FC = () => {
       setError(null);
       const data = await ClientService.getClients();
       const arr = Array.isArray(data) ? (data as Client[]) : [];
-      setClients(arr.filter(hasEnvioInfo)); // 👈 solo con info de envíos
+      // 👇 Solo con SEDE+CIUDAD+DIRECCIÓN válidos y que NO sean “No aplica”
+      setClients(arr.filter(hasSedeCiudadDireccionValid));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar envíos');
     } finally {
@@ -53,22 +74,22 @@ export const EnviosPage: React.FC = () => {
     fetchClients();
   }, []);
 
-  // ciudades únicas (prioriza guia_ciudad; si no, ciudad)
+  // Ciudades únicas (solo válidas)
   const cities = useMemo(() => {
     const s = new Set<string>();
     clients.forEach((c) => {
-      const city = (c.guia_ciudad && String(c.guia_ciudad).trim()) || (c.ciudad && String(c.ciudad).trim()) || '';
-      if (city) s.add(city);
+      const city = (c.guia_ciudad && String(c.guia_ciudad).trim()) || '';
+      if (city && !isInvalidNoAplica(city)) s.add(city);
     });
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [clients]);
 
-  // sedes únicas (agenda_ciudad_sede)
+  // Sedes únicas (solo válidas)
   const sedes = useMemo(() => {
     const s = new Set<string>();
     clients.forEach((c) => {
       const sede = (c.agenda_ciudad_sede && String(c.agenda_ciudad_sede).trim()) || '';
-      if (sede) s.add(sede);
+      if (sede && !isInvalidNoAplica(sede)) s.add(sede);
     });
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [clients]);
@@ -78,18 +99,12 @@ export const EnviosPage: React.FC = () => {
 
     if (cityFilter) {
       const nf = normalize(cityFilter);
-      data = data.filter((c) => {
-        const city = (c.guia_ciudad && String(c.guia_ciudad).trim()) || (c.ciudad && String(c.ciudad).trim()) || '';
-        return normalize(city) === nf;
-      });
+      data = data.filter((c) => normalize(String(c.guia_ciudad || '')) === nf);
     }
 
     if (sedeFilter) {
       const nf = normalize(sedeFilter);
-      data = data.filter((c) => {
-        const sede = (c.agenda_ciudad_sede && String(c.agenda_ciudad_sede).trim()) || '';
-        return normalize(sede) === nf;
-      });
+      data = data.filter((c) => normalize(String(c.agenda_ciudad_sede || '')) === nf);
     }
 
     if (search.trim()) {
@@ -100,7 +115,7 @@ export const EnviosPage: React.FC = () => {
         const dir = normalize(String(c.guia_direccion || ''));
         const ida = normalize(String(c.guia_numero_ida || ''));
         const ret = normalize(String(c.guia_numero_retorno || ''));
-        const ciudad = normalize(String(c.guia_ciudad || c.ciudad || ''));
+        const ciudad = normalize(String(c.guia_ciudad || ''));
         const sede = normalize(String(c.agenda_ciudad_sede || ''));
         const tel = String(c.whatsapp || '').replace('@s.whatsapp.net', '');
         return (
@@ -139,7 +154,7 @@ export const EnviosPage: React.FC = () => {
           <div>
             <h2 className="text-lg font-semibold text-gray-800">Gestión de Envíos</h2>
             <p className="text-sm text-gray-500">
-              {total} registro{total !== 1 ? 's' : ''} con información de guía
+              {total} registro{total !== 1 ? 's' : ''} con SEDE, CIUDAD y DIRECCIÓN válidos
             </p>
           </div>
         </div>
@@ -163,7 +178,7 @@ export const EnviosPage: React.FC = () => {
               value={cityFilter}
               onChange={(e) => setCityFilter(e.target.value)}
               className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-500"
-              title="Filtrar por ciudad (destino)"
+              title="Filtrar por ciudad (guía)"
             >
               <option value="">Todas las ciudades</option>
               {cities.map((c) => (
@@ -228,7 +243,7 @@ export const EnviosPage: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Cliente</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">WhatsApp</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Sede</th> {/* agenda_ciudad_sede */}
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Sede</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ciudad</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Dirección</th>
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Guía ida</th>
@@ -239,19 +254,22 @@ export const EnviosPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((c, i) => {
-                  const ciudad = (c.guia_ciudad && String(c.guia_ciudad).trim()) || String(c.ciudad || '');
+                  const ciudad = String(c.guia_ciudad || '');
                   const direccion = String(c.guia_direccion || '');
                   const ida = String(c.guia_numero_ida || '');
                   const ret = String(c.guia_numero_retorno || '');
                   const asegurado = String(c.asegurado || '');
-                  const valorSeguro = c.valor_seguro !== undefined && c.valor_seguro !== null ? String(c.valor_seguro) : '';
+                  const valorSeguro =
+                    c.valor_seguro !== undefined && c.valor_seguro !== null
+                      ? String(c.valor_seguro)
+                      : '';
                   const sede = String(c.agenda_ciudad_sede || '');
 
                   return (
                     <tr
                       key={`${c.row_number}-${i}`}
                       className="hover:bg-gradient-to-r hover:from-purple-50/50 hover:to-blue-50/50 transition-colors cursor-pointer"
-                      onClick={() => setViewClient(c)} // 👈 abre modal
+                      onClick={() => setViewClient(c)}
                       tabIndex={0}
                       role="button"
                     >
@@ -279,7 +297,7 @@ export const EnviosPage: React.FC = () => {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
-                      No hay registros de envíos que coincidan con el filtro.
+                      No hay registros que cumplan con SEDE, CIUDAD y DIRECCIÓN (sin “No aplica”).
                     </td>
                   </tr>
                 )}
