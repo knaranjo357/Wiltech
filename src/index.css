@@ -1,3 +1,233 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* =========================
+   Tokens & helpers globales
+   ========================= */
+:root {
+  --radius: 0.75rem;
+}
+
+@keyframes float {
+  0%,100% { transform: translateY(0) }
+  50% { transform: translateY(-4px) }
+}
+@keyframes shimmer {
+  100% { background-position: 200% 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px) }
+  to   { opacity: 1; transform: translateY(0) }
+}
+
+/* =========================
+   BASE
+   ========================= */
+@layer base {
+  html { @apply scroll-smooth; color-scheme: light dark; }
+  *, *::before, *::after { @apply antialiased; }
+
+  body {
+    @apply bg-neutral-50 text-neutral-900 selection:bg-indigo-200/60 selection:text-neutral-900
+           dark:bg-neutral-950 dark:text-neutral-100 dark:selection:bg-indigo-400/30;
+  }
+
+  /* Tipografía base y titulares */
+  h1 { @apply text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-balance; }
+  h2 { @apply text-3xl md:text-4xl font-semibold tracking-tight text-balance; }
+  h3 { @apply text-2xl md:text-3xl font-semibold tracking-tight; }
+  h4 { @apply text-xl md:text-2xl font-semibold; }
+  p  { @apply leading-relaxed; }
+
+  /* Enlaces */
+  a {
+    @apply underline decoration-2 underline-offset-4 text-indigo-600 hover:text-indigo-500
+           decoration-indigo-400/30 hover:decoration-indigo-500 transition-colors
+           dark:text-indigo-400 dark:hover:text-indigo-300;
+  }
+
+  /* Separador y medios */
+  hr { @apply my-8 border-t border-neutral-200/70 dark:border-neutral-800; }
+  img, video, canvas { @apply rounded-xl; }
+
+  /* Código */
+  code { @apply px-1.5 py-0.5 rounded-md bg-neutral-100 text-neutral-800
+                 dark:bg-neutral-900 dark:text-neutral-100; }
+  pre {
+    @apply p-4 rounded-xl bg-neutral-900 text-neutral-100 overflow-x-auto shadow-inner;
+  }
+  pre code { @apply bg-transparent p-0; }
+
+  /* Formularios base */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  input[type="tel"],
+  textarea,
+  select {
+    @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 shadow-sm
+           placeholder:text-neutral-400
+           focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500
+           dark:border-neutral-700 dark:bg-neutral-900 dark:placeholder:text-neutral-500
+           dark:focus:ring-indigo-400/60;
+  }
+
+  /* Scrollbar bonito (webkit) */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-neutral-300/70 hover:bg-neutral-400/80
+           dark:bg-neutral-700/70 dark:hover:bg-neutral-600/80;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+/* =========================
+   COMPONENTES
+   ========================= */
+@layer components {
+  /* Contenedor con padding fluido */
+  .container-p {
+    @apply mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Tarjeta */
+  .card {
+    @apply rounded-2xl border border-neutral-200/70 bg-white/90 shadow-sm
+           dark:bg-neutral-900/80 dark:border-neutral-800;
+    backdrop-filter: blur(6px);
+  }
+  .card-hover {
+    @apply transition hover:shadow-md hover:-translate-y-0.5
+           dark:hover:shadow-neutral-900/60;
+  }
+  .card-body { @apply p-5 sm:p-6; }
+
+  /* Botones (sólido, sutil, fantasma, peligro) */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium
+           ring-1 ring-black/5 shadow-sm transition
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
+           disabled:opacity-50 disabled:pointer-events-none
+           dark:focus-visible:ring-offset-neutral-900;
+  }
+  .btn-primary {
+    @apply btn bg-indigo-600 text-white hover:bg-indigo-500 focus-visible:ring-indigo-500;
+  }
+  .btn-secondary {
+    @apply btn bg-neutral-100 text-neutral-900 hover:bg-neutral-200
+           focus-visible:ring-neutral-400
+           dark:bg-neutral-800 dark:text-neutral-100 dark:hover:bg-neutral-700;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-neutral-900 hover:bg-neutral-100
+           dark:text-neutral-100 dark:hover:bg-neutral-800;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 text-white hover:bg-rose-500 focus-visible:ring-rose-500;
+  }
+  .btn-icon { @apply btn p-2.5 aspect-square; }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium
+           border-neutral-200/70 text-neutral-700 bg-neutral-50
+           dark:border-neutral-700 dark:text-neutral-200 dark:bg-neutral-800;
+  }
+  .badge-success { @apply border-emerald-300/60 bg-emerald-50 text-emerald-700
+                            dark:border-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300; }
+  .badge-info    { @apply border-sky-300/60 bg-sky-50 text-sky-700
+                            dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-300; }
+
+  /* Inputs compuestos con icono */
+  .input-wrap {
+    @apply group relative flex items-center rounded-lg ring-1 ring-neutral-300 bg-white
+           focus-within:ring-2 focus-within:ring-indigo-500
+           dark:ring-neutral-700 dark:bg-neutral-900 dark:focus-within:ring-indigo-400;
+  }
+  .input-wrap > .icon {
+    @apply pl-3 text-neutral-400 dark:text-neutral-500;
+  }
+  .input-wrap > input {
+    @apply w-full bg-transparent px-3 py-2 outline-none;
+  }
+
+  /* Lista/ítem interactivo (por ej. en menús) */
+  .item {
+    @apply flex items-center justify-between gap-3 rounded-lg px-3 py-2
+           hover:bg-neutral-100 active:bg-neutral-200 transition
+           dark:hover:bg-neutral-800 dark:active:bg-neutral-700;
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    @apply animate-pulse rounded-lg bg-neutral-200/80 dark:bg-neutral-700/60;
+  }
+
+  /* Glassmorphism utilitario */
+  .glass {
+    @apply bg-white/50 dark:bg-neutral-900/40 border border-white/20 dark:border-white/10;
+    backdrop-filter: blur(10px);
+  }
+
+  /* Título de sección */
+  .section-title {
+    @apply text-sm font-semibold tracking-wider uppercase text-neutral-500
+           dark:text-neutral-400;
+    letter-spacing: 0.12em;
+  }
+
+  /* Divider elegante */
+  .divider {
+    @apply relative my-8 text-center;
+  }
+  .divider::before, .divider::after {
+    content: "";
+    @apply absolute top-1/2 h-px w-1/3 -translate-y-1/2 bg-neutral-200/80
+           dark:bg-neutral-800;
+  }
+  .divider::before { left: 0; }
+  .divider::after { right: 0; }
+}
+
+/* =========================
+   UTILIDADES EXTRA
+   ========================= */
+@layer utilities {
+  .text-balance { text-wrap: balance; } /* títulos que no “se rompen feo” */
+  .floaty      { animation: float 4s ease-in-out infinite; }
+  .fade-in     { animation: fade-in .5s ease-out both; }
+
+  /* “Shimmer” para placeholders o CTAs */
+  .shimmer {
+    background-image: linear-gradient(90deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,.4) 20%,
+      rgba(255,255,255,0) 40%);
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Fondo degradado sexy sin plugins */
+  .bg-hero {
+    background-image:
+      radial-gradient(80% 60% at 50% -10%, rgba(99,102,241,.25), transparent 60%),
+      radial-gradient(60% 50% at 100% 0%, rgba(56,189,248,.20), transparent 50%),
+      radial-gradient(80% 50% at 0% 0%, rgba(236,72,153,.20), transparent 60%);
+  }
+
+  /* Sombras de elevación */
+  .shadow-elevated { box-shadow:
+    0 1px 2px rgba(0,0,0,.04),
+    0 8px 20px rgba(0,0,0,.08);
+  }
+
+  /* Radios consistentes */
+  .rounded-sys { border-radius: var(--radius); }
+  .rounded-sys-lg { border-radius: calc(var(--radius) + .25rem); }
+}

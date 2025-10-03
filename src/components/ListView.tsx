@@ -17,6 +17,10 @@ const labelize = (v?: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// helpers SEGURAS para convertir a texto (¡declaradas antes de usarlas!)
+const asText = (v: unknown) => String(v ?? '').toLowerCase();
+const asStr  = (v: unknown) => String(v ?? '');
+
 const normalize = (s: string) =>
   s.toLowerCase().replace(/[_\-\s]+/g, ' ').trim();
 
@@ -54,6 +58,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
     const saved = localStorage.getItem('crm-visible-columns');
     return saved ? JSON.parse(saved) : [];
   });
+
   useEffect(() => {
     if (allColumns.length > 0 && visibleColumns.length === 0) {
       setVisibleColumns(allColumns.slice(0, 8));
@@ -70,9 +75,9 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
       localStorage.setItem('crm-visible-columns', JSON.stringify(newVisible));
       return newVisible;
     });
-  }; 
+  };
 
-  /** ===== Opciones dinámicas (según petición/data) ===== */
+  /** ===== Opciones dinámicas (según data) ===== */
   const etapasOptions = useMemo(() => collectUnique(clients, 'estado_etapa'), [clients]);
   const categoriasOptions = useMemo(() => collectUnique(clients, 'categoria_contacto'), [clients]);
   const ciudadOptions = useMemo(() => collectUnique(clients, 'ciudad'), [clients]);
@@ -112,15 +117,17 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const filteredAndSorted = useMemo(() => {
     let data = [...clients];
 
-    // filtro búsqueda
+    // filtro búsqueda (todo convertido a texto seguro)
     if (searchTerm) {
       const q = searchTerm.toLowerCase();
+
       data = data.filter((c) => {
-        const nombre = c.nombre?.toLowerCase() ?? '';
-        const modelo = (c as any).modelo?.toLowerCase?.() ?? '';
-        const whatsapp = c.whatsapp ?? '';
-        const ciudad = c.ciudad?.toLowerCase() ?? '';
-        const notas = (c as any).notas?.toLowerCase?.() ?? '';
+        const nombre   = asText(c.nombre);
+        const modelo   = asText((c as any).modelo);
+        const whatsapp = asStr(c.whatsapp); // SIEMPRE string
+        const ciudad   = asText(c.ciudad);
+        const notas    = asText((c as any).notas);
+
         return (
           nombre.includes(q) ||
           modelo.includes(q) ||
@@ -131,7 +138,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
       });
     }
 
-    // filtros chips (normalizados para aceptar variantes)
+    // filtros chips (normalizados)
     if (selectedEtapas.length > 0) {
       const setN = new Set(selectedEtapas.map(normalize));
       data = data.filter(c => setN.has(normalize(String((c as any).estado_etapa ?? ''))));
@@ -210,7 +217,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
 
   const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const phoneNumber = (whatsapp || '').replace('@s.whatsapp.net', '');
+    const phoneNumber = asStr(whatsapp).replace('@s.whatsapp.net', '');
     const whatsappUrl = `https://wa.me/${phoneNumber}`;
     window.open(whatsappUrl, '_blank');
   };
@@ -620,6 +627,13 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}
         client={viewClient}
+        onUpdate={async (payload) => {
+          const ok = await onUpdate(payload);
+          if (ok && viewClient && payload.row_number === viewClient.row_number) {
+            setViewClient({ ...viewClient, ...payload } as any);
+          }
+          return ok;
+        }}
       />
     </div>
   );

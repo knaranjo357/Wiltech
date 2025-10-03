@@ -20,7 +20,7 @@ const canon = (v: unknown) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** “No aplica” no debe contar como valor válido (pediste excluir: "No aplica", "no_aplica", "no aplica", "no") */
+/** “No aplica” no debe contar como valor válido */
 const isInvalidNoAplica = (v: unknown) => {
   const c = canon(v);
   return c === '' || c === 'no aplica' || c === 'no';
@@ -37,10 +37,8 @@ const hasSedeCiudadDireccionValid = (c: Client): boolean => {
   const sede = c?.agenda_ciudad_sede != null ? String(c.agenda_ciudad_sede).trim() : '';
   const ciudad = c?.guia_ciudad != null ? String(c.guia_ciudad).trim() : '';
   const direccion = c?.guia_direccion != null ? String(c.guia_direccion).trim() : '';
-
   if (!sede || !ciudad || !direccion) return false;
   if (isInvalidNoAplica(sede) || isInvalidNoAplica(ciudad) || isInvalidNoAplica(direccion)) return false;
-
   return true;
 };
 
@@ -55,13 +53,13 @@ export const EnviosPage: React.FC = () => {
 
   const [viewClient, setViewClient] = useState<Client | null>(null);
 
+  /** === Carga inicial === */
   const fetchClients = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await ClientService.getClients();
       const arr = Array.isArray(data) ? (data as Client[]) : [];
-      // 👇 Solo con SEDE+CIUDAD+DIRECCIÓN válidos y que NO sean “No aplica”
       setClients(arr.filter(hasSedeCiudadDireccionValid));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar envíos');
@@ -74,7 +72,91 @@ export const EnviosPage: React.FC = () => {
     fetchClients();
   }, []);
 
-  // Ciudades únicas (solo válidas)
+  /** === Sincronización con otras vistas/pestañas === */
+  useEffect(() => {
+    // Parche local cuando otra vista del mismo SPA dispare el evento
+    const onExternalUpdate = (ev: Event) => {
+      const detail = (ev as CustomEvent<Partial<Client>>).detail;
+      if (!detail || !('row_number' in detail)) return;
+
+      setClients(prev => {
+        const next = prev.map(c =>
+          c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c
+        );
+        return next.filter(hasSedeCiudadDireccionValid);
+      });
+
+      setViewClient(v => {
+        if (!v || !detail || v.row_number !== detail.row_number) return v;
+        const merged = { ...v, ...detail } as Client;
+        return hasSedeCiudadDireccionValid(merged) ? merged : null;
+      });
+    };
+
+    window.addEventListener('client:updated', onExternalUpdate as any);
+
+    // Si el cambio vino desde otra pestaña/route, re-fetch rápido
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'crm:client-updated' && e.newValue) {
+        fetchClients();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('client:updated', onExternalUpdate as any);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  /** === Opcional: estado de guardado por si quieres bloquear algo en la tabla === */
+  const [savingRow, setSavingRow] = useState<number | null>(null);
+
+  /** === onUpdate usado por el modal (mismo contrato que en ListView) === */
+  const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
+    if (!payload.row_number) return false;
+
+    // --- OPTIMISTA + ROLLBACK ---
+    setSavingRow(payload.row_number);
+    const prevClients = clients;
+    const prevView = viewClient;
+
+    // Parchea y respeta el filtro de "válidos" inmediatamente
+    const patchedClients = prevClients
+      .map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c)
+      .filter(hasSedeCiudadDireccionValid);
+    setClients(patchedClients);
+
+    setViewClient(v => {
+      if (!v || v.row_number !== payload.row_number) return v;
+      const merged = { ...v, ...payload } as Client;
+      return hasSedeCiudadDireccionValid(merged) ? merged : null;
+    });
+
+    try {
+      if (typeof (ClientService as any).updateClient === 'function') {
+        await (ClientService as any).updateClient(payload);
+      } else {
+        await fetch('/api/clients/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+      return true;
+    } catch (e) {
+      // --- ROLLBACK si falla ---
+      setClients(prevClients);
+      setViewClient(prevView);
+      setError('No se pudo guardar los cambios');
+      return false;
+    } finally {
+      setSavingRow(null);
+    }
+  };
+
+
+  /** === Ciudades & Sedes únicas (derivadas del estado “clients”) === */
   const cities = useMemo(() => {
     const s = new Set<string>();
     clients.forEach((c) => {
@@ -84,7 +166,6 @@ export const EnviosPage: React.FC = () => {
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [clients]);
 
-  // Sedes únicas (solo válidas)
   const sedes = useMemo(() => {
     const s = new Set<string>();
     clients.forEach((c) => {
@@ -94,6 +175,7 @@ export const EnviosPage: React.FC = () => {
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [clients]);
 
+  /** === Filtrado + Orden === */
   const filtered = useMemo(() => {
     let data = [...clients];
 
@@ -131,7 +213,7 @@ export const EnviosPage: React.FC = () => {
       });
     }
 
-    // Orden sugerido: por número de guía ida descendente (string compare numérico)
+    // Orden sugerido: guía ida (desc)
     data.sort((a, b) => {
       const aIda = String(a.guia_numero_ida || '');
       const bIda = String(b.guia_numero_ida || '');
@@ -143,6 +225,7 @@ export const EnviosPage: React.FC = () => {
 
   const total = filtered.length;
 
+  /** === Render === */
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -151,7 +234,7 @@ export const EnviosPage: React.FC = () => {
           <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center">
             <Truck className="w-5 h-5 text-purple-600" />
           </div>
-          <div>
+        <div>
             <h2 className="text-lg font-semibold text-gray-800">Gestión de Envíos</h2>
             <p className="text-sm text-gray-500">
               {total} registro{total !== 1 ? 's' : ''} con SEDE, CIUDAD y DIRECCIÓN válidos
@@ -198,9 +281,11 @@ export const EnviosPage: React.FC = () => {
             onClick={fetchClients}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 active:scale-[0.99] transition"
             aria-label="Recargar"
+            disabled={loading || savingRow !== null}
+            title={savingRow !== null ? 'Guardando cambios…' : 'Recargar'}
           >
             <RefreshCw className="w-4 h-4" />
-            <span className="text-sm">Recargar</span>
+            <span className="text-sm">{savingRow !== null ? 'Guardando…' : 'Recargar'}</span>
           </button>
         </div>
       </div>
@@ -272,6 +357,7 @@ export const EnviosPage: React.FC = () => {
                       onClick={() => setViewClient(c)}
                       tabIndex={0}
                       role="button"
+                      aria-label={`Abrir modal de ${c.nombre || 'cliente'}`}
                     >
                       <td className="px-4 py-4">
                         <div className="text-gray-900 font-medium">{c.nombre || 'Sin nombre'}</div>
@@ -312,6 +398,7 @@ export const EnviosPage: React.FC = () => {
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}
         client={viewClient}
+        onUpdate={onUpdate}
       />
     </div>
   );

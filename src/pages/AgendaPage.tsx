@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Calendar, Clock, RefreshCw, Phone, X } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { Client } from '../types/client';
 import { getEtapaColor, getCategoriaColor, formatWhatsApp } from '../utils/clientHelpers';
+import { ClientModal } from '../components/ClientModal';
 
 /** ================== Utils de fecha (robustos) ================== */
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
@@ -95,17 +96,23 @@ const displayDate = (s?: string | null) => {
 };
 /** ============================================================= */
 
+/** ================== Normalizador texto ================== */
+const normalize = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim();
+
 type DateFilter = 'today' | 'tomorrow' | 'yesterday' | 'custom' | 'future';
 
 export const AgendaPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
-  const [filteredClients, setFilteredClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [customDate, setCustomDate] = useState('');
-  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [nameFilter, setNameFilter] = useState('');
+  const [viewClient, setViewClient] = useState<Client | null>(null);
+  const [savingRow, setSavingRow] = useState<number | null>(null);
 
+  /** === Carga inicial === */
   const fetchClients = async () => {
     try {
       setLoading(true);
@@ -129,34 +136,95 @@ export const AgendaPage: React.FC = () => {
     fetchClients();
   }, []);
 
-  // Filtrado por fecha + orden por hora
+  /** === Sincronización con otras vistas/pestañas === */
   useEffect(() => {
-    let filtered = clients;
+    const onExternalUpdate = (ev: Event) => {
+      const detail = (ev as CustomEvent<Partial<Client>>).detail;
+      if (!detail || !('row_number' in detail)) return;
 
+      setClients(prev => prev.map(c => c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c));
+      setViewClient(v => (v && detail && v.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v));
+    };
+
+    window.addEventListener('client:updated', onExternalUpdate as any);
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'crm:client-updated' && e.newValue) {
+        fetchClients();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('client:updated', onExternalUpdate as any);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
+
+  /** === Guardado (mismo contrato que en ListView / EnviosPage) === */
+  const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
+    if (!payload.row_number) return false;
+
+    // --- OPTIMISTA: parchea inmediatamente y guarda snapshot para rollback ---
+    setSavingRow(payload.row_number);
+    const prevClients = clients;
+    const prevView = viewClient;
+
+    setClients(prev =>
+      prev.map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c)
+    );
+    setViewClient(v =>
+      (v && v.row_number === payload.row_number) ? ({ ...v, ...payload } as Client) : v
+    );
+
+    try {
+      // Intenta con el servicio (no dependas del shape de la respuesta)
+      if (typeof (ClientService as any).updateClient === 'function') {
+        await (ClientService as any).updateClient(payload);
+      } else {
+        // Fallback HTTP si aplica en tu app
+        await fetch('/api/clients/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+      return true;
+    } catch (e) {
+      // --- ROLLBACK si falla ---
+      setClients(prevClients);
+      setViewClient(prevView);
+      setError('No se pudo guardar los cambios');
+      return false;
+    } finally {
+      setSavingRow(null);
+    }
+  };
+
+
+  /** === Lista filtrada (fecha + nombre) === */
+  const filteredClients = useMemo(() => {
+    let filtered = [...clients];
+
+    // Filtro por fecha
     switch (dateFilter) {
       case 'today':
-        filtered = clients.filter((c) => isTodayLocal((c as any).fecha_agenda));
+        filtered = filtered.filter((c) => isTodayLocal((c as any).fecha_agenda));
         break;
       case 'tomorrow':
-        filtered = clients.filter((c) =>
-          isTomorrowLocal((c as any).fecha_agenda)
-        );
+        filtered = filtered.filter((c) => isTomorrowLocal((c as any).fecha_agenda));
         break;
       case 'yesterday':
-        filtered = clients.filter((c) =>
-          isYesterdayLocal((c as any).fecha_agenda)
-        );
+        filtered = filtered.filter((c) => isYesterdayLocal((c as any).fecha_agenda));
         break;
       case 'future':
-        filtered = clients.filter((c) =>
-          isFutureBeyondTomorrowLocal((c as any).fecha_agenda)
-        );
+        filtered = filtered.filter((c) => isFutureBeyondTomorrowLocal((c as any).fecha_agenda));
         break;
       case 'custom':
         if (customDate) {
           const [y, m, d] = customDate.split('-').map(Number);
           const sel = new Date(y, (m ?? 1) - 1, d ?? 1, 0, 0, 0);
-          filtered = clients.filter((c) => {
+          filtered = filtered.filter((c) => {
             const cd = parseAgendaDate((c as any).fecha_agenda);
             return cd ? sameLocalDay(cd, sel) : false;
           });
@@ -166,25 +234,28 @@ export const AgendaPage: React.FC = () => {
         break;
     }
 
+    // Filtro por nombre (normalizado)
+    const q = normalize(nameFilter);
+    if (q) {
+      filtered = filtered.filter(c => normalize(String(c.nombre ?? ''))?.includes(q));
+    }
+
+    // Orden por hora ascendente
     filtered.sort((a, b) => {
       const ta = parseAgendaDate((a as any).fecha_agenda)?.getTime() ?? 0;
       const tb = parseAgendaDate((b as any).fecha_agenda)?.getTime() ?? 0;
       return ta - tb;
     });
 
-    setFilteredClients(filtered);
-  }, [clients, dateFilter, customDate]);
+    return filtered;
+  }, [clients, dateFilter, customDate, nameFilter]);
 
   // Contadores para los botones
   const stats = {
     today: clients.filter((c) => isTodayLocal((c as any).fecha_agenda)).length,
-    tomorrow: clients.filter((c) => isTomorrowLocal((c as any).fecha_agenda))
-      .length,
-    yesterday: clients.filter((c) => isYesterdayLocal((c as any).fecha_agenda))
-      .length,
-    future: clients.filter((c) =>
-      isFutureBeyondTomorrowLocal((c as any).fecha_agenda)
-    ).length,
+    tomorrow: clients.filter((c) => isTomorrowLocal((c as any).fecha_agenda)).length,
+    yesterday: clients.filter((c) => isYesterdayLocal((c as any).fecha_agenda)).length,
+    future: clients.filter((c) => isFutureBeyondTomorrowLocal((c as any).fecha_agenda)).length,
   };
 
   const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
@@ -196,64 +267,99 @@ export const AgendaPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Filtros por fecha */}
+      {/* Header de filtros (fecha + nombre) */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/40 p-6">
-        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
-          <div className="flex gap-2 flex-wrap flex-1">
-            <button
-              onClick={() => setDateFilter('today')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
-                dateFilter === 'today'
-                  ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
-              }`}
-            >
-              📅 Hoy ({stats.today})
-            </button>
-            <button
-              onClick={() => setDateFilter('tomorrow')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
-                dateFilter === 'tomorrow'
-                  ? 'bg-gradient-to-r from-green-600 to-green-700 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
-              }`}
-            >
-              ⏰ Mañana ({stats.tomorrow})
-            </button>
-            <button
-              onClick={() => setDateFilter('yesterday')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
-                dateFilter === 'yesterday'
-                  ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
-              }`}
-            >
-              📋 Ayer ({stats.yesterday})
-            </button>
-            <button
-              onClick={() => setDateFilter('future')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
-                dateFilter === 'future'
-                  ? 'bg-gradient-to-r from-fuchsia-600 to-fuchsia-700 text-white shadow-lg scale-105'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
-              }`}
-            >
-              🔮 Futuras ({stats.future})
-            </button>
+        <div className="flex flex-col gap-4">
+          {/* Filtros por fecha */}
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+            <div className="flex gap-2 flex-wrap flex-1">
+              <button
+                onClick={() => setDateFilter('today')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                  dateFilter === 'today'
+                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg scale-105'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
+                }`}
+              >
+                📅 Hoy ({stats.today})
+              </button>
+              <button
+                onClick={() => setDateFilter('tomorrow')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                  dateFilter === 'tomorrow'
+                    ? 'bg-gradient-to-r from-green-600 to-green-700 text-white shadow-lg scale-105'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
+                }`}
+              >
+                ⏰ Mañana ({stats.tomorrow})
+              </button>
+              <button
+                onClick={() => setDateFilter('yesterday')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                  dateFilter === 'yesterday'
+                    ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-lg scale-105'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
+                }`}
+              >
+                📋 Ayer ({stats.yesterday})
+              </button>
+              <button
+                onClick={() => setDateFilter('future')}
+                className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 transform hover:scale-105 ${
+                  dateFilter === 'future'
+                    ? 'bg-gradient-to-r from-fuchsia-600 to-fuchsia-700 text-white shadow-lg scale-105'
+                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200 shadow-sm'
+                }`}
+              >
+                🔮 Futuras ({stats.future})
+              </button>
+            </div>
+
+            <div className="flex items-center space-x-3 bg-gradient-to-r from-purple-50 to-pink-50 p-3 rounded-xl border border-purple-200">
+              <Calendar className="w-5 h-5 text-purple-600" />
+              <span className="text-sm font-medium text-purple-700">Fecha específica:</span>
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => {
+                  setCustomDate(e.target.value);
+                  setDateFilter('custom');
+                }}
+                className="px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300 bg-white"
+              />
+            </div>
           </div>
 
-          <div className="flex items-center space-x-3 bg-gradient-to-r from-purple-50 to-pink-50 p-3 rounded-xl border border-purple-200">
-            <Calendar className="w-5 h-5 text-purple-600" />
-            <span className="text-sm font-medium text-purple-700">Fecha específica:</span>
-            <input
-              type="date"
-              value={customDate}
-              onChange={(e) => {
-                setCustomDate(e.target.value);
-                setDateFilter('custom');
-              }}
-              className="px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-300 bg-white"
-            />
+          {/* Filtro por nombre */}
+          <div className="flex items-center gap-2">
+            <div className="relative w-full max-w-md">
+              <input
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+                placeholder="Filtrar por nombre…"
+                className="w-full pl-3 pr-9 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+              />
+              {nameFilter && (
+                <button
+                  title="Limpiar"
+                  onClick={() => setNameFilter('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md hover:bg-gray-100"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={fetchClients}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 active:scale-[0.99] transition"
+              aria-label="Recargar"
+              disabled={loading || savingRow !== null}
+              title={savingRow !== null ? 'Guardando cambios…' : 'Recargar'}
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="text-sm">{savingRow !== null ? 'Guardando…' : 'Recargar'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -283,10 +389,11 @@ export const AgendaPage: React.FC = () => {
               {filteredClients.map((client) => (
                 <div
                   key={client.row_number}
-                  onClick={() => setSelectedClient(client)}
+                  onClick={() => setViewClient(client)}
                   className="p-6 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-purple-50/50 transition-all duration-300 cursor-pointer"
                   role="button"
                   tabIndex={0}
+                  aria-label={`Abrir modal de ${client.nombre || 'cliente'}`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
@@ -327,9 +434,8 @@ export const AgendaPage: React.FC = () => {
                         onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
                         className="flex items-center text-green-600 hover:text-green-700 font-medium transition-colors duration-300 group mb-2 ml-auto"
                       >
-                        <span className="text-sm">
-                          {formatWhatsApp(client.whatsapp as any)}
-                        </span>
+                        <Phone className="w-4 h-4 mr-2" />
+                        <span className="text-sm">{formatWhatsApp(client.whatsapp as any)}</span>
                       </button>
 
                       <div className="flex items-center gap-2 justify-end">
@@ -366,157 +472,13 @@ export const AgendaPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de detalle */}
-      <AgendaClientModal
-        client={selectedClient}
-        onClose={() => setSelectedClient(null)}
-        onOpenWhatsApp={(wa) => handleWhatsAppClick(wa)}
+      {/* Modal reutilizable con edición inline */}
+      <ClientModal
+        isOpen={!!viewClient}
+        onClose={() => setViewClient(null)}
+        client={viewClient}
+        onUpdate={onUpdate}
       />
     </div>
   );
 };
-
-/** ================== Modal ================== */
-const AgendaClientModal: React.FC<{
-  client: Client | null;
-  onClose: () => void;
-  onOpenWhatsApp: (whatsapp: string) => void;
-}> = ({ client, onClose, onOpenWhatsApp }) => {
-  if (!client) return null;
-
-  const field = (val?: string | null) =>
-    val && String(val).trim() ? String(val) : '—';
-
-  return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {field(client.nombre)}
-            </h3>
-            <p className="text-sm text-gray-600">
-              {field(client.ciudad)} • {field(client.modelo)}
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-2 rounded-xl hover:bg-white/70 transition"
-            aria-label="Cerrar"
-            title="Cerrar"
-          >
-            <X className="w-5 h-5 text-gray-600" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
-          {/* Chips */}
-          <div className="flex flex-wrap gap-2">
-            <span
-              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}
-            >
-              {(client.estado_etapa || 'Sin_estado').replace(/_/g, ' ')}
-            </span>
-            {client.categoria_contacto && (
-              <span
-                className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getCategoriaColor(client.categoria_contacto as any)}`}
-              >
-                {(client.categoria_contacto as string).replace(/_/g, ' ')}
-              </span>
-            )}
-          </div>
-
-          {/* Agenda */}
-          <section>
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Agenda</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-purple-600" />
-                <span className="text-gray-600">Fecha y hora:</span>
-                <span className="font-medium text-gray-900">
-                  {displayDate((client as any).fecha_agenda)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600">Recepción:</span>
-                <span className="font-medium text-gray-900">
-                  {field(client.modo_recepcion)}
-                </span>
-              </div>
-            </div>
-          </section>
-
-          {/* Contacto */}
-          <section>
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Contacto</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600">WhatsApp:</span>
-                <button
-                  onClick={() => onOpenWhatsApp(client.whatsapp as any)}
-                  className="font-medium text-green-700 hover:text-green-800 underline underline-offset-2"
-                  title="Abrir chat"
-                >
-                  {formatWhatsApp(client.whatsapp as any)}
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600">Ciudad:</span>
-                <span className="font-medium text-gray-900">{field(client.ciudad)}</span>
-              </div>
-            </div>
-          </section>
-
-          {/* Detalles */}
-          <section>
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Detalles</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-              <KV label="Intención" value={client.intencion} />
-              <KV label="Modelo" value={client.modelo} />
-              <KV label="Estado precios" value={client.buscar_precios_status} />
-              <KV label="Servicios adicionales" value={client.servicios_adicionales} />
-              <KV label="Descuento multi-reparación" value={client.descuento_multi_reparacion} />
-              <KV label="Asignado a" value={client.asignado_a} />
-              <div className="md:col-span-2">
-                <KV label="Descripción / Detalles" value={client.detalles} />
-              </div>
-              <div className="md:col-span-2">
-                <KV label="Notas" value={client.notas} />
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-2">
-          <button
-            onClick={() => onOpenWhatsApp(client.whatsapp as any)}
-            className="px-4 py-2 rounded-xl bg-green-600 text-white hover:bg-green-700 transition"
-          >
-            Abrir WhatsApp
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition"
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const KV: React.FC<{ label: string; value?: string | null }> = ({ label, value }) => (
-  <div className="flex gap-2">
-    <span className="text-gray-600 min-w-40">{label}:</span>
-    <span className="font-medium text-gray-900">{value && String(value).trim() ? value : '—'}</span>
-  </div>
-);

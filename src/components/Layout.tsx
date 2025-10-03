@@ -19,7 +19,7 @@ interface LayoutProps {
 
 const navigationItems = [
   { id: 'precios', name: 'Precios', icon: DollarSign },
-  { id: 'agente', name: 'Agente', icon: Bot },
+  // { id: 'agente', name: 'Agente', icon: Bot },
   { id: 'crm', name: 'CRM', icon: Users },
   { id: 'agenda', name: 'Agenda', icon: Calendar },
   { id: 'envios', name: 'Envíos', icon: Truck }, // 👈 nuevo item
@@ -35,7 +35,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
     if (currentPage === 'envios') return 'Envíos';
     if (currentPage === 'agenda') return 'Agenda';
     if (currentPage === 'precios') return 'Precios';
-    if (currentPage === 'agente') return 'Agente';
+    // if (currentPage === 'agente') return 'Agente';
     return currentPage.charAt(0).toUpperCase() + currentPage.slice(1);
   })();
 

@@ -1,8 +1,10 @@
+// CRMPage.tsx
 import React, { useEffect, useState } from 'react';
 import { Users, RefreshCw } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { Client } from '../types/client';
 import { ListView } from '../components/ListView';
+import { NuevoCliente } from '../components/NuevoCliente';
 
 export const CRMPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -25,6 +27,11 @@ export const CRMPage: React.FC = () => {
 
   useEffect(() => {
     fetchClients();
+
+    // Escucha global por si otros módulos disparan 'client:created'
+    const onCreated = () => fetchClients();
+    window.addEventListener('client:created', onCreated as any);
+    return () => window.removeEventListener('client:created', onCreated as any);
   }, []);
 
   /** ===== Update (optimista con rollback por recarga) ===== */
@@ -59,6 +66,9 @@ export const CRMPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Botón flotante para crear clientes */}
+      <NuevoCliente onCreated={fetchClients} />
+
       {/* Header */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/40 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
