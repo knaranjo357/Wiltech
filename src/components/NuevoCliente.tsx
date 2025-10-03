@@ -26,9 +26,9 @@ import { Client } from '../types/client';
 /** ===================== Helpers ===================== **/
 
 /**
- * Normaliza un número ingresado a JID de WhatsApp: 573154479122@s.whatsapp.net
+ * Normaliza un número ingresado a JID de WhatsApp: 573150000000@s.whatsapp.net
  * Reglas:
- *  - Si viene en 10 dígitos (p.ej. 3154479122) => antepone 57
+ *  - Si viene en 10 dígitos (p.ej. 3150000000) => antepone 57
  *  - Si viene con +57 o 57, lo respeta
  *  - El móvil colombiano debe empezar por 3 y tener 10 dígitos (sin contar el 57)
  * Devuelve { jid, e164 } o null si no es válido.
@@ -454,7 +454,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                         if (parsed) setVal('whatsapp' as any, parsed.e164); // dejamos e164 visible
                                       }
                                     }}
-                                    placeholder={field.key === 'whatsapp' ? '+57 315 447 9122' : undefined}
+                                    placeholder={field.key === 'whatsapp' ? '+57 315 000 0000' : undefined}
                                   />
                                 )}
 
@@ -481,3 +481,4 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
 };
 
 export default NuevoCliente;
+
