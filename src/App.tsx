@@ -1,45 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from './hooks/useAuth';
-import { LoginForm } from './components/LoginForm';
-import { Layout } from './components/Layout';
-import { PreciosPage } from './pages/PreciosPage';
-import { AgentePage } from './pages/AgentePage';
-import { CRMPage } from './pages/CRMPage';
-import { AgendaPage } from './pages/AgendaPage';
-import { EnviosPage  } from './pages/EnviosPage';
-
+import React, { useEffect, useState } from "react";
+import { useAuth } from "./hooks/useAuth";
+import { LoginForm } from "./components/LoginForm";
+import { Layout } from "./components/Layout";
+import { PreciosPage } from "./pages/PreciosPage";
+import { CRMPage } from "./pages/CRMPage";
+import { AgendaPage } from "./pages/AgendaPage";
+import { EnviosPage } from "./pages/EnviosPage";
+import { Resultados } from "./pages/Resultados";
+import { WppPage } from "./pages/WppPage";
 
 function App() {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { loading, isAuthenticated } = useAuth();
   const [currentPage, setCurrentPage] = useState(() => {
     const path = window.location.pathname;
-    if (path === '/precios') return 'precios';
-    if (path === '/agente') return 'agente';
-    if (path === '/crm') return 'crm';
-    if (path === '/agenda') return 'agenda';
-    if (path === '/envios') return 'EnviosPage';
-    return 'precios';
+    if (path === "/precios") return "precios";
+    if (path === "/wpp") return "wpp";
+    if (path === "/crm") return "crm";
+    if (path === "/agenda") return "agenda";
+    if (path === "/envios") return "envios";
+    if (path === "/resultados") return "resultados";
+    return "precios";
   });
 
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path === '/precios') setCurrentPage('precios');
-      else if (path === '/agente') setCurrentPage('agente');
-      else if (path === '/crm') setCurrentPage('crm');
-      else if (path === '/agenda') setCurrentPage('agenda');
-      else if (path === '/login') setCurrentPage('login');
-      else if (path === '/envios') setCurrentPage('envios');
-      
+      if (path === "/precios") setCurrentPage("precios");
+      else if (path === "/wpp") setCurrentPage("wpp");
+      else if (path === "/crm") setCurrentPage("crm");
+      else if (path === "/agenda") setCurrentPage("agenda");
+      else if (path === "/envios") setCurrentPage("envios");
+      else if (path === "/resultados") setCurrentPage("resultados");
+      else if (path === "/login") setCurrentPage("login");
     };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   const handlePageChange = (page: string) => {
     setCurrentPage(page);
-    window.history.pushState(null, '', `/${page}`);
+    window.history.pushState(null, "", `/${page}`);
   };
 
   if (loading) {
@@ -54,22 +54,24 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    window.history.pushState(null, '', '/login');
+    window.history.pushState(null, "", "/login");
     return <LoginForm />;
   }
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'precios':
+      case "precios":
         return <PreciosPage />;
-      case 'agente':
-        return <AgentePage />;
-      case 'crm':
+      case "wpp":
+        return <WppPage />;
+      case "crm":
         return <CRMPage />;
-      case 'agenda':
+      case "agenda":
         return <AgendaPage />;
-      case 'envios':
+      case "envios":
         return <EnviosPage />;
+      case "resultados":
+        return <Resultados />;
       default:
         return <PreciosPage />;
     }
