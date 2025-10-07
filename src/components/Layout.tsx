@@ -20,11 +20,11 @@ interface LayoutProps {
 
 const navigationItems = [
   { id: "precios", name: "Precios", icon: DollarSign },
-  { id: "wpp", name: "WPP", icon: Bot },               // 👈 nueva sección
+  // { id: "wpp", name: "WPP", icon: Bot },
   { id: "crm", name: "CRM", icon: Users },
   { id: "agenda", name: "Agenda", icon: Calendar },
   { id: "envios", name: "Envíos", icon: Truck },
-  { id: "resultados", name: "Resultados", icon: BarChart3 }, // 👈 resultados
+  { id: "resultados", name: "Resultados", icon: BarChart3 },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) => {
@@ -148,3 +148,4 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
     </div>
   );
 };
+
