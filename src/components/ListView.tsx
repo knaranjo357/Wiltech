@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowUpDown, Phone, Calendar, Edit2, Save, X, Bot, Eye, Search, Filter } from 'lucide-react';
+import { ArrowUpDown, Phone, Calendar, Edit2, Save, X, Bot, Eye, Search, Filter, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight } from 'lucide-react';
 import { Client, EstadoEtapa, CategoriaContacto, SortField, SortOrder } from '../types/client';
 import { getEtapaColor, getCategoriaColor, formatDate, formatWhatsApp } from '../utils/clientHelpers';
 import { ColumnSelector } from './ColumnSelector';
@@ -35,6 +35,7 @@ const getCategoriaColorSafe = (v: string) =>
 function collectUnique<T extends keyof Client>(rows: Client[], key: T): string[] {
   const s = new Set<string>();
   for (const c of rows) {
+    // @ts-ignore: index access
     const raw = (c as any)[key];
     const str = raw === null || raw === undefined ? '' : String(raw).trim();
     if (str) s.add(str);
@@ -51,6 +52,23 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const [savingRow, setSavingRow] = useState<number | null>(null);
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [showFilters, setShowFilters] = useState<boolean>(true);
+
+  // ===== Paginación =====
+  const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = parseInt(localStorage.getItem('crm-page-size') || '50', 10);
+    return Number.isFinite(saved) && saved > 0 ? saved : 50;
+  });
+  const [page, setPage] = useState<number>(1);
+
+  const pageSizeOptions = [10, 25, 50, 100, 200];
+
+  const goToPage = (n: number) => {
+    setPage((prev) => {
+      const total = Math.max(1, Math.ceil(resultsCount / pageSize));
+      if (Number.isNaN(n)) return prev;
+      return Math.min(Math.max(1, n), total);
+    });
+  };
 
   // Column visibility (persistida)
   const allColumns = clients.length > 0 ? Object.keys(clients[0]).filter(k => k !== 'row_number') : [];
@@ -80,7 +98,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   /** ===== Opciones dinámicas (según data) ===== */
   const etapasOptions = useMemo(() => collectUnique(clients, 'estado_etapa'), [clients]);
   const categoriasOptions = useMemo(() => collectUnique(clients, 'categoria_contacto'), [clients]);
-  const ciudadOptions = useMemo(() => collectUnique(clients, 'ciudad'), [clients]);
+  const ciudadOptions = useMemo(() => collectUnique(clients, 'agenda_ciudad_sede'), [clients]);
 
   /** ===== Filtros locales ===== */
   const [searchInput, setSearchInput] = useState('');
@@ -154,7 +172,9 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
 
     // orden
     data.sort((a, b) => {
+      // @ts-ignore: index access
       let aValue: any = (a as any)[sortField];
+      // @ts-ignore: index access
       let bValue: any = (b as any)[sortField];
 
       if (sortField === 'fecha_agenda') {
@@ -177,6 +197,28 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   }, [clients, searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, sortField, sortOrder]);
 
   const resultsCount = filteredAndSorted.length;
+
+  // ===== Reset de página al cambiar filtros/orden/dataset =====
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, sortField, sortOrder, clients.length]);
+
+  // Clamp cuando cambia pageSize o resultsCount
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(resultsCount / pageSize));
+    if (page > totalPages) setPage(totalPages);
+  }, [resultsCount, pageSize, page]);
+
+  // Persistir pageSize
+  useEffect(() => {
+    localStorage.setItem('crm-page-size', String(pageSize));
+  }, [pageSize]);
+
+  // Slice de la página actual
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, resultsCount);
+  const pagedData = filteredAndSorted.slice(startIndex, endIndex);
+  const totalPages = Math.max(1, Math.ceil(resultsCount / pageSize));
 
   /** ===== Acciones fila ===== */
   const handleSort = (field: SortField) => {
@@ -252,6 +294,77 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
       setSavingRow(null);
     }
   };
+
+  /** ===== UI de paginación ===== */
+  const PageButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement> & {active?: boolean}> = ({ active, className = '', children, ...props }) => (
+    <button
+      {...props}
+      className={`px-3 py-2 rounded-xl border text-sm bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed ${active ? 'border-blue-500 ring-2 ring-blue-200 font-semibold' : 'border-gray-200'} ${className}`}
+    >
+      {children}
+    </button>
+  );
+
+  const buildPageList = (): (number | '…')[] => {
+    const items: (number | '…')[] = [];
+    const windowSize = 1; // vecinos a mostrar
+
+    items.push(1);
+    const left = Math.max(2, page - windowSize);
+    const right = Math.min(totalPages - 1, page + windowSize);
+
+    if (left > 2) items.push('…');
+    for (let p = left; p <= right; p++) items.push(p);
+    if (right < totalPages - 1) items.push('…');
+    if (totalPages > 1) items.push(totalPages);
+
+    // eliminar duplicados cuando totalPages es pequeño
+    return Array.from(new Set(items)).filter((x) => typeof x === 'number' ? x >= 1 && x <= totalPages : true);
+  };
+
+  const PaginationBar = () => (
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-4">
+      <div className="text-sm text-gray-600">
+        {resultsCount > 0 ? (
+          <span>
+            Mostrando <span className="font-semibold">{startIndex + 1}</span>–<span className="font-semibold">{endIndex}</span> de <span className="font-semibold">{resultsCount}</span>
+            {` • página ${page}/${totalPages}`}
+          </span>
+        ) : (
+          <span>Sin resultados</span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <label className="text-sm text-gray-600">Filas por página</label>
+        <select
+          value={pageSize}
+          onChange={(e) => { setPageSize(parseInt(e.target.value, 10)); setPage(1); }}
+          className="text-sm px-2 py-1.5 border border-gray-200 rounded-lg bg-white hover:bg-gray-50"
+        >
+          {pageSizeOptions.map(opt => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+
+        <div className="flex items-center gap-1 ml-2">
+          <PageButton onClick={() => goToPage(1)} disabled={page === 1} aria-label="Primera página"><ChevronsLeft className="w-4 h-4"/></PageButton>
+          <PageButton onClick={() => goToPage(page - 1)} disabled={page === 1} aria-label="Página anterior"><ChevronLeft className="w-4 h-4"/></PageButton>
+
+          {buildPageList().map((p, idx) =>
+            p === '…' ? (
+              <span key={`ellipsis-${idx}`} className="px-2 text-gray-500 select-none">…</span>
+            ) : (
+              <PageButton key={p} active={p === page} onClick={() => goToPage(p)} aria-label={`Ir a página ${p}`}>{p}</PageButton>
+            )
+          )}
+
+          <PageButton onClick={() => goToPage(page + 1)} disabled={page >= totalPages} aria-label="Página siguiente"><ChevronRight className="w-4 h-4"/></PageButton>
+          <PageButton onClick={() => goToPage(totalPages)} disabled={page >= totalPages} aria-label="Última página"><ChevronsRight className="w-4 h-4"/></PageButton>
+        </div>
+      </div>
+    </div>
+  );
 
   /** ===== Render ===== */
   return (
@@ -418,6 +531,11 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
             </div>
           )}
         </div>
+
+        {/* Barra de paginación superior */}
+        <div className="mt-2 border-t border-gray-100">
+          <PaginationBar />
+        </div>
       </div>
 
       {/* Tabla */}
@@ -445,7 +563,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
             </thead>
 
             <tbody className="divide-y divide-gray-100">
-              {filteredAndSorted.map((client, index) => {
+              {pagedData.map((client, index) => {
                 const isEditing = editingId === client.row_number;
                 const currentClient = isEditing ? { ...client, ...editData } : client;
 
@@ -619,6 +737,11 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
               })}
             </tbody>
           </table>
+        </div>
+
+        {/* Barra de paginación inferior */}
+        <div className="border-t border-gray-100">
+          <PaginationBar />
         </div>
       </div>
 

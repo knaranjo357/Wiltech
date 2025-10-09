@@ -8,6 +8,8 @@ import { AgendaPage } from "./pages/AgendaPage";
 import { EnviosPage } from "./pages/EnviosPage";
 import { Resultados } from "./pages/Resultados";
 import { WppPage } from "./pages/WppPage";
+import { AgentePage } from "./pages/AgentePage";
+
 
 function App() {
   const { loading, isAuthenticated } = useAuth();
@@ -19,6 +21,7 @@ function App() {
     if (path === "/agenda") return "agenda";
     if (path === "/envios") return "envios";
     if (path === "/resultados") return "resultados";
+    if (path === "/agente") return "agente";
     return "precios";
   });
 
@@ -72,6 +75,8 @@ function App() {
         return <EnviosPage />;
       case "resultados":
         return <Resultados />;
+      case "agente":
+        return <AgentePage />;
       default:
         return <PreciosPage />;
     }

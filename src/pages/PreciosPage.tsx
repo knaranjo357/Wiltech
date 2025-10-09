@@ -10,9 +10,9 @@ const categories = [
   { name: 'PC', icon: Monitor, color: 'from-purple-500 to-pink-600', image: 'https://images.pexels.com/photos/2148217/pexels-photo-2148217.jpeg?auto=compress&cs=tinysrgb&w=400' },
   { name: 'IPAD', icon: Tablet, color: 'from-orange-500 to-red-600', image: 'https://images.pexels.com/photos/1334597/pexels-photo-1334597.jpeg?auto=compress&cs=tinysrgb&w=400' },
   { name: 'UGREEN', icon: Zap, color: 'from-yellow-500 to-orange-600', image: 'https://images.pexels.com/photos/163100/circuit-circuit-board-resistor-computer-163100.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { name: 'DIAGNOSTICO', icon: Wrench, color: 'from-indigo-500 to-blue-600', image: 'https://images.pexels.com/photos/159298/gears-cogs-machine-machinery-159298.jpeg?auto=compress&cs=tinysrgb&w=400' },
   { name: 'PELICULAS DE SEGURIDAD', icon: Shield, color: 'from-teal-500 to-cyan-600', image: 'https://images.pexels.com/photos/1476321/pexels-photo-1476321.jpeg?auto=compress&cs=tinysrgb&w=400' },
-  { name: 'PRECIOS PARA REPARACIONES ELECT', icon: DollarSign, color: 'from-pink-500 to-rose-600', image: 'https://images.pexels.com/photos/5380664/pexels-photo-5380664.jpeg?auto=compress&cs=tinysrgb&w=400' },
+  // { name: 'DIAGNOSTICO', icon: Wrench, color: 'from-indigo-500 to-blue-600', image: 'https://images.pexels.com/photos/159298/gears-cogs-machine-machinery-159298.jpeg?auto=compress&cs=tinysrgb&w=400' },
+  // { name: 'PRECIOS PARA REPARACIONES ELECT', icon: DollarSign, color: 'from-pink-500 to-rose-600', image: 'https://images.pexels.com/photos/5380664/pexels-photo-5380664.jpeg?auto=compress&cs=tinysrgb&w=400' },
 ];
 
 export const PreciosPage: React.FC = () => {
