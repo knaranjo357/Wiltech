@@ -1,6 +1,6 @@
 // src/pages/Resultados.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, RefreshCw, X, Phone, Clock, BarChart2 } from 'lucide-react';
+import { RefreshCw, X, Phone, Clock, BarChart2 } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -9,7 +9,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  Legend,
   Brush,
   Cell,
 } from 'recharts';
@@ -19,38 +18,74 @@ import { Client } from '../types/client';
 import { ClientModal } from '../components/ClientModal';
 import { formatWhatsApp, getEtapaColor, getCategoriaColor } from '../utils/clientHelpers';
 
-/** ================== Utils de fecha (compatibles con Agenda) ================== */
+/** ================== Utils ================== */
+type Granularity = 'day' | 'week' | 'month';
+
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 const toYMD = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const startOfDay = (d: Date) => {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+};
+const startOfWeekMonday = (d: Date) => {
+  const x = startOfDay(d);
+  const day = x.getDay(); // 0=Sun..6=Sat
+  const diff = (day + 6) % 7; // días desde lunes
+  x.setDate(x.getDate() - diff);
+  return x;
+};
+const startOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1);
 
+const bucketStart = (d: Date, g: Granularity) =>
+  g === 'day' ? startOfDay(d) : g === 'week' ? startOfWeekMonday(d) : startOfMonth(d);
+
+const formatBucketLabel = (d: Date, g: Granularity) => {
+  if (g === 'day') {
+    return d.toLocaleDateString('es-CO', { month: 'short', day: '2-digit' });
+  }
+  if (g === 'week') {
+    return `Sem ${toYMD(d)}`; // lunes de la semana
+  }
+  // month
+  return d.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
+};
+
+/** ================== Parsers de fechas ================== */
+// Agenda (mismas reglas que ya usabas)
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
 
-  // ISO
   const iso = Date.parse(s);
   if (!Number.isNaN(iso)) return new Date(iso);
 
-  // YYYY-MM-DD HH:mm[:ss]
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (m) {
     const [, y, mo, d, hh, mm, ss] = m;
     return new Date(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), ss ? Number(ss) : 0);
   }
 
-  // YYYY-MM-DD
   m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
     const [, y, mo, d] = m;
     return new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0);
   }
 
-  // fallback
   if (s.includes(' ')) {
     const tryAlt = Date.parse(s.replace(' ', 'T'));
     if (!Number.isNaN(tryAlt)) return new Date(tryAlt);
   }
   return null;
+};
+
+// created (timestamptz +0) -> ajustar a -5 (Bogotá)
+const parseCreatedToBogota = (raw?: string | null): Date | null => {
+  if (!raw) return null;
+  const ms = Date.parse(raw);
+  if (Number.isNaN(ms)) return null;
+  // raw viene en UTC (+0). Bogotá es -05:00 y no tiene DST.
+  return new Date(ms - 5 * 60 * 60 * 1000);
 };
 
 const sameLocalDay = (a: Date, b: Date) =>
@@ -67,7 +102,7 @@ const displayDate = (s?: string | null) => {
   })} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-/** ================== Normalizadores / Sede ================== */
+/** ================== Normalizadores ================== */
 const normalize = (v: string) =>
   v.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim();
 
@@ -86,13 +121,19 @@ const isInvalidNoAplica = (v: unknown) => {
   return c === '' || c === 'no aplica' || c === 'no';
 };
 
-/** ================== Tipos ================== */
-type DayPoint = { key: string; label: string; count: number; when: 'past' | 'today' | 'future' };
+/** ================== Tipos / Colores ================== */
+type BucketPoint = {
+  key: string;             // YMD del bucket (día, lunes de semana o 1° de mes)
+  label: string;           // texto para eje X
+  count: number;           // # de agendas o # de creados
+  uniqueClients: number;   // # de clientes únicos en el bucket
+  when: 'past' | 'today' | 'future';
+};
 
 const COLORS = {
-  past: '#2563EB',   // blue-600
-  today: '#16A34A',  // green-600
-  future: '#A855F7', // purple-600
+  past: '#2563EB',     // blue-600
+  today: '#16A34A',    // green-600
+  future: '#A855F7',   // purple-600
   barHover: '#7C3AED', // violet-600
 };
 
@@ -101,16 +142,26 @@ export const Resultados: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔎 Filtro principal requerido: agenda_ciudad_sede
+  // Tabs: agendas vs creados
+  const [activeTab, setActiveTab] = useState<'agendas' | 'creados'>('agendas');
+
+  // Filtro principal requerido: agenda_ciudad_sede (aplica a ambas vistas)
   const [sedeFilter, setSedeFilter] = useState<string>('ALL');
 
-  // 🔍 búsqueda opcional
+  // Búsqueda texto
   const [search, setSearch] = useState<string>('');
 
-  // 📊 selección de barra (día) para mostrar lista detallada
+  // Rango de fechas (YYYY-MM-DD) que condiciona estadísticas
+  const [fromDate, setFromDate] = useState<string>(''); // vacío = sin límite
+  const [toDate, setToDate] = useState<string>('');     // vacío = sin límite
+
+  // Agrupación
+  const [granularity, setGranularity] = useState<Granularity>('day');
+
+  // selección de barra para detalle (solo en agendas)
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  // 🔧 Modal
+  // Modal
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRow, setSavingRow] = useState<number | null>(null);
 
@@ -138,8 +189,8 @@ export const Resultados: React.FC = () => {
       const detail = (ev as CustomEvent<Partial<Client>>).detail;
       if (!detail || !('row_number' in detail)) return;
 
-      setClients(prev => prev.map(c => (c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c)));
-      setViewClient(v => (v && detail && v.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v));
+      setClients(prev => prev.map(c => (c.row_number === (detail as any).row_number ? ({ ...c, ...detail } as Client) : c)));
+      setViewClient(v => (v && detail && v.row_number === (detail as any).row_number ? ({ ...v, ...detail } as Client) : v));
     };
 
     window.addEventListener('client:updated', onExternalUpdate as any);
@@ -187,106 +238,194 @@ export const Resultados: React.FC = () => {
     }
   };
 
-  /** === Validación de fecha y sede === */
-  const withValidDate = useMemo(() => {
+  /** === Validación por fecha base === */
+  const withValidAgendaDate = useMemo(() => {
     return clients.filter(c => !!parseAgendaDate((c as any).fecha_agenda));
+  }, [clients]);
+
+  const withValidCreatedDate = useMemo(() => {
+    return clients.filter(c => !!parseCreatedToBogota((c as any).created));
   }, [clients]);
 
   /** === Sedes únicas para el filtro (agenda_ciudad_sede) === */
   const sedes = useMemo(() => {
     const s = new Set<string>();
-    withValidDate.forEach(c => {
+    withValidAgendaDate.forEach(c => {
       const sede = (c as any).agenda_ciudad_sede ? String((c as any).agenda_ciudad_sede).trim() : '';
       if (sede && !isInvalidNoAplica(sede)) s.add(sede);
     });
     return ['ALL', ...Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))];
-  }, [withValidDate]);
+  }, [withValidAgendaDate]);
 
-  /** === Filtrado base por sede + búsqueda === */
-  const filtered = useMemo(() => {
-    let data = withValidDate;
+  /** === Helpers comunes de filtro === */
+  const inRange = (d: Date) => {
+    const sd = startOfDay(d).getTime();
+    if (fromDate) {
+      const f = new Date(fromDate + 'T00:00:00');
+      if (sd < f.getTime()) return false;
+    }
+    if (toDate) {
+      const t = new Date(toDate + 'T23:59:59.999');
+      if (sd > t.getTime()) return false;
+    }
+    return true;
+  };
 
+  const passTextAndSede = (c: Client) => {
+    // Filtro de sede
     if (sedeFilter !== 'ALL') {
       const nf = normalize(sedeFilter);
-      data = data.filter(c => normalize(String((c as any).agenda_ciudad_sede || '')) === nf);
+      const sede = normalize(String((c as any).agenda_ciudad_sede || ''));
+      if (sede !== nf) return false;
     }
-
+    // Búsqueda de texto
     if (search.trim()) {
       const q = normalize(search.trim());
-      data = data.filter(c => {
-        const nombre = normalize(String(c.nombre || ''));
-        const modelo = normalize(String(c.modelo || ''));
-        const ciudad = normalize(String(c.ciudad || ''));
-        const sede = normalize(String((c as any).agenda_ciudad_sede || ''));
-        const tel = String(c.whatsapp || '').replace('@s.whatsapp.net', '');
-        return nombre.includes(q) || modelo.includes(q) || ciudad.includes(q) || sede.includes(q) || tel.includes(q);
-      });
+      const nombre = normalize(String(c.nombre || ''));
+      const modelo = normalize(String(c.modelo || ''));
+      const ciudad = normalize(String(c.ciudad || ''));
+      const sede = normalize(String((c as any).agenda_ciudad_sede || ''));
+      const tel = String(c.whatsapp || '').replace('@s.whatsapp.net', '');
+      if (!(nombre.includes(q) || modelo.includes(q) || ciudad.includes(q) || sede.includes(q) || tel.includes(q))) {
+        return false;
+      }
     }
-    return data;
-  }, [withValidDate, sedeFilter, search]);
+    return true;
+  };
 
-  /** === Serie por día (TODOS: pasado y futuro) === */
-  const series: DayPoint[] = useMemo(() => {
-    const map = new Map<string, DayPoint>();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+  /** === Series por bucket (AGENDAS) === */
+  const seriesAgendas: BucketPoint[] = useMemo(() => {
+    const map = new Map<string, { start: Date; count: number; clientsSet: Set<string> }>();
+    const today = startOfDay(new Date());
 
-    for (const c of filtered) {
+    for (const c of withValidAgendaDate) {
+      if (!passTextAndSede(c)) continue;
       const d = parseAgendaDate((c as any).fecha_agenda);
-      if (!d) continue;
+      if (!d || !inRange(d)) continue;
 
-      const key = toYMD(d);
-      const stamp = new Date(d);
-      stamp.setHours(0, 0, 0, 0);
+      const start = bucketStart(d, granularity);
+      const key = toYMD(start);
 
-      let when: DayPoint['when'] = 'past';
-      if (sameLocalDay(stamp, today)) when = 'today';
-      else if (stamp > today) when = 'future';
+      if (!map.has(key)) map.set(key, { start, count: 0, clientsSet: new Set() });
+      const rec = map.get(key)!;
+      rec.count += 1;
 
-      const label = d.toLocaleDateString(undefined, { month: 'short', day: '2-digit' });
-
-      if (!map.has(key)) map.set(key, { key, label, count: 0, when });
-      map.get(key)!.count += 1;
+      // cliente único por whatsapp (fallback a row_number)
+      const ck = String((c as any).whatsapp || c.row_number || `${c.nombre}|${c.ciudad}`);
+      rec.clientsSet.add(ck);
     }
 
-    return Array.from(map.values()).sort((a, b) => a.key.localeCompare(b.key));
-  }, [filtered]);
+    const arr: BucketPoint[] = Array.from(map.values())
+      .map(({ start, count, clientsSet }) => {
+        const s = startOfDay(start);
+        let when: BucketPoint['when'] = 'past';
+        if (sameLocalDay(s, today)) when = 'today';
+        else if (s > today) when = 'future';
 
-  /** === Lista de agendas del día seleccionado === */
+        return {
+          key: toYMD(s),
+          label: formatBucketLabel(s, granularity),
+          count,
+          uniqueClients: clientsSet.size,
+          when,
+        };
+      })
+      .sort((a, b) => a.key.localeCompare(b.key));
+
+    return arr;
+  }, [withValidAgendaDate, granularity, search, sedeFilter, fromDate, toDate]);
+
+  /** === Series por bucket (CREATED ajustado a -5) === */
+  const seriesCreated: BucketPoint[] = useMemo(() => {
+    const map = new Map<string, { start: Date; count: number; clientsSet: Set<string> }>();
+    const today = startOfDay(new Date());
+
+    for (const c of withValidCreatedDate) {
+      if (!passTextAndSede(c)) continue;
+      const d = parseCreatedToBogota((c as any).created);
+      if (!d || !inRange(d)) continue;
+
+      const start = bucketStart(d, granularity);
+      const key = toYMD(start);
+
+      if (!map.has(key)) map.set(key, { start, count: 0, clientsSet: new Set() });
+      const rec = map.get(key)!;
+      rec.count += 1;
+      const ck = String((c as any).whatsapp || c.row_number || `${c.nombre}|${c.ciudad}`);
+      rec.clientsSet.add(ck);
+    }
+
+    const arr: BucketPoint[] = Array.from(map.values())
+      .map(({ start, count, clientsSet }) => {
+        const s = startOfDay(start);
+        let when: BucketPoint['when'] = 'past';
+        if (sameLocalDay(s, today)) when = 'today';
+        else if (s > today) when = 'future';
+
+        return {
+          key: toYMD(s),
+          label: formatBucketLabel(s, granularity),
+          count,
+          uniqueClients: clientsSet.size,
+          when,
+        };
+      })
+      .sort((a, b) => a.key.localeCompare(b.key));
+
+    return arr;
+  }, [withValidCreatedDate, granularity, search, sedeFilter, fromDate, toDate]);
+
+  // Serie activa según tab
+  const activeSeries = activeTab === 'agendas' ? seriesAgendas : seriesCreated;
+
+  /** === Lista de agendas del bucket seleccionado (solo tab AGENDAS) === */
   const selectedItems = useMemo(() => {
-    if (!selectedKey) return [];
-    const day = new Date(selectedKey + 'T00:00:00');
+    if (activeTab !== 'agendas' || !selectedKey) return [];
+    const bucketStartDate = new Date(selectedKey + 'T00:00:00');
 
-    return filtered
+    return withValidAgendaDate
+      .filter(c => passTextAndSede(c))
       .filter(c => {
         const d = parseAgendaDate((c as any).fecha_agenda);
-        return d ? sameLocalDay(d, day) : false;
+        if (!d) return false;
+        const b = bucketStart(d, granularity);
+        return toYMD(b) === selectedKey && inRange(d);
       })
       .sort((a, b) => {
         const ta = parseAgendaDate((a as any).fecha_agenda)?.getTime() ?? 0;
         const tb = parseAgendaDate((b as any).fecha_agenda)?.getTime() ?? 0;
         return ta - tb;
       });
-  }, [filtered, selectedKey]);
+  }, [activeTab, selectedKey, withValidAgendaDate, granularity, sedeFilter, search, fromDate, toDate]);
 
-  /** === Helpers UI === */
-  const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const phoneNumber = (whatsapp || '').replace('@s.whatsapp.net', '');
-    const url = `https://wa.me/${phoneNumber}`;
-    window.open(url, '_blank');
-  };
+  /** === KPIs rápidos (dependen de rango y filtros) === */
+  const totalAgendas = seriesAgendas.reduce((a, b) => a + b.count, 0);
+  const totalClientesAgendados = seriesAgendas.reduce((a, b) => a + b.uniqueClients, 0);
+  const totalCreados = seriesCreated.reduce((a, b) => a + b.count, 0);
+  const totalClientesCreados = seriesCreated.reduce((a, b) => a + b.uniqueClients, 0);
 
-  const legendPayload = [
-    { value: 'Pasado', type: 'square', color: COLORS.past, id: 'past' },
-    { value: 'Hoy', type: 'square', color: COLORS.today, id: 'today' },
-    { value: 'Futuro', type: 'square', color: COLORS.future, id: 'future' },
-  ];
+  /** === Leyenda custom (evitamos problema de tipos con <Legend payload=... />) === */
+  const CustomLegend = () => (
+    <div className="flex items-center gap-4 text-sm mb-2">
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.past }} />
+        Pasado
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.today }} />
+        Hoy
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.future }} />
+        Futuro
+      </span>
+    </div>
+  );
 
   /** === Render === */
   return (
     <div className="space-y-6">
-      {/* Header / Filtros */}
+      {/* Header / Filtros superiores */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/40 p-6">
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
@@ -294,21 +433,49 @@ export const Resultados: React.FC = () => {
               <BarChart2 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-gray-800">Resultados de Agendas</h2>
-              <p className="text-sm text-gray-500">Reporte de agendas por día (pasado y futuro)</p>
+              <h2 className="text-lg font-semibold text-gray-800">Resultados</h2>
+              <p className="text-sm text-gray-500">Estadísticas por {granularity === 'day' ? 'día' : granularity === 'week' ? 'semana' : 'mes'} y rango de fechas</p>
             </div>
           </div>
 
+          {/* Tabs para elegir gráfica */}
+          <div className="flex items-center gap-2">
+            {(['agendas', 'creados'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); setSelectedKey(null); }}
+                className={`px-3 py-2 rounded-xl border transition ${
+                  activeTab === tab ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                {tab === 'agendas' ? 'Agendas' : 'Creados'}
+              </button>
+            ))}
+
+            {/* Agrupación */}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-sm text-gray-600">Agrupar por</span>
+              <select
+                className="px-3 py-2 border border-gray-200 rounded-xl"
+                value={granularity}
+                onChange={e => { setGranularity(e.target.value as Granularity); setSelectedKey(null); }}
+                title="Agrupar por día/semana/mes"
+              >
+                <option value="day">Día</option>
+                <option value="week">Semana</option>
+                <option value="month">Mes</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Filtros dependientes del tab */}
           <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
-            {/* Filtro sede (agenda_ciudad_sede) */}
+            {/* Sede */}
             <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-purple-50 p-3 rounded-xl border border-indigo-200">
               <span className="text-sm font-medium text-indigo-700">Sede (agenda_ciudad_sede):</span>
               <select
                 value={sedeFilter}
-                onChange={(e) => {
-                  setSedeFilter(e.target.value);
-                  setSelectedKey(null);
-                }}
+                onChange={(e) => { setSedeFilter(e.target.value); setSelectedKey(null); }}
                 className="px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                 title="Filtrar por sede"
               >
@@ -324,10 +491,7 @@ export const Resultados: React.FC = () => {
             <div className="relative w-full max-w-md">
               <input
                 value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setSelectedKey(null);
-                }}
+                onChange={(e) => { setSearch(e.target.value); setSelectedKey(null); }}
                 placeholder="Buscar por nombre, modelo, ciudad o WhatsApp…"
                 className="w-full pl-3 pr-9 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               />
@@ -340,6 +504,25 @@ export const Resultados: React.FC = () => {
                   <X className="w-4 h-4 text-gray-500" />
                 </button>
               )}
+            </div>
+
+            {/* Rango de fechas */}
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => { setFromDate(e.target.value); setSelectedKey(null); }}
+                className="px-3 py-2 border border-gray-200 rounded-xl"
+                title="Desde"
+              />
+              <span className="text-gray-500">—</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => { setToDate(e.target.value); setSelectedKey(null); }}
+                className="px-3 py-2 border border-gray-200 rounded-xl"
+                title="Hasta"
+              />
             </div>
 
             <button
@@ -362,74 +545,87 @@ export const Resultados: React.FC = () => {
           <div className="py-12 text-center text-gray-600">Cargando datos…</div>
         ) : error ? (
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600">{error}</div>
-        ) : series.length ? (
-          <div className="h-[360px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={series} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} />
-                <Tooltip
-                  formatter={(value: any) => [value, 'Agendas']}
-                  labelFormatter={(label: any, payload: any) =>
-                    payload?.[0]?.payload?.key ||
-                    new Date().toLocaleDateString()
-                  }
-                />
-                <Legend payload={legendPayload} />
-                <Bar
-                  dataKey="count"
-                  name="Agendas"
-                  onClick={(entry: any) => setSelectedKey(entry?.key ?? null)}
-                  isAnimationActive
-                >
-                  {series.map((s) => (
-                    <Cell
-                      key={s.key}
-                      cursor="pointer"
-                      fill={
-                        selectedKey === s.key
-                          ? COLORS.barHover
-                          : s.when === 'today'
-                          ? COLORS.today
-                          : s.when === 'future'
-                          ? COLORS.future
-                          : COLORS.past
-                      }
-                    />
-                  ))}
-                </Bar>
-                {series.length > 24 && <Brush dataKey="label" height={24} />}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        ) : activeSeries.length ? (
+          <>
+            <CustomLegend />
+            <div className="h-[360px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={activeSeries} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                  <YAxis allowDecimals={false} />
+                  <Tooltip
+                    formatter={(value: any, _name: any, props: any) => {
+                      const uniq = props?.payload?.uniqueClients ?? 0;
+                      return [`${value} / ${uniq}`, 'Agendas / Clientes'];
+                    }}
+                    labelFormatter={(_label: any, payload: any) =>
+                      payload?.[0]?.payload?.key || new Date().toLocaleDateString()
+                    }
+                  />
+                  <Bar
+                    dataKey="count"
+                    name="Agendas"
+                    onClick={(entry: any) => {
+                      // solo permitir detalle en la vista de agendas
+                      if (activeTab === 'agendas') setSelectedKey(entry?.key ?? null);
+                    }}
+                    isAnimationActive
+                  >
+                    {activeSeries.map((s) => (
+                      <Cell
+                        key={s.key}
+                        cursor={activeTab === 'agendas' ? 'pointer' : 'default'}
+                        fill={
+                          selectedKey === s.key && activeTab === 'agendas'
+                            ? COLORS.barHover
+                            : s.when === 'today'
+                            ? COLORS.today
+                            : s.when === 'future'
+                            ? COLORS.future
+                            : COLORS.past
+                        }
+                      />
+                    ))}
+                  </Bar>
+                  {activeSeries.length > 24 && <Brush dataKey="label" height={24} />}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </>
         ) : (
           <div className="py-12 text-center text-gray-500">No hay datos para mostrar.</div>
         )}
       </div>
 
-      {/* KPIs rápidos */}
-      {!loading && !error && !!series.length && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* KPIs rápidos (condicionados por rango y agrupación) */}
+      {!loading && !error && !!(seriesAgendas.length + seriesCreated.length) && (
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
-            <p className="text-sm text-gray-500">Total agendas</p>
-            <p className="text-3xl font-semibold">{series.reduce((a, b) => a + b.count, 0)}</p>
+            <p className="text-sm text-gray-500">Agendas (Σ)</p>
+            <p className="text-3xl font-semibold">{totalAgendas}</p>
+            <p className="text-xs text-gray-500 mt-1">Clientes únicos: {totalClientesAgendados}</p>
           </div>
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
-            <p className="text-sm text-gray-500">Días con actividad</p>
-            <p className="text-3xl font-semibold">{series.length}</p>
+            <p className="text-sm text-gray-500">Creados (Σ)</p>
+            <p className="text-3xl font-semibold">{totalCreados}</p>
+            <p className="text-xs text-gray-500 mt-1">Clientes únicos: {totalClientesCreados}</p>
           </div>
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
-            <p className="text-sm text-gray-500">Pico por día</p>
+            <p className="text-sm text-gray-500">Días/Semanas/Meses</p>
+            <p className="text-3xl font-semibold">{activeSeries.length}</p>
+          </div>
+          <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
+            <p className="text-sm text-gray-500">Pico por bucket</p>
             <p className="text-3xl font-semibold">
-              {Math.max(...series.map(s => s.count))}
+              {activeSeries.length ? Math.max(...activeSeries.map(s => s.count)) : 0}
             </p>
           </div>
         </div>
       )}
 
-      {/* Lista detallada del día seleccionado */}
-      {!!selectedKey && (
+      {/* Lista detallada del bucket seleccionado (solo para Agendas) */}
+      {activeTab === 'agendas' && !!selectedKey && (
         <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/40 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
@@ -491,7 +687,11 @@ export const Resultados: React.FC = () => {
 
                     <div className="text-right">
                       <button
-                        onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const phoneNumber = String(client.whatsapp || '').replace('@s.whatsapp.net', '');
+                          window.open(`https://wa.me/${phoneNumber}`, '_blank');
+                        }}
                         className="flex items-center text-green-600 hover:text-green-700 font-medium transition-colors duration-300 group mb-2 ml-auto"
                       >
                         <Phone className="w-4 h-4 mr-2" />

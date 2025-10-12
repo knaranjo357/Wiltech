@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, Bot, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { AuthService } from '../services/authService';
 
 export const LoginForm: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -16,10 +17,13 @@ export const LoginForm: React.FC = () => {
     setError('');
 
     try {
-      await login(email, password);
-      // No need to do anything else, useAuth will update and App will re-render
+      await login(email, password); // guarda token, rol y ciudad en localStorage
+      // Redirigir a /agenda (recarga limpia, sin dejar /login en el historial)
+      window.location.replace('/agenda');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al iniciar sesión');
+      // Limpia tokens viejos para que al refrescar NO te deje dentro
+      AuthService.logout();
+      setError(err instanceof Error ? err.message : 'Usuario o contraseña incorrectos');
     } finally {
       setLoading(false);
     }
@@ -43,7 +47,9 @@ export const LoginForm: React.FC = () => {
         <form onSubmit={handleSubmit} className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 p-8">
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-red-600 text-sm text-center">{error}</p>
+              <p className="text-red-600 text-sm text-center">
+                {error || 'Usuario o contraseña incorrectos'}
+              </p>
             </div>
           )}
 

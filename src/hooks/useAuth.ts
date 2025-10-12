@@ -1,24 +1,31 @@
+// hooks/useAuth.ts
 import { useState, useEffect } from 'react';
 import { User } from '../types/auth';
 import { AuthService } from '../services/authService';
 
 export const useAuth = () => {
-  const [user, setUser] = useState<User | null>(null);
+  // ⬇️ lee localStorage en el primer render (sin flicker)
+  const [user, setUser] = useState<User | null>(() => AuthService.getCurrentUser());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const currentUser = AuthService.getCurrentUser();
-    setUser(currentUser);
+    // por si el storage cambió entre renders
+    setUser(AuthService.getCurrentUser());
     setLoading(false);
+
+    // sincroniza entre pestañas
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'wiltech_user' || e.key === 'wiltech_token') {
+        setUser(AuthService.getCurrentUser());
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  const login = async (email: string, password: string): Promise<void> => {
-    try {
-      const user = await AuthService.login({ email, password });
-      setUser(user);
-    } catch (error) {
-      throw error;
-    }
+  const login = async (email: string, password: string) => {
+    const u = await AuthService.login({ email, password });
+    setUser(u);
   };
 
   const logout = () => {
@@ -27,11 +34,5 @@ export const useAuth = () => {
     window.location.href = '/login';
   };
 
-  return {
-    user,
-    loading,
-    isAuthenticated: !!user,
-    login,
-    logout,
-  };
+  return { user, loading, isAuthenticated: !!user, login, logout };
 };

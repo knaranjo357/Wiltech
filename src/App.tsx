@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
 import { Layout } from "./components/Layout";
@@ -10,39 +10,92 @@ import { Resultados } from "./pages/Resultados";
 import { WppPage } from "./pages/WppPage";
 import { AgentePage } from "./pages/AgentePage";
 
+type PageKey = "precios" | "wpp" | "crm" | "agenda" | "envios" | "resultados" | "agente";
 
 function App() {
   const { loading, isAuthenticated } = useAuth();
-  const [currentPage, setCurrentPage] = useState(() => {
-    const path = window.location.pathname;
-    if (path === "/precios") return "precios";
-    if (path === "/wpp") return "wpp";
-    if (path === "/crm") return "crm";
-    if (path === "/agenda") return "agenda";
-    if (path === "/envios") return "envios";
-    if (path === "/resultados") return "resultados";
-    if (path === "/agente") return "agente";
-    return "precios";
-  });
 
+  // Mapeos ruta <-> página
+  const pathToPage = useMemo<Record<string, PageKey>>(
+    () => ({
+      "/precios": "precios",
+      "/wpp": "wpp",
+      "/crm": "crm",
+      "/agenda": "agenda",
+      "/envios": "envios",
+      "/resultados": "resultados",
+      "/agente": "agente",
+    }),
+    []
+  );
+
+  const pageToPath = useMemo<Record<PageKey, string>>(
+    () => ({
+      precios: "/precios",
+      wpp: "/wpp",
+      crm: "/crm",
+      agenda: "/agenda",
+      envios: "/envios",
+      resultados: "/resultados",
+      agente: "/agente",
+    }),
+    []
+  );
+
+  const DEFAULT_PAGE: PageKey = "precios";
+
+  // Página inicial según URL (si es /login o desconocida, usa DEFAULT_PAGE)
+  const initialPage: PageKey = useMemo(() => {
+    const path = window.location.pathname;
+    if (path in pathToPage) return pathToPage[path];
+    return DEFAULT_PAGE;
+  }, [pathToPage]);
+
+  const [currentPage, setCurrentPage] = useState<PageKey>(initialPage);
+
+  // Manejar navegación con botón atrás/adelante del navegador
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path === "/precios") setCurrentPage("precios");
-      else if (path === "/wpp") setCurrentPage("wpp");
-      else if (path === "/crm") setCurrentPage("crm");
-      else if (path === "/agenda") setCurrentPage("agenda");
-      else if (path === "/envios") setCurrentPage("envios");
-      else if (path === "/resultados") setCurrentPage("resultados");
-      else if (path === "/login") setCurrentPage("login");
+      if (path === "/login") {
+        // Si el usuario navega manualmente a /login, no cambiamos currentPage.
+        // La UI de abajo decide si muestra Login o Layout según autenticación.
+        return;
+      }
+      const page = pathToPage[path] ?? DEFAULT_PAGE;
+      setCurrentPage(page);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
+  }, [pathToPage]);
 
+  // Efecto de guard: decide a qué ruta empujar según estado de auth (sin side effects en render)
+  useEffect(() => {
+    if (loading) return;
+
+    const path = window.location.pathname;
+
+    // No autenticado => asegúrate de estar en /login
+    if (!isAuthenticated) {
+      if (path !== "/login") {
+        window.history.pushState(null, "", "/login");
+      }
+      return;
+    }
+
+    // Autenticado y estás en /login => manda a la ruta de la página actual
+    if (isAuthenticated && path === "/login") {
+      const target = pageToPath[currentPage] ?? pageToPath[DEFAULT_PAGE];
+      window.history.pushState(null, "", target);
+    }
+  }, [loading, isAuthenticated, currentPage, pageToPath]);
+
+  // Cambio de página disparado desde el Layout (barra lateral, etc.)
   const handlePageChange = (page: string) => {
-    setCurrentPage(page);
-    window.history.pushState(null, "", `/${page}`);
+    const p = (page as PageKey) ?? DEFAULT_PAGE;
+    setCurrentPage(p);
+    const target = pageToPath[p] ?? pageToPath[DEFAULT_PAGE];
+    window.history.pushState(null, "", target);
   };
 
   if (loading) {
@@ -56,8 +109,8 @@ function App() {
     );
   }
 
+  // NO hagas pushState aquí; solo renderiza la pantalla de login.
   if (!isAuthenticated) {
-    window.history.pushState(null, "", "/login");
     return <LoginForm />;
   }
 
