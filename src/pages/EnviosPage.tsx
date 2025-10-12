@@ -1,15 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Truck, RefreshCw, Phone } from 'lucide-react';
+import { Truck, RefreshCw, Phone, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
-import { formatWhatsApp } from '../utils/clientHelpers';
+import { formatWhatsApp, formatDate } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 
 /** ================== Normalizadores & validaciones ================== */
 const normalize = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 
-/** Canoniza para comparar valores “no válidos” (sin tildes, signos, guiones/underscores, espacios múltiples) */
 const canon = (v: unknown) =>
   String(v ?? '')
     .toLowerCase()
@@ -20,10 +19,29 @@ const canon = (v: unknown) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-/** “No aplica” no debe contar como valor válido */
 const isInvalidNoAplica = (v: unknown) => {
   const c = canon(v);
   return c === '' || c === 'no aplica' || c === 'no';
+};
+
+/** Oculta null/undefined/"null"/"undefined"/"No aplica" */
+const fmt = (v: unknown, placeholder = ''): string => {
+  const s = (v ?? '').toString().trim();
+  if (!s) return placeholder;
+  const lower = s.toLowerCase();
+  if (lower === 'null' || lower === 'undefined' || isInvalidNoAplica(s)) return placeholder;
+  return s;
+};
+
+/** Parse seguro de fecha (admite "YYYY-MM-DD HH:mm" o ISO) */
+const parseDateSafe = (v: unknown): number => {
+  if (!v) return 0;
+  const raw = String(v).trim();
+  if (!raw) return 0;
+  // Si viene como "2025-09-04 10:00" lo pasamos a ISO
+  const iso = raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') + (raw.length === 16 ? ':00' : '') : raw;
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? 0 : time;
 };
 
 /**
@@ -31,7 +49,7 @@ const isInvalidNoAplica = (v: unknown) => {
  * - SEDE (agenda_ciudad_sede)
  * - CIUDAD (guia_ciudad)
  * - DIRECCIÓN (guia_direccion)
- * Y además, que ninguno de esos tres sea "No aplica"/"no_aplica"/"no aplica"/"no".
+ * Y ninguno sea "No aplica"/"no".
  */
 const hasSedeCiudadDireccionValid = (c: Client): boolean => {
   const sede = c?.agenda_ciudad_sede != null ? String(c.agenda_ciudad_sede).trim() : '';
@@ -41,6 +59,20 @@ const hasSedeCiudadDireccionValid = (c: Client): boolean => {
   if (isInvalidNoAplica(sede) || isInvalidNoAplica(ciudad) || isInvalidNoAplica(direccion)) return false;
   return true;
 };
+
+type SortKey =
+  | 'cliente'
+  | 'whatsapp'
+  | 'sede'
+  | 'ciudad'
+  | 'direccion'
+  | 'ida'
+  | 'ret'
+  | 'asegurado'
+  | 'valorSeguro'
+  | 'created';
+
+type SortOrder = 'asc' | 'desc';
 
 export const EnviosPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -52,6 +84,12 @@ export const EnviosPage: React.FC = () => {
   const [search, setSearch] = useState<string>('');
 
   const [viewClient, setViewClient] = useState<Client | null>(null);
+
+  // Orden por defecto: Fecha registro (created) descendente (más recientes primero)
+  const [sort, setSort] = useState<{ key: SortKey; order: SortOrder }>({
+    key: 'created',
+    order: 'desc',
+  });
 
   /** === Carga inicial === */
   const fetchClients = async () => {
@@ -74,7 +112,6 @@ export const EnviosPage: React.FC = () => {
 
   /** === Sincronización con otras vistas/pestañas === */
   useEffect(() => {
-    // Parche local cuando otra vista del mismo SPA dispare el evento
     const onExternalUpdate = (ev: Event) => {
       const detail = (ev as CustomEvent<Partial<Client>>).detail;
       if (!detail || !('row_number' in detail)) return;
@@ -95,7 +132,6 @@ export const EnviosPage: React.FC = () => {
 
     window.addEventListener('client:updated', onExternalUpdate as any);
 
-    // Si el cambio vino desde otra pestaña/route, re-fetch rápido
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'crm:client-updated' && e.newValue) {
         fetchClients();
@@ -112,18 +148,16 @@ export const EnviosPage: React.FC = () => {
   /** === Opcional: estado de guardado por si quieres bloquear algo en la tabla === */
   const [savingRow, setSavingRow] = useState<number | null>(null);
 
-  /** === onUpdate usado por el modal (mismo contrato que en ListView) === */
+  /** === onUpdate usado por el modal (mismo contrato) === */
   const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
     if (!payload.row_number) return false;
 
-    // --- OPTIMISTA + ROLLBACK ---
     setSavingRow(payload.row_number);
     const prevClients = clients;
     const prevView = viewClient;
 
-    // Parchea y respeta el filtro de "válidos" inmediatamente
     const patchedClients = prevClients
-      .map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c)
+      .map(c => (c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c))
       .filter(hasSedeCiudadDireccionValid);
     setClients(patchedClients);
 
@@ -145,7 +179,6 @@ export const EnviosPage: React.FC = () => {
       }
       return true;
     } catch (e) {
-      // --- ROLLBACK si falla ---
       setClients(prevClients);
       setViewClient(prevView);
       setError('No se pudo guardar los cambios');
@@ -155,11 +188,10 @@ export const EnviosPage: React.FC = () => {
     }
   };
 
-
-  /** === Ciudades & Sedes únicas (derivadas del estado “clients”) === */
+  /** === Ciudades & Sedes únicas (derivadas) === */
   const cities = useMemo(() => {
     const s = new Set<string>();
-    clients.forEach((c) => {
+    clients.forEach(c => {
       const city = (c.guia_ciudad && String(c.guia_ciudad).trim()) || '';
       if (city && !isInvalidNoAplica(city)) s.add(city);
     });
@@ -168,30 +200,30 @@ export const EnviosPage: React.FC = () => {
 
   const sedes = useMemo(() => {
     const s = new Set<string>();
-    clients.forEach((c) => {
+    clients.forEach(c => {
       const sede = (c.agenda_ciudad_sede && String(c.agenda_ciudad_sede).trim()) || '';
       if (sede && !isInvalidNoAplica(sede)) s.add(sede);
     });
     return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
   }, [clients]);
 
-  /** === Filtrado + Orden === */
+  /** === Filtrado === */
   const filtered = useMemo(() => {
     let data = [...clients];
 
     if (cityFilter) {
       const nf = normalize(cityFilter);
-      data = data.filter((c) => normalize(String(c.guia_ciudad || '')) === nf);
+      data = data.filter(c => normalize(String(c.guia_ciudad || '')) === nf);
     }
 
     if (sedeFilter) {
       const nf = normalize(sedeFilter);
-      data = data.filter((c) => normalize(String(c.agenda_ciudad_sede || '')) === nf);
+      data = data.filter(c => normalize(String(c.agenda_ciudad_sede || '')) === nf);
     }
 
     if (search.trim()) {
       const q = normalize(search.trim());
-      data = data.filter((c) => {
+      data = data.filter(c => {
         const nombre = normalize(String(c.nombre || ''));
         const modelo = normalize(String(c.modelo || ''));
         const dir = normalize(String(c.guia_direccion || ''));
@@ -213,17 +245,74 @@ export const EnviosPage: React.FC = () => {
       });
     }
 
-    // Orden sugerido: guía ida (desc)
-    data.sort((a, b) => {
-      const aIda = String(a.guia_numero_ida || '');
-      const bIda = String(b.guia_numero_ida || '');
-      return bIda.localeCompare(aIda, 'es', { numeric: true, sensitivity: 'base' });
-    });
-
     return data;
   }, [clients, cityFilter, sedeFilter, search]);
 
-  const total = filtered.length;
+  /** === Ordenamiento === */
+  const sorted = useMemo(() => {
+    const getKeyValue = (c: Client, key: SortKey): string | number => {
+      switch (key) {
+        case 'cliente':
+          return fmt(c.nombre) || '';
+        case 'whatsapp':
+          return String(c.whatsapp || '').replace('@s.whatsapp.net', '');
+        case 'sede':
+          return fmt(c.agenda_ciudad_sede) || '';
+        case 'ciudad':
+          return fmt(c.guia_ciudad) || '';
+        case 'direccion':
+          return fmt(c.guia_direccion) || '';
+        case 'ida':
+          return fmt(c.guia_numero_ida) || '';
+        case 'ret':
+          return fmt(c.guia_numero_retorno) || '';
+        case 'asegurado':
+          return fmt(c.asegurado) || '';
+        case 'valorSeguro': {
+          const v = fmt(c.valor_seguro) || '';
+          const n = Number(v.toString().replace(/[^\d.-]/g, ''));
+          return Number.isFinite(n) ? n : -Infinity; // vacíos al final si asc
+        }
+        case 'created':
+          return parseDateSafe(c.created);
+        default:
+          return '';
+      }
+    };
+
+    const dir = sort.order === 'asc' ? 1 : -1;
+
+    return [...filtered].sort((a, b) => {
+      const va = getKeyValue(a, sort.key);
+      const vb = getKeyValue(b, sort.key);
+
+      // num vs string
+      if (typeof va === 'number' || typeof vb === 'number') {
+        const na = typeof va === 'number' ? va : 0;
+        const nb = typeof vb === 'number' ? vb : 0;
+        return (na - nb) * dir;
+      }
+      // string
+      return (String(va).localeCompare(String(vb), 'es', { numeric: true, sensitivity: 'base' })) * dir;
+    });
+  }, [filtered, sort]);
+
+  const total = sorted.length;
+
+  /** === UI helpers de orden === */
+  const headerBtn =
+    'group inline-flex items-center gap-1 select-none hover:text-purple-700 transition cursor-pointer';
+
+  const sortIcon = (key: SortKey) => {
+    if (sort.key !== key) return <ArrowUpDown className="w-4 h-4 opacity-60 group-hover:opacity-100" />;
+    return sort.order === 'asc'
+      ? <ArrowUp className="w-4 h-4" />
+      : <ArrowDown className="w-4 h-4" />;
+  };
+
+  const onSort = (key: SortKey) => {
+    setSort(prev => (prev.key === key ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' } : { key, order: 'asc' }));
+  };
 
   /** === Render === */
   return (
@@ -234,7 +323,7 @@ export const EnviosPage: React.FC = () => {
           <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center">
             <Truck className="w-5 h-5 text-purple-600" />
           </div>
-        <div>
+          <div>
             <h2 className="text-lg font-semibold text-gray-800">Gestión de Envíos</h2>
             <p className="text-sm text-gray-500">
               {total} registro{total !== 1 ? 's' : ''} con SEDE, CIUDAD y DIRECCIÓN válidos
@@ -252,7 +341,7 @@ export const EnviosPage: React.FC = () => {
               title="Filtrar por sede (agenda_ciudad_sede)"
             >
               <option value="">Todas las sedes</option>
-              {sedes.map((s) => (
+              {sedes.map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
@@ -264,7 +353,7 @@ export const EnviosPage: React.FC = () => {
               title="Filtrar por ciudad (guía)"
             >
               <option value="">Todas las ciudades</option>
-              {cities.map((c) => (
+              {cities.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
@@ -326,29 +415,72 @@ export const EnviosPage: React.FC = () => {
             <table className="min-w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-purple-50 sticky top-0 z-10">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Cliente</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">WhatsApp</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Sede</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Ciudad</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Dirección</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Guía ida</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Guía retorno</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Asegurado</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Valor seguro</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('cliente')}>
+                      Cliente {sortIcon('cliente')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('whatsapp')}>
+                      WhatsApp {sortIcon('whatsapp')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('sede')}>
+                      Sede {sortIcon('sede')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('ciudad')}>
+                      Ciudad {sortIcon('ciudad')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('direccion')}>
+                      Dirección {sortIcon('direccion')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('ida')}>
+                      Guía ida {sortIcon('ida')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('ret')}>
+                      Guía retorno {sortIcon('ret')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('asegurado')}>
+                      Asegurado {sortIcon('asegurado')}
+                    </button>
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('valorSeguro')}>
+                      Valor seguro {sortIcon('valorSeguro')}
+                    </button>
+                  </th>
+                  {/* Nueva columna */}
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('created')}>
+                      Fecha registro {sortIcon('created')}
+                    </button>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((c, i) => {
-                  const ciudad = String(c.guia_ciudad || '');
-                  const direccion = String(c.guia_direccion || '');
-                  const ida = String(c.guia_numero_ida || '');
-                  const ret = String(c.guia_numero_retorno || '');
-                  const asegurado = String(c.asegurado || '');
-                  const valorSeguro =
-                    c.valor_seguro !== undefined && c.valor_seguro !== null
-                      ? String(c.valor_seguro)
-                      : '';
-                  const sede = String(c.agenda_ciudad_sede || '');
+                {sorted.map((c, i) => {
+                  const nombre = fmt(c.nombre, 'Sin nombre');
+                  const modelo = fmt(c.modelo);
+                  const sede = fmt(c.agenda_ciudad_sede, '-');
+                  const ciudad = fmt(c.guia_ciudad, '-');
+                  const direccion = fmt(c.guia_direccion, '-');
+                  const ida = fmt(c.guia_numero_ida, '-');
+                  const ret = fmt(c.guia_numero_retorno, '-');
+                  const asegurado = fmt(c.asegurado, '-');
+                  const valorSeguro = fmt(c.valor_seguro, '-');
+                  const createdRaw = c.created ? String(c.created) : '';
+                  const createdHuman = createdRaw ? formatDate(createdRaw) : '-';
 
                   return (
                     <tr
@@ -357,11 +489,11 @@ export const EnviosPage: React.FC = () => {
                       onClick={() => setViewClient(c)}
                       tabIndex={0}
                       role="button"
-                      aria-label={`Abrir modal de ${c.nombre || 'cliente'}`}
+                      aria-label={`Abrir modal de ${nombre || 'cliente'}`}
                     >
                       <td className="px-4 py-4">
-                        <div className="text-gray-900 font-medium">{c.nombre || 'Sin nombre'}</div>
-                        <div className="text-xs text-gray-500">{c.modelo || ''}</div>
+                        <div className="text-gray-900 font-medium">{nombre}</div>
+                        {modelo && <div className="text-xs text-gray-500">{modelo}</div>}
                       </td>
                       <td className="px-4 py-4">
                         <div className="inline-flex items-center gap-1.5 text-green-700">
@@ -369,20 +501,21 @@ export const EnviosPage: React.FC = () => {
                           {formatWhatsApp(c.whatsapp)}
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-gray-900">{sede || '-'}</td>
-                      <td className="px-4 py-4 text-gray-900">{ciudad || '-'}</td>
-                      <td className="px-4 py-4 text-gray-900 break-words max-w-[280px]">{direccion || '-'}</td>
-                      <td className="px-4 py-4 text-gray-900">{ida || '-'}</td>
-                      <td className="px-4 py-4 text-gray-900">{ret || '-'}</td>
-                      <td className="px-4 py-4 text-gray-900">{asegurado || '-'}</td>
-                      <td className="px-4 py-4 text-gray-900">{valorSeguro || '-'}</td>
+                      <td className="px-4 py-4 text-gray-900">{sede}</td>
+                      <td className="px-4 py-4 text-gray-900">{ciudad}</td>
+                      <td className="px-4 py-4 text-gray-900 break-words max-w-[280px]">{direccion}</td>
+                      <td className="px-4 py-4 text-gray-900">{ida}</td>
+                      <td className="px-4 py-4 text-gray-900">{ret}</td>
+                      <td className="px-4 py-4 text-gray-900">{asegurado}</td>
+                      <td className="px-4 py-4 text-gray-900">{valorSeguro}</td>
+                      <td className="px-4 py-4 text-gray-900">{createdHuman}</td>
                     </tr>
                   );
                 })}
 
-                {filtered.length === 0 && (
+                {sorted.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={10} className="px-4 py-10 text-center text-gray-500">
                       No hay registros que cumplan con SEDE, CIUDAD y DIRECCIÓN (sin “No aplica”).
                     </td>
                   </tr>
