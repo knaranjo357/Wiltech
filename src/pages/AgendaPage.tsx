@@ -1,9 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, Clock, RefreshCw, Phone, X } from 'lucide-react';
+import { Calendar, Clock, RefreshCw, Phone, X, CheckCircle } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { Client } from '../types/client';
 import { getEtapaColor, getCategoriaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
+
+/** ================== Utils de texto ================== */
+const safeText = (v: unknown): string => {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  const lower = s.toLowerCase();
+  if (lower === 'null' || lower === 'undefined') return '';
+  return s;
+};
 
 /** ================== Utils de fecha (robustos) ================== */
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
@@ -161,11 +170,11 @@ export const AgendaPage: React.FC = () => {
     };
   }, []);
 
-  /** === Guardado (mismo contrato que en ListView / EnviosPage) === */
+  /** === Guardado (mismo contrato que en otras vistas) === */
   const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
     if (!payload.row_number) return false;
 
-    // --- OPTIMISTA: parchea inmediatamente y guarda snapshot para rollback ---
+    // OPTIMISTA + ROLLBACK
     setSavingRow(payload.row_number);
     const prevClients = clients;
     const prevView = viewClient;
@@ -178,11 +187,9 @@ export const AgendaPage: React.FC = () => {
     );
 
     try {
-      // Intenta con el servicio (no dependas del shape de la respuesta)
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        // Fallback HTTP si aplica en tu app
         await fetch('/api/clients/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -191,7 +198,7 @@ export const AgendaPage: React.FC = () => {
       }
       return true;
     } catch (e) {
-      // --- ROLLBACK si falla ---
+      // ROLLBACK
       setClients(prevClients);
       setViewClient(prevView);
       setError('No se pudo guardar los cambios');
@@ -200,7 +207,6 @@ export const AgendaPage: React.FC = () => {
       setSavingRow(null);
     }
   };
-
 
   /** === Lista filtrada (fecha + nombre) === */
   const filteredClients = useMemo(() => {
@@ -237,7 +243,7 @@ export const AgendaPage: React.FC = () => {
     // Filtro por nombre (normalizado)
     const q = normalize(nameFilter);
     if (q) {
-      filtered = filtered.filter(c => normalize(String(c.nombre ?? ''))?.includes(q));
+      filtered = filtered.filter(c => normalize(safeText(c.nombre)).includes(q));
     }
 
     // Orden por hora ascendente
@@ -260,7 +266,7 @@ export const AgendaPage: React.FC = () => {
 
   const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    const phoneNumber = (whatsapp || '').replace('@s.whatsapp.net', '');
+    const phoneNumber = safeText(whatsapp).replace('@s.whatsapp.net', '');
     const url = `https://wa.me/${phoneNumber}`;
     window.open(url, '_blank');
   };
@@ -386,76 +392,95 @@ export const AgendaPage: React.FC = () => {
         <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/40 overflow-hidden">
           {filteredClients.length > 0 ? (
             <div className="divide-y divide-gray-100">
-              {filteredClients.map((client) => (
-                <div
-                  key={client.row_number}
-                  onClick={() => setViewClient(client)}
-                  className="p-6 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-purple-50/50 transition-all duration-300 cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Abrir modal de ${client.nombre || 'cliente'}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {client.nombre || 'Sin nombre'}
-                      </h3>
+              {filteredClients.map((client) => {
+                const attended = (client as any).asistio_agenda === true;
+                const nombre = safeText(client.nombre) || 'Sin nombre';
+                const modelo = safeText(client.modelo) || 'N/A';
+                const ciudad = safeText(client.ciudad) || 'N/A';
+                const intencion = safeText(client.intencion);
+                const notas = safeText(client.notas);
 
-                      <div className="flex items-center space-x-4 mt-1">
-                        <span className="text-sm text-gray-600">
-                          <strong>Modelo:</strong> {client.modelo || 'N/A'}
-                        </span>
-                        <span className="text-sm text-gray-600">
-                          <strong>Ciudad:</strong> {client.ciudad || 'N/A'}
-                        </span>
-                      </div>
+                return (
+                  <div
+                    key={client.row_number}
+                    onClick={() => setViewClient(client)}
+                    className={`p-6 transition-all duration-300 cursor-pointer
+                      ${attended
+                        ? 'bg-emerald-50 hover:bg-emerald-100/70 border-l-4 border-emerald-500'
+                        : 'hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-purple-50/50'}
+                    `}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Abrir modal de ${nombre}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                          {nombre}
+                          {attended && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Asistió
+                            </span>
+                          )}
+                        </h3>
 
-                      {client.intencion && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          <strong>Intención:</strong> {client.intencion}
-                        </p>
-                      )}
-                      {client.notas && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          <strong>Notas:</strong> {client.notas}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="text-right">
-                      <div className="flex items-center text-purple-600 mb-2 justify-end">
-                        <Clock className="w-4 h-4 mr-2" />
-                        <span className="font-medium">
-                          {displayDate((client as any).fecha_agenda)}
-                        </span>
-                      </div>
-
-                      <button
-                        onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
-                        className="flex items-center text-green-600 hover:text-green-700 font-medium transition-colors duration-300 group mb-2 ml-auto"
-                      >
-                        <Phone className="w-4 h-4 mr-2" />
-                        <span className="text-sm">{formatWhatsApp(client.whatsapp as any)}</span>
-                      </button>
-
-                      <div className="flex items-center gap-2 justify-end">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}
-                        >
-                          {(client.estado_etapa || 'Sin_estado').replace(/_/g, ' ')}
-                        </span>
-                        {client.categoria_contacto && (
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getCategoriaColor(client.categoria_contacto as any)}`}
-                          >
-                            {(client.categoria_contacto as string).replace(/_/g, ' ')}
+                        <div className="flex items-center space-x-4 mt-1">
+                          <span className="text-sm text-gray-600">
+                            <strong>Modelo:</strong> {modelo}
                           </span>
+                          <span className="text-sm text-gray-600">
+                            <strong>Ciudad:</strong> {ciudad}
+                          </span>
+                        </div>
+
+                        {intencion && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            <strong>Intención:</strong> {intencion}
+                          </p>
                         )}
+                        {notas && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            <strong>Notas:</strong> {notas}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="text-right">
+                        <div className="flex items-center text-purple-600 mb-2 justify-end">
+                          <Clock className="w-4 h-4 mr-2" />
+                          <span className="font-medium">
+                            {displayDate((client as any).fecha_agenda)}
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
+                          className="flex items-center text-green-600 hover:text-green-700 font-medium transition-colors duration-300 group mb-2 ml-auto"
+                        >
+                          <Phone className="w-4 h-4 mr-2" />
+                          <span className="text-sm">{formatWhatsApp(client.whatsapp as any)}</span>
+                        </button>
+
+                        <div className="flex items-center gap-2 justify-end">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}
+                          >
+                            {(safeText(client.estado_etapa) || 'Sin estado').replace(/_/g, ' ')}
+                          </span>
+                          {client.categoria_contacto && (
+                            <span
+                              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getCategoriaColor(client.categoria_contacto as any)}`}
+                            >
+                              {safeText(client.categoria_contacto).replace(/_/g, ' ')}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12">
@@ -472,7 +497,7 @@ export const AgendaPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modal reutilizable con edición inline */}
+      {/* Modal reutilizable con edición inline (incluye botón “Asistió” y Chat) */}
       <ClientModal
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}
