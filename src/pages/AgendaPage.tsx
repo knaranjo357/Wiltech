@@ -1,9 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Calendar, Clock, RefreshCw, Phone, X, CheckCircle } from 'lucide-react';
+import { Calendar, Clock, RefreshCw, Phone, X, CheckCircle, MapPin, ChevronRight } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { Client } from '../types/client';
 import { getEtapaColor, getCategoriaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
+
+/** ================== Config Sedes / Source ================== */
+const SEDE_OPCIONES = ['Bogotá', 'Bucaramanga', 'Barranquilla', 'Barrancabermeja'] as const;
+type Sede = (typeof SEDE_OPCIONES)[number];
+
+const SOURCE_TO_SEDE: Record<string, Sede> = {
+  Wiltech: 'Bogotá',
+  WiltechBga: 'Bucaramanga',
+};
 
 /** ================== Utils de texto ================== */
 const safeText = (v: unknown): string => {
@@ -111,6 +120,106 @@ const normalize = (s: string) =>
 
 type DateFilter = 'today' | 'tomorrow' | 'yesterday' | 'custom' | 'future';
 
+/** ================== Helpers de sede ================== */
+const getClientSede = (c: Client): string => {
+  const byAgenda = safeText((c as any).agenda_ciudad_sede);
+  if (byAgenda) return byAgenda;
+  const src = safeText((c as any).source);
+  if (src && SOURCE_TO_SEDE[src]) return SOURCE_TO_SEDE[src];
+  return safeText(c.ciudad);
+};
+
+/** ================== Modal para elegir Sede ================== */
+const SedeModal: React.FC<{
+  isOpen: boolean;
+  defaultSede?: string;
+  onSelect: (sede: Sede | 'Todas') => void;
+}> = ({ isOpen, defaultSede, onSelect }) => {
+  const [remember, setRemember] = useState(true);
+  const [sel, setSel] = useState<Sede | 'Todas'>(() => {
+    const candidate = (defaultSede || '') as Sede | 'Todas';
+    return (candidate && (SEDE_OPCIONES as readonly string[]).includes(candidate)) ? (candidate as Sede) : 'Bogotá';
+  });
+
+  if (!isOpen) return null;
+
+  const persist = (value: Sede | 'Todas') => {
+    if (remember) {
+      try { localStorage.setItem('agenda:selectedSede', value); } catch {}
+    } else {
+      try { localStorage.removeItem('agenda:selectedSede'); } catch {}
+    }
+  };
+
+  const confirm = () => {
+    persist(sel);
+    onSelect(sel);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[140] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-neutral-200 overflow-hidden">
+        <div className="px-5 py-4 bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <MapPin className="w-5 h-5" />
+            ¿De qué sede quieres ver la agenda?
+          </h3>
+          <p className="text-white/80 text-sm mt-1">
+            Puedes cambiar esta selección en cualquier momento.
+          </p>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {SEDE_OPCIONES.map((s) => {
+              const active = sel === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setSel(s)}
+                  className={`flex items-center justify-between w-full px-4 py-3 rounded-xl border text-left transition
+                    ${active ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-neutral-200 hover:bg-neutral-50'}`}
+                >
+                  <span className="font-medium">{s}</span>
+                  {active && <ChevronRight className="w-4 h-4 text-indigo-600" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between pt-2">
+            <label className="inline-flex items-center gap-2 text-sm text-neutral-700">
+              <input
+                type="checkbox"
+                className="rounded border-neutral-300"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+              />
+              Recordar mi selección
+            </label>
+            <button
+              onClick={confirm}
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              Confirmar
+            </button>
+          </div>
+
+          <div className="pt-2 border-t border-neutral-200">
+            <button
+              onClick={() => { persist('Todas'); onSelect('Todas'); }}
+              className="text-sm text-neutral-600 hover:text-neutral-900 underline"
+            >
+              Ver todas las sedes (sin filtrar)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/** ================== Página ================== */
 export const AgendaPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,6 +229,10 @@ export const AgendaPage: React.FC = () => {
   const [nameFilter, setNameFilter] = useState('');
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRow, setSavingRow] = useState<number | null>(null);
+
+  // Sede seleccionada
+  const [selectedSede, setSelectedSede] = useState<Sede | 'Todas' | ''>('');
+  const [showSedeModal, setShowSedeModal] = useState<boolean>(false);
 
   /** === Carga inicial === */
   const fetchClients = async () => {
@@ -142,6 +255,18 @@ export const AgendaPage: React.FC = () => {
   };
 
   useEffect(() => {
+    // Preguntar sede al inicio
+    const saved = (() => {
+      try { return localStorage.getItem('agenda:selectedSede') || ''; } catch { return ''; }
+    })();
+
+    if (saved) {
+      setSelectedSede(saved as Sede | 'Todas');
+      setShowSedeModal(false);
+    } else {
+      setShowSedeModal(true);
+    }
+
     fetchClients();
   }, []);
 
@@ -208,9 +333,15 @@ export const AgendaPage: React.FC = () => {
     }
   };
 
-  /** === Lista filtrada (fecha + nombre) === */
+  /** === Lista filtrada (sede + fecha + nombre) === */
   const filteredClients = useMemo(() => {
     let filtered = [...clients];
+
+    // Filtro por sede (si hay selección y no es "Todas")
+    if (selectedSede && selectedSede !== 'Todas') {
+      const target = normalize(selectedSede);
+      filtered = filtered.filter((c) => normalize(getClientSede(c)) === target);
+    }
 
     // Filtro por fecha
     switch (dateFilter) {
@@ -254,7 +385,7 @@ export const AgendaPage: React.FC = () => {
     });
 
     return filtered;
-  }, [clients, dateFilter, customDate, nameFilter]);
+  }, [clients, selectedSede, dateFilter, customDate, nameFilter]);
 
   // Contadores para los botones
   const stats = {
@@ -271,11 +402,36 @@ export const AgendaPage: React.FC = () => {
     window.open(url, '_blank');
   };
 
+  /** ===== Render ===== */
   return (
     <div className="space-y-6">
-      {/* Header de filtros (fecha + nombre) */}
+      {/* Modal de selección de sede al inicio */}
+      <SedeModal
+        isOpen={showSedeModal}
+        defaultSede={(selectedSede as string) || undefined}
+        onSelect={(s) => { setSelectedSede(s); setShowSedeModal(false); }}
+      />
+
+      {/* Header de filtros (sede + fecha + nombre) */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/40 p-6">
         <div className="flex flex-col gap-4">
+          {/* Sede actual + botón cambiar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-sm">
+              <MapPin className="w-4 h-4" />
+              <span className="font-medium">
+                Sede: {selectedSede ? selectedSede : '— seleccionar —'}
+              </span>
+            </span>
+            <button
+              onClick={() => setShowSedeModal(true)}
+              className="text-sm px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
+              title="Cambiar sede"
+            >
+              Cambiar sede
+            </button>
+          </div>
+
           {/* Filtros por fecha */}
           <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
             <div className="flex gap-2 flex-wrap flex-1">
@@ -336,7 +492,7 @@ export const AgendaPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Filtro por nombre */}
+          {/* Filtro por nombre + recargar */}
           <div className="flex items-center gap-2">
             <div className="relative w-full max-w-md">
               <input
@@ -432,6 +588,10 @@ export const AgendaPage: React.FC = () => {
                           <span className="text-sm text-gray-600">
                             <strong>Ciudad:</strong> {ciudad}
                           </span>
+                          {/* Mostrar sede deducida */}
+                          <span className="text-sm text-gray-600">
+                            <strong>Sede:</strong> {getClientSede(client) || '—'}
+                          </span>
                         </div>
 
                         {intencion && (
@@ -486,18 +646,30 @@ export const AgendaPage: React.FC = () => {
             <div className="text-center py-12">
               <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-500">
-                {dateFilter === 'today' && 'No hay citas programadas para hoy'}
-                {dateFilter === 'tomorrow' && 'No hay citas programadas para mañana'}
-                {dateFilter === 'yesterday' && 'No hubo citas programadas ayer'}
-                {dateFilter === 'future' && 'No hay citas programadas en fechas futuras'}
-                {dateFilter === 'custom' && 'No hay citas para la fecha seleccionada'}
+                {selectedSede && selectedSede !== 'Todas' ? (
+                  <>
+                    {dateFilter === 'today' && `No hay citas programadas para hoy en ${selectedSede}`}
+                    {dateFilter === 'tomorrow' && `No hay citas programadas para mañana en ${selectedSede}`}
+                    {dateFilter === 'yesterday' && `No hubo citas programadas ayer en ${selectedSede}`}
+                    {dateFilter === 'future' && `No hay citas programadas en fechas futuras en ${selectedSede}`}
+                    {dateFilter === 'custom' && `No hay citas para la fecha seleccionada en ${selectedSede}`}
+                  </>
+                ) : (
+                  <>
+                    {dateFilter === 'today' && 'No hay citas programadas para hoy'}
+                    {dateFilter === 'tomorrow' && 'No hay citas programadas para mañana'}
+                    {dateFilter === 'yesterday' && 'No hubo citas programadas ayer'}
+                    {dateFilter === 'future' && 'No hay citas programadas en fechas futuras'}
+                    {dateFilter === 'custom' && 'No hay citas para la fecha seleccionada'}
+                  </>
+                )}
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* Modal reutilizable con edición inline (incluye botón “Asistió” y Chat) */}
+      {/* Modal de cliente (incluye Chat con source y todo lo demás) */}
       <ClientModal
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}

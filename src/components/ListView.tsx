@@ -24,6 +24,12 @@ const asStr  = (v: unknown) => String(v ?? '');
 const normalize = (s: string) =>
   s.toLowerCase().replace(/[_\-\s]+/g, ' ').trim();
 
+/** Map de etiqueta legible para source */
+const sourceLabel = (s?: string) =>
+  s === 'Wiltech' ? 'Bogotá' :
+  s === 'WiltechBga' ? 'Bucaramanga' :
+  labelize(s || '');
+
 /** Colores seguros incluso con valores desconocidos */
 const getEtapaColorSafe = (v: string) =>
   getEtapaColor(v as EstadoEtapa) || 'bg-gray-50 text-gray-700 border border-gray-200';
@@ -96,9 +102,10 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   };
 
   /** ===== Opciones dinámicas (según data) ===== */
-  const etapasOptions = useMemo(() => collectUnique(clients, 'estado_etapa'), [clients]);
+  const etapasOptions     = useMemo(() => collectUnique(clients, 'estado_etapa'), [clients]);
   const categoriasOptions = useMemo(() => collectUnique(clients, 'categoria_contacto'), [clients]);
-  const ciudadOptions = useMemo(() => collectUnique(clients, 'agenda_ciudad_sede'), [clients]);
+  const ciudadOptions     = useMemo(() => collectUnique(clients, 'agenda_ciudad_sede'), [clients]);
+  const sourceOptions     = useMemo(() => collectUnique(clients, 'source'), [clients]);
 
   /** ===== Filtros locales ===== */
   const [searchInput, setSearchInput] = useState('');
@@ -106,6 +113,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const [selectedEtapas, setSelectedEtapas] = useState<string[]>([]);
   const [selectedCategorias, setSelectedCategorias] = useState<string[]>([]);
   const [selectedCiudades, setSelectedCiudades] = useState<string[]>([]);
+  const [selectedSources, setSelectedSources] = useState<string[]>([]); // <<< NUEVO
 
   // debounce para búsqueda
   useEffect(() => {
@@ -122,6 +130,9 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const toggleCiudad = (city: string) => {
     setSelectedCiudades(prev => prev.includes(city) ? prev.filter(x => x !== city) : [...prev, city]);
   };
+  const toggleSource = (src: string) => { // <<< NUEVO
+    setSelectedSources(prev => prev.includes(src) ? prev.filter(x => x !== src) : [...prev, src]);
+  };
 
   const clearFilters = () => {
     setSearchInput('');
@@ -129,6 +140,7 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
     setSelectedEtapas([]);
     setSelectedCategorias([]);
     setSelectedCiudades([]);
+    setSelectedSources([]); // <<< NUEVO
   };
 
   /** ===== Orden + Filtro + Datos ===== */
@@ -169,6 +181,10 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
       const setN = new Set(selectedCiudades.map(normalize));
       data = data.filter(c => setN.has(normalize(String((c as any).ciudad ?? ''))));
     }
+    if (selectedSources.length > 0) { // <<< NUEVO
+      const setN = new Set(selectedSources.map(normalize));
+      data = data.filter(c => setN.has(normalize(String((c as any).source ?? ''))));
+    }
 
     // orden
     data.sort((a, b) => {
@@ -194,14 +210,14 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
     });
 
     return data;
-  }, [clients, searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, sortField, sortOrder]);
+  }, [clients, searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, selectedSources, sortField, sortOrder]); // <<< deps incluye selectedSources
 
   const resultsCount = filteredAndSorted.length;
 
   // ===== Reset de página al cambiar filtros/orden/dataset =====
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, sortField, sortOrder, clients.length]);
+  }, [searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, selectedSources, sortField, sortOrder, clients.length]); // <<< incluye selectedSources
 
   // Clamp cuando cambia pageSize o resultsCount
   useEffect(() => {
@@ -487,8 +503,31 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
                 </div>
               )}
 
+              {/* Chips Source (Wiltech / WiltechBga / otros) */}
+              {sourceOptions.length > 0 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  <span className="text-xs font-medium text-gray-600 mr-1 min-w-fit">Source:</span>
+                  {sourceOptions.map((src) => {
+                    const selected = selectedSources.includes(src);
+                    return (
+                      <button
+                        key={src}
+                        onClick={() => toggleSource(src)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border shadow-sm transition
+                          ${selected ? 'ring-2 ring-blue-400' : ''}
+                          bg-gray-50 text-gray-700 border-gray-200
+                        `}
+                      >
+                        <span>{sourceLabel(src)}</span>
+                        {selected && <X className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {/* Chips activos */}
-              {(searchTerm || selectedEtapas.length > 0 || selectedCategorias.length > 0 || selectedCiudades.length > 0) && (
+              {(searchTerm || selectedEtapas.length > 0 || selectedCategorias.length > 0 || selectedCiudades.length > 0 || selectedSources.length > 0) && (
                 <div className="flex flex-wrap items-center gap-2">
                   {searchTerm && (
                     <span className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-xs bg-blue-50 text-blue-700 border border-blue-100">
@@ -522,6 +561,14 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
                     <span key={`sci-${ci}`} className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-xs bg-gray-50 text-gray-700 border border-gray-200">
                       {labelize(ci)}
                       <button className="p-0.5 hover:bg-gray-100 rounded-full" onClick={() => toggleCiudad(ci)}>
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                  {selectedSources.map(s => (
+                    <span key={`ss-${s}`} className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full text-xs bg-gray-50 text-gray-700 border border-gray-200">
+                      {sourceLabel(s)}
+                      <button className="p-0.5 hover:bg-gray-100 rounded-full" onClick={() => toggleSource(s)}>
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </span>
@@ -723,6 +770,10 @@ export const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
                                 <Phone size={14} className="mr-2" />
                                 {formatWhatsApp((currentClient as any)[field] as string)}
                               </button>
+                            ) : field === 'source' ? (
+                              <span className="text-gray-900 font-medium">
+                                {sourceLabel((currentClient as any)[field]) || '-'}
+                              </span>
                             ) : (
                               <span className="text-gray-900 font-medium">
                                 {(currentClient as any)[field]?.toString() || '-'}

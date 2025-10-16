@@ -11,6 +11,7 @@ import {
   CartesianGrid,
   Brush,
   Cell,
+  Legend,
 } from 'recharts';
 
 import { ClientService } from '../services/clientService';
@@ -52,7 +53,6 @@ const formatBucketLabel = (d: Date, g: Granularity) => {
 };
 
 /** ================== Parsers de fechas ================== */
-// Agenda (mismas reglas que ya usabas)
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
@@ -123,18 +123,32 @@ const isInvalidNoAplica = (v: unknown) => {
 
 /** ================== Tipos / Colores ================== */
 type BucketPoint = {
-  key: string;             // YMD del bucket (día, lunes de semana o 1° de mes)
-  label: string;           // texto para eje X
-  count: number;           // # de agendas o # de creados
-  uniqueClients: number;   // # de clientes únicos en el bucket
+  key: string;
+  label: string;
   when: 'past' | 'today' | 'future';
+  // comparación por source
+  bogotaCount: number;
+  bogotaUnique: number;
+  bgaCount: number;
+  bgaUnique: number;
+  // totales (por si quieres mostrar stacked en el futuro)
+  totalCount: number;
+  totalUnique: number;
 };
 
 const COLORS = {
-  past: '#2563EB',     // blue-600
-  today: '#16A34A',    // green-600
-  future: '#A855F7',   // purple-600
-  barHover: '#7C3AED', // violet-600
+  bogota: '#2563EB',     // blue-600
+  bogotaSelected: '#1D4ED8', // blue-700
+  bga: '#A855F7',        // purple-600
+  bgaSelected: '#7C3AED',    // violet-600
+};
+
+const classifySource = (c: Client): 'bogota' | 'bga' | 'other' => {
+  const s = String((c as any).source ?? '').trim();
+  const sN = s.toLowerCase();
+  if (sN === 'wiltech') return 'bogota';
+  if (sN === 'wiltechbga') return 'bga';
+  return 'other';
 };
 
 export const Resultados: React.FC = () => {
@@ -145,15 +159,15 @@ export const Resultados: React.FC = () => {
   // Tabs: agendas vs creados
   const [activeTab, setActiveTab] = useState<'agendas' | 'creados'>('agendas');
 
-  // Filtro principal requerido: agenda_ciudad_sede (aplica a ambas vistas)
+  // Filtro principal: agenda_ciudad_sede
   const [sedeFilter, setSedeFilter] = useState<string>('ALL');
 
   // Búsqueda texto
   const [search, setSearch] = useState<string>('');
 
-  // Rango de fechas (YYYY-MM-DD) que condiciona estadísticas
-  const [fromDate, setFromDate] = useState<string>(''); // vacío = sin límite
-  const [toDate, setToDate] = useState<string>('');     // vacío = sin límite
+  // Rango de fechas (YYYY-MM-DD)
+  const [fromDate, setFromDate] = useState<string>('');
+  const [toDate, setToDate] = useState<string>('');
 
   // Agrupación
   const [granularity, setGranularity] = useState<Granularity>('day');
@@ -282,10 +296,10 @@ export const Resultados: React.FC = () => {
     if (search.trim()) {
       const q = normalize(search.trim());
       const nombre = normalize(String(c.nombre || ''));
-      const modelo = normalize(String(c.modelo || ''));
-      const ciudad = normalize(String(c.ciudad || ''));
+      const modelo = normalize(String((c as any).modelo || ''));
+      const ciudad = normalize(String((c as any).ciudad || ''));
       const sede = normalize(String((c as any).agenda_ciudad_sede || ''));
-      const tel = String(c.whatsapp || '').replace('@s.whatsapp.net', '');
+      const tel = String((c as any).whatsapp || '').replace('@s.whatsapp.net', '');
       if (!(nombre.includes(q) || modelo.includes(q) || ciudad.includes(q) || sede.includes(q) || tel.includes(q))) {
         return false;
       }
@@ -293,9 +307,19 @@ export const Resultados: React.FC = () => {
     return true;
   };
 
-  /** === Series por bucket (AGENDAS) === */
+  /** === Series comparativas por bucket (AGENDAS) === */
   const seriesAgendas: BucketPoint[] = useMemo(() => {
-    const map = new Map<string, { start: Date; count: number; clientsSet: Set<string> }>();
+    const map = new Map<
+      string,
+      {
+        start: Date;
+        when: BucketPoint['when'];
+        bogCount: number; bogSet: Set<string>;
+        bgaCount: number; bgaSet: Set<string>;
+        totCount: number; totSet: Set<string>;
+      }
+    >();
+
     const today = startOfDay(new Date());
 
     for (const c of withValidAgendaDate) {
@@ -306,38 +330,69 @@ export const Resultados: React.FC = () => {
       const start = bucketStart(d, granularity);
       const key = toYMD(start);
 
-      if (!map.has(key)) map.set(key, { start, count: 0, clientsSet: new Set() });
-      const rec = map.get(key)!;
-      rec.count += 1;
-
-      // cliente único por whatsapp (fallback a row_number)
-      const ck = String((c as any).whatsapp || c.row_number || `${c.nombre}|${c.ciudad}`);
-      rec.clientsSet.add(ck);
-    }
-
-    const arr: BucketPoint[] = Array.from(map.values())
-      .map(({ start, count, clientsSet }) => {
+      if (!map.has(key)) {
         const s = startOfDay(start);
         let when: BucketPoint['when'] = 'past';
         if (sameLocalDay(s, today)) when = 'today';
         else if (s > today) when = 'future';
 
-        return {
-          key: toYMD(s),
-          label: formatBucketLabel(s, granularity),
-          count,
-          uniqueClients: clientsSet.size,
+        map.set(key, {
+          start: s,
           when,
-        };
-      })
+          bogCount: 0, bogSet: new Set(),
+          bgaCount: 0, bgaSet: new Set(),
+          totCount: 0, totSet: new Set(),
+        });
+      }
+
+      const rec = map.get(key)!;
+      const ck = String((c as any).whatsapp || c.row_number || `${c.nombre}|${(c as any).ciudad}`);
+
+      // totales
+      rec.totCount += 1;
+      rec.totSet.add(ck);
+
+      // por source
+      const src = classifySource(c);
+      if (src === 'bogota') {
+        rec.bogCount += 1;
+        rec.bogSet.add(ck);
+      } else if (src === 'bga') {
+        rec.bgaCount += 1;
+        rec.bgaSet.add(ck);
+      }
+    }
+
+    const arr: BucketPoint[] = Array.from(map.entries())
+      .map(([key, r]) => ({
+        key,
+        label: formatBucketLabel(r.start, granularity),
+        when: r.when,
+        bogotaCount: r.bogCount,
+        bogotaUnique: r.bogSet.size,
+        bgaCount: r.bgaCount,
+        bgaUnique: r.bgaSet.size,
+        totalCount: r.totCount,
+        totalUnique: r.totSet.size,
+      }))
       .sort((a, b) => a.key.localeCompare(b.key));
 
     return arr;
   }, [withValidAgendaDate, granularity, search, sedeFilter, fromDate, toDate]);
 
-  /** === Series por bucket (CREATED ajustado a -5) === */
+  /** === Series comparativas por bucket (CREADOS ajustado a -5) === */
   const seriesCreated: BucketPoint[] = useMemo(() => {
-    const map = new Map<string, { start: Date; count: number; clientsSet: Set<string> }>();
+    const map = new Map<
+      string,
+      {
+        start: Date;
+        when: BucketPoint['when'];
+        bogCount: number; bogSet: Set<string>;
+        bgaCount: number; bgaSet: Set<string>;
+        totCount: number; totSet: Set<string>;
+      }
+    >();
+
     const today = startOfDay(new Date());
 
     for (const c of withValidCreatedDate) {
@@ -348,28 +403,49 @@ export const Resultados: React.FC = () => {
       const start = bucketStart(d, granularity);
       const key = toYMD(start);
 
-      if (!map.has(key)) map.set(key, { start, count: 0, clientsSet: new Set() });
-      const rec = map.get(key)!;
-      rec.count += 1;
-      const ck = String((c as any).whatsapp || c.row_number || `${c.nombre}|${c.ciudad}`);
-      rec.clientsSet.add(ck);
-    }
-
-    const arr: BucketPoint[] = Array.from(map.values())
-      .map(({ start, count, clientsSet }) => {
+      if (!map.has(key)) {
         const s = startOfDay(start);
         let when: BucketPoint['when'] = 'past';
         if (sameLocalDay(s, today)) when = 'today';
         else if (s > today) when = 'future';
 
-        return {
-          key: toYMD(s),
-          label: formatBucketLabel(s, granularity),
-          count,
-          uniqueClients: clientsSet.size,
+        map.set(key, {
+          start: s,
           when,
-        };
-      })
+          bogCount: 0, bogSet: new Set(),
+          bgaCount: 0, bgaSet: new Set(),
+          totCount: 0, totSet: new Set(),
+        });
+      }
+
+      const rec = map.get(key)!;
+      const ck = String((c as any).whatsapp || c.row_number || `${c.nombre}|${(c as any).ciudad}`);
+
+      rec.totCount += 1;
+      rec.totSet.add(ck);
+
+      const src = classifySource(c);
+      if (src === 'bogota') {
+        rec.bogCount += 1;
+        rec.bogSet.add(ck);
+      } else if (src === 'bga') {
+        rec.bgaCount += 1;
+        rec.bgaSet.add(ck);
+      }
+    }
+
+    const arr: BucketPoint[] = Array.from(map.entries())
+      .map(([key, r]) => ({
+        key,
+        label: formatBucketLabel(r.start, granularity),
+        when: r.when,
+        bogotaCount: r.bogCount,
+        bogotaUnique: r.bogSet.size,
+        bgaCount: r.bgaCount,
+        bgaUnique: r.bgaSet.size,
+        totalCount: r.totCount,
+        totalUnique: r.totSet.size,
+      }))
       .sort((a, b) => a.key.localeCompare(b.key));
 
     return arr;
@@ -381,8 +457,6 @@ export const Resultados: React.FC = () => {
   /** === Lista de agendas del bucket seleccionado (solo tab AGENDAS) === */
   const selectedItems = useMemo(() => {
     if (activeTab !== 'agendas' || !selectedKey) return [];
-    const bucketStartDate = new Date(selectedKey + 'T00:00:00');
-
     return withValidAgendaDate
       .filter(c => passTextAndSede(c))
       .filter(c => {
@@ -398,29 +472,34 @@ export const Resultados: React.FC = () => {
       });
   }, [activeTab, selectedKey, withValidAgendaDate, granularity, sedeFilter, search, fromDate, toDate]);
 
-  /** === KPIs rápidos (dependen de rango y filtros) === */
-  const totalAgendas = seriesAgendas.reduce((a, b) => a + b.count, 0);
-  const totalClientesAgendados = seriesAgendas.reduce((a, b) => a + b.uniqueClients, 0);
-  const totalCreados = seriesCreated.reduce((a, b) => a + b.count, 0);
-  const totalClientesCreados = seriesCreated.reduce((a, b) => a + b.uniqueClients, 0);
+  /** === KPIs rápidos (totales y por source) === */
+  const totalAgendas = seriesAgendas.reduce((a, b) => a + b.totalCount, 0);
+  const totalClientesAgendados = seriesAgendas.reduce((a, b) => a + b.totalUnique, 0);
+  const totalAgendasBog = seriesAgendas.reduce((a, b) => a + b.bogotaCount, 0);
+  const totalAgendasBga = seriesAgendas.reduce((a, b) => a + b.bgaCount, 0);
 
-  /** === Leyenda custom (evitamos problema de tipos con <Legend payload=... />) === */
-  const CustomLegend = () => (
-    <div className="flex items-center gap-4 text-sm mb-2">
-      <span className="inline-flex items-center gap-2">
-        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.past }} />
-        Pasado
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.today }} />
-        Hoy
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.future }} />
-        Futuro
-      </span>
-    </div>
-  );
+  const totalCreados = seriesCreated.reduce((a, b) => a + b.totalCount, 0);
+  const totalClientesCreados = seriesCreated.reduce((a, b) => a + b.totalUnique, 0);
+  const totalCreadosBog = seriesCreated.reduce((a, b) => a + b.bogotaCount, 0);
+  const totalCreadosBga = seriesCreated.reduce((a, b) => a + b.bgaCount, 0);
+
+  /** === Tooltip comparativo === */
+  const tooltipFormatter = (value: any, name: any, props: any) => {
+    const p = props?.payload as BucketPoint | undefined;
+    if (!p) return [value, name];
+    if (props.dataKey === 'bogotaCount') {
+      return [`${value} / ${p.bogotaUnique}`, 'Bogotá: Agendas / Clientes'];
+    }
+    if (props.dataKey === 'bgaCount') {
+      return [`${value} / ${p.bgaUnique}`, 'Bucaramanga: Agendas / Clientes'];
+    }
+    return [value, name];
+  };
+
+  const tooltipLabel = (_: any, payload: any[]) => {
+    const k = payload?.[0]?.payload?.key as string | undefined;
+    return k ?? new Date().toLocaleDateString();
+  };
 
   /** === Render === */
   return (
@@ -434,7 +513,7 @@ export const Resultados: React.FC = () => {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-800">Resultados</h2>
-              <p className="text-sm text-gray-500">Estadísticas por {granularity === 'day' ? 'día' : granularity === 'week' ? 'semana' : 'mes'} y rango de fechas</p>
+              <p className="text-sm text-gray-500">Comparativo Bogotá vs Bucaramanga por {granularity === 'day' ? 'día' : granularity === 'week' ? 'semana' : 'mes'}</p>
             </div>
           </div>
 
@@ -468,7 +547,7 @@ export const Resultados: React.FC = () => {
             </div>
           </div>
 
-          {/* Filtros dependientes del tab */}
+          {/* Filtros */}
           <div className="flex flex-col lg:flex-row gap-3 lg:items-center">
             {/* Sede */}
             <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-purple-50 p-3 rounded-xl border border-indigo-200">
@@ -539,7 +618,7 @@ export const Resultados: React.FC = () => {
         </div>
       </div>
 
-      {/* Gráfica */}
+      {/* Gráfica comparativa */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/40 p-6">
         {loading ? (
           <div className="py-12 text-center text-gray-600">Cargando datos…</div>
@@ -547,47 +626,60 @@ export const Resultados: React.FC = () => {
           <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-600">{error}</div>
         ) : activeSeries.length ? (
           <>
-            <CustomLegend />
-            <div className="h-[360px]">
+            <div className="flex items-center gap-4 text-sm mb-3">
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.bogota }} />
+                Bogotá (source: Wiltech)
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="inline-block w-3 h-3 rounded-sm" style={{ background: COLORS.bga }} />
+                Bucaramanga (source: WiltechBga)
+              </span>
+            </div>
+            <div className="h-[380px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={activeSeries} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="label" tick={{ fontSize: 12 }} />
                   <YAxis allowDecimals={false} />
-                  <Tooltip
-                    formatter={(value: any, _name: any, props: any) => {
-                      const uniq = props?.payload?.uniqueClients ?? 0;
-                      return [`${value} / ${uniq}`, 'Agendas / Clientes'];
-                    }}
-                    labelFormatter={(_label: any, payload: any) =>
-                      payload?.[0]?.payload?.key || new Date().toLocaleDateString()
-                    }
-                  />
+                  <Tooltip formatter={tooltipFormatter} labelFormatter={tooltipLabel} />
+                  <Legend />
+                  {/* Bogotá */}
                   <Bar
-                    dataKey="count"
-                    name="Agendas"
+                    dataKey="bogotaCount"
+                    name="Bogotá"
                     onClick={(entry: any) => {
-                      // solo permitir detalle en la vista de agendas
                       if (activeTab === 'agendas') setSelectedKey(entry?.key ?? null);
                     }}
                     isAnimationActive
                   >
                     {activeSeries.map((s) => (
                       <Cell
-                        key={s.key}
+                        key={`bog-${s.key}`}
                         cursor={activeTab === 'agendas' ? 'pointer' : 'default'}
-                        fill={
-                          selectedKey === s.key && activeTab === 'agendas'
-                            ? COLORS.barHover
-                            : s.when === 'today'
-                            ? COLORS.today
-                            : s.when === 'future'
-                            ? COLORS.future
-                            : COLORS.past
-                        }
+                        fill={selectedKey === s.key && activeTab === 'agendas' ? COLORS.bogotaSelected : COLORS.bogota}
                       />
                     ))}
                   </Bar>
+
+                  {/* Bucaramanga */}
+                  <Bar
+                    dataKey="bgaCount"
+                    name="Bucaramanga"
+                    onClick={(entry: any) => {
+                      if (activeTab === 'agendas') setSelectedKey(entry?.key ?? null);
+                    }}
+                    isAnimationActive
+                  >
+                    {activeSeries.map((s) => (
+                      <Cell
+                        key={`bga-${s.key}`}
+                        cursor={activeTab === 'agendas' ? 'pointer' : 'default'}
+                        fill={selectedKey === s.key && activeTab === 'agendas' ? COLORS.bgaSelected : COLORS.bga}
+                      />
+                    ))}
+                  </Bar>
+
                   {activeSeries.length > 24 && <Brush dataKey="label" height={24} />}
                 </BarChart>
               </ResponsiveContainer>
@@ -598,28 +690,35 @@ export const Resultados: React.FC = () => {
         )}
       </div>
 
-      {/* KPIs rápidos (condicionados por rango y agrupación) */}
+      {/* KPIs rápidos */}
       {!loading && !error && !!(seriesAgendas.length + seriesCreated.length) && (
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-6 gap-4">
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
             <p className="text-sm text-gray-500">Agendas (Σ)</p>
             <p className="text-3xl font-semibold">{totalAgendas}</p>
             <p className="text-xs text-gray-500 mt-1">Clientes únicos: {totalClientesAgendados}</p>
           </div>
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
+            <p className="text-sm text-gray-500">Agendas Bogotá</p>
+            <p className="text-3xl font-semibold">{totalAgendasBog}</p>
+          </div>
+          <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
+            <p className="text-sm text-gray-500">Agendas Bucaramanga</p>
+            <p className="text-3xl font-semibold">{totalAgendasBga}</p>
+          </div>
+
+          <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
             <p className="text-sm text-gray-500">Creados (Σ)</p>
             <p className="text-3xl font-semibold">{totalCreados}</p>
             <p className="text-xs text-gray-500 mt-1">Clientes únicos: {totalClientesCreados}</p>
           </div>
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
-            <p className="text-sm text-gray-500">Días/Semanas/Meses</p>
-            <p className="text-3xl font-semibold">{activeSeries.length}</p>
+            <p className="text-sm text-gray-500">Creados Bogotá</p>
+            <p className="text-3xl font-semibold">{totalCreadosBog}</p>
           </div>
           <div className="bg-white/90 rounded-2xl border border-white/40 shadow p-5">
-            <p className="text-sm text-gray-500">Pico por bucket</p>
-            <p className="text-3xl font-semibold">
-              {activeSeries.length ? Math.max(...activeSeries.map(s => s.count)) : 0}
-            </p>
+            <p className="text-sm text-gray-500">Creados Bucaramanga</p>
+            <p className="text-3xl font-semibold">{totalCreadosBga}</p>
           </div>
         </div>
       )}
@@ -665,22 +764,22 @@ export const Resultados: React.FC = () => {
                       </h4>
 
                       <div className="flex flex-wrap items-center gap-4 mt-1 text-sm text-gray-700">
-                        <span><strong>Modelo:</strong> {client.modelo || 'N/A'}</span>
-                        <span><strong>Ciudad:</strong> {client.ciudad || 'N/A'}</span>
+                        <span><strong>Modelo:</strong> {(client as any).modelo || 'N/A'}</span>
+                        <span><strong>Ciudad:</strong> {(client as any).ciudad || 'N/A'}</span>
                         <span className="inline-flex items-center text-purple-600">
                           <Clock className="w-4 h-4 mr-1" />
                           {displayDate((client as any).fecha_agenda)}
                         </span>
                       </div>
 
-                      {client.intencion && (
+                      {(client as any).intencion && (
                         <p className="text-sm text-gray-600 mt-1">
-                          <strong>Intención:</strong> {client.intencion}
+                          <strong>Intención:</strong> {(client as any).intencion}
                         </p>
                       )}
-                      {client.notas && (
+                      {(client as any).notas && (
                         <p className="text-sm text-gray-600 mt-1">
-                          <strong>Notas:</strong> {client.notas}
+                          <strong>Notas:</strong> {(client as any).notas}
                         </p>
                       )}
                     </div>
@@ -689,26 +788,26 @@ export const Resultados: React.FC = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const phoneNumber = String(client.whatsapp || '').replace('@s.whatsapp.net', '');
+                          const phoneNumber = String((client as any).whatsapp || '').replace('@s.whatsapp.net', '');
                           window.open(`https://wa.me/${phoneNumber}`, '_blank');
                         }}
                         className="flex items-center text-green-600 hover:text-green-700 font-medium transition-colors duration-300 group mb-2 ml-auto"
                       >
                         <Phone className="w-4 h-4 mr-2" />
-                        <span className="text-sm">{formatWhatsApp(client.whatsapp as any)}</span>
+                        <span className="text-sm">{formatWhatsApp((client as any).whatsapp as any)}</span>
                       </button>
 
                       <div className="flex items-center gap-2 justify-end">
                         <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border-2 shadow-sm ${getEtapaColor((client as any).estado_etapa as any)}`}
                         >
-                          {(client.estado_etapa || 'Sin_estado').replace(/_/g, ' ')}
+                          {(((client as any).estado_etapa || 'Sin_estado') as string).replace(/_/g, ' ')}
                         </span>
-                        {client.categoria_contacto && (
+                        {(client as any).categoria_contacto && (
                           <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getCategoriaColor(client.categoria_contacto as any)}`}
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getCategoriaColor((client as any).categoria_contacto as any)}`}
                           >
-                            {(client.categoria_contacto as string).replace(/_/g, ' ')}
+                            {(((client as any).categoria_contacto as string) || '').replace(/_/g, ' ')}
                           </span>
                         )}
                       </div>

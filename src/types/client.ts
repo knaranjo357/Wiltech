@@ -94,4 +94,5 @@ export interface Client {
   valor_seguro: Nullable<string | number>;
   created: Nullable<string>;
   asistio_agenda:Nullable<Boolean>;
+  source: Nullable<string>;
 }

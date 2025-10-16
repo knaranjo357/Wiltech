@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
   Copy, MessageCircle, ShieldCheck, PackageSearch, ClipboardList, Building2, ClipboardCheck,
-  Truck, Edit2, Save, Bot, Send, CheckCircle,
+  Truck, Edit2, Save, Bot, CheckCircle,
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { formatDate, formatWhatsApp, getEtapaColor, getCategoriaColor } from '../utils/clientHelpers';
-import { ApiService } from '../services/apiService';
+import { ChatPanel } from './ChatPanel';
+import { SourceSelector, SOURCE_TO_SEDE } from './SourceSelector';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -23,11 +24,10 @@ type FieldDef<K extends keyof Client = keyof Client> = {
   type?: FieldType;
 };
 
-type ChatMsg = { id: string | number; type: 'human' | 'ai' | 'system'; content: string };
-
 const SEDE_OPCIONES = ['Bogotá', 'Bucaramanga', 'Barranquilla', 'Barrancabermeja'];
 const CUSTOM_VALUE = '__custom__';
 
+// ========= Utils =========
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
@@ -53,47 +53,55 @@ const safeStr = (v?: unknown) => {
   return l === 'null' || l === 'undefined' ? '' : s;
 };
 
+// ========= Paleta fija =========
+const COLORS = {
+  overlay: 'rgba(17, 24, 39, 0.7)', // gris muy oscuro translúcido
+  headerFrom: '#4F46E5', // indigo-600
+  headerTo: '#A21CAF',   // fuchsia-800
+  white: '#FFFFFF',
+  black: '#111827', // gray-900
+  text: '#111827',
+  muted: '#6B7280', // gray-500
+  border: '#E5E7EB', // gray-200
+  borderSoft: '#F3F4F6', // gray-100
+  slate100: '#F1F5F9',
+  slate200: '#E2E8F0',
+  emerald50: '#ECFDF5',
+  emerald200: '#A7F3D0',
+  emerald600: '#059669',
+  purple50: '#F5F3FF',
+  purple200: '#DDD6FE',
+  purple700: '#6D28D9',
+  indigo50: '#EEF2FF',
+  indigo700: '#4338CA',
+  indigo800: '#3730A3',
+  neutral50: '#FAFAFA',
+  neutral100: '#F5F5F5',
+  neutral200: '#E5E7EB',
+};
+
+// ========= Componente =========
 export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, client, onUpdate }) => {
-  /** ===== NO returns antes de hooks ===== */
   const shouldRender = Boolean(isOpen && client);
   const c = (client ?? {}) as Client;
 
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  /** Estado general */
+  // Estado
   const [activeTab, setActiveTab] = useState<'ficha' | 'chat'>('ficha');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Client>>({});
   const [saving, setSaving] = useState(false);
 
-  /** Chat state */
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
-
-  /** Reset al abrir */
+  // Al abrir
   useEffect(() => {
     if (!shouldRender) return;
     setActiveTab('ficha');
     setIsEditing(false);
     setEditData(c);
-    setMsgs([]);
-    setChatError(null);
-    setInput('');
   }, [shouldRender]); // eslint-disable-line
 
-  /** Autoscroll chat */
-  useEffect(() => {
-    if (activeTab !== 'chat') return;
-    const el = chatScrollRef.current;
-    if (el) requestAnimationFrame(() => (el.scrollTop = el.scrollHeight));
-  }, [msgs, activeTab]);
-
-  /** Hotkeys + bloqueo scroll fondo */
+  // Hotkeys + bloqueo scroll fondo
   useEffect(() => {
     if (!shouldRender) return;
     const onKey = (e: KeyboardEvent) => {
@@ -130,7 +138,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     }
   };
 
-  /** Helpers */
+  // Helpers
   const getVal = <K extends keyof Client>(key: K): any => (editData[key] ?? c[key]) as any;
   const setVal = <K extends keyof Client>(key: K, value: any) => setEditData(prev => ({ ...prev, [key]: value }));
   const handleCopy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch {} };
@@ -151,7 +159,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     } finally { setSaving(false); }
   };
 
-  /** Bot on/off */
+  // Bot on/off
   const isBotOn = (v: any) => v === true || v === '' || v === null;
   const handleBotToggle = async () => {
     const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto) as any;
@@ -182,7 +190,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     } finally { setSaving(false); }
   };
 
-  /** Asistencia */
+  // Asistencia
   const agendaDate = parseAgendaDate(c?.fecha_agenda ?? null);
   const canShowAsistio = !!agendaDate;
   const asistio = Boolean(editData.asistio_agenda ?? c?.asistio_agenda);
@@ -199,7 +207,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     }
   };
 
-  /** Quick data memos (siempre fuera de condiciones) */
+  // Datos memorizados
   const phoneE164 = (c?.whatsapp || '').replace('@s.whatsapp.net', '');
   const waLink = useMemo(() => `https://wa.me/${phoneE164}`, [phoneE164]);
   const mapsLink = useMemo(() => {
@@ -217,12 +225,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     const raw = (editData.consentimiento_contacto ?? c?.consentimiento_contacto) as any;
     const on = isBotOn(raw);
     return on ? (
-      <span className="badge badge-success">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
+        style={{ background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' }}>
         <ShieldCheck className="w-3.5 h-3.5" />
         Bot activo
       </span>
     ) : (
-      <span className="badge">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
+        style={{ background: COLORS.slate100, color: '#0F172A', borderColor: COLORS.slate200 }}>
         <ShieldCheck className="w-3.5 h-3.5" />
         Bot inactivo
       </span>
@@ -232,7 +242,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   const etapaBadge = useMemo(() => {
     if (!c?.estado_etapa) return null;
     return (
-      <span className={`badge border ${getEtapaColor(c.estado_etapa as any)} font-semibold`} title="Etapa">
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${getEtapaColor(c.estado_etapa as any)}`} title="Etapa">
         {String(c.estado_etapa).replace('_', ' ')}
       </span>
     );
@@ -241,7 +251,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   const categoriaBadge = useMemo(() => {
     if (!c?.categoria_contacto) return null;
     return (
-      <span className={`badge ${getCategoriaColor(c.categoria_contacto as any)} font-semibold`} title="Categoría">
+      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${getCategoriaColor(c.categoria_contacto as any)}`} title="Categoría">
         {String(c.categoria_contacto).replace('_', ' ')}
       </span>
     );
@@ -250,57 +260,29 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   const agendaBadge = useMemo(() => {
     if (!c?.fecha_agenda) return null;
     return (
-      <span className="badge bg-purple-50 text-purple-700 border border-purple-200">
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
+        style={{ background: COLORS.purple50, color: COLORS.purple700, borderColor: COLORS.purple200 }}>
         <Calendar className="w-3.5 h-3.5" />
         {formatDate(c.fecha_agenda)}
       </span>
     );
   }, [c?.fecha_agenda]);
 
-  /** Chat API */
-  const loadConversation = async () => {
-    if (!c?.whatsapp) return;
-    try {
-      setChatLoading(true);
-      setChatError(null);
-      const resp = await ApiService.post<any[]>('/conversacion', { whatsapp: c.whatsapp });
-      const normalized: ChatMsg[] = Array.isArray(resp)
-        ? resp.map((it, idx) => ({
-            id: it?.id ?? idx,
-            type: (it?.message?.type === 'human' || it?.message?.type === 'ai' || it?.message?.type === 'system')
-              ? it.message.type
-              : 'ai',
-            content: String(it?.message?.content ?? '').trim(),
-          }))
-        : [];
-      setMsgs(normalized);
-      setTimeout(() => chatInputRef.current?.focus(), 0);
-    } catch (e) {
-      setChatError(e instanceof Error ? e.message : 'No se pudo cargar la conversación');
-    } finally {
-      setChatLoading(false);
-    }
+  // Source → efectos (auto sede)
+  const applySourceSideEffects = (nextSource: string) => {
+    setEditData(prev => {
+      const currSede = String(prev.agenda_ciudad_sede ?? c.agenda_ciudad_sede ?? '').trim();
+      const mapped = SOURCE_TO_SEDE[nextSource];
+      const shouldAuto = !currSede || Object.values(SOURCE_TO_SEDE).includes(currSede);
+      return {
+        ...prev,
+        source: nextSource,
+        agenda_ciudad_sede: shouldAuto && mapped ? mapped : prev.agenda_ciudad_sede,
+      };
+    });
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
-    if (!text || !c?.whatsapp) return;
-    const optimistic: ChatMsg = { id: `local-${Date.now()}`, type: 'ai', content: text };
-    setMsgs(prev => [...prev, optimistic]);
-    setInput('');
-    setSending(true);
-    try {
-      await ApiService.post('/enviarmensaje', { whatsapp: c.whatsapp, mensaje: text });
-      await loadConversation();
-    } catch (e) {
-      setChatError(e instanceof Error ? e.message : 'No se pudo enviar el mensaje');
-      setMsgs(prev => prev.filter(m => m !== optimistic));
-      setInput(text);
-      chatInputRef.current?.focus();
-    } finally { setSending(false); }
-  };
-
-  /** Secciones (sin hooks dentro) */
+  // Secciones
   const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; }> = [
     { title: 'Información Personal', icon: User, fields: [
       { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
@@ -356,35 +338,42 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     if (isEditing && activeTab === 'ficha') fichaTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [isEditing, activeTab]);
 
-  /** ===== Render final (AHORA sí podemos retornar) ===== */
   if (!shouldRender) return null;
+  const currentSource = (editData.source ?? c.source) || '';
 
   return (
     <div
       ref={overlayRef}
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-[120] bg-neutral-950/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[120] backdrop-blur-sm"
+      style={{ background: COLORS.overlay }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="client-modal-title"
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="absolute inset-0 w-screen h-screen flex flex-col bg-white dark:bg-neutral-950"
+        className="absolute inset-0 w-screen h-screen flex flex-col"
+        style={{ background: COLORS.white }}
       >
         {/* Header */}
-        <div className="relative px-6 py-5 text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600">
-          <div className="absolute inset-0 bg-hero opacity-50 mix-blend-overlay pointer-events-none" />
+        <div
+          className="relative px-6 py-5 text-white"
+          style={{
+            backgroundImage: `linear-gradient(90deg, ${COLORS.headerFrom}, ${COLORS.headerTo})`,
+          }}
+        >
           <div className="relative flex items-center justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
-              <div className="size-12 rounded-2xl bg-white/20 backdrop-blur-sm ring-1 ring-white/30 flex items-center justify-center text-lg font-semibold">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-semibold"
+                   style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)' }}>
                 {initials}
               </div>
               <div className="min-w-0">
                 <h2 id="client-modal-title" className="text-2xl md:text-3xl font-semibold tracking-tight truncate">
                   {safeStr(c?.nombre) || 'Sin nombre'}
                 </h2>
-                <p className="text-indigo-100/90 truncate">{safeStr(c?.modelo) || 'Sin modelo'}</p>
+                <p className="opacity-90 truncate">{safeStr(c?.modelo) || 'Sin modelo'}</p>
               </div>
             </div>
 
@@ -396,28 +385,39 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <div className="hidden sm:flex rounded-xl overflow-hidden border border-white/40">
+              {/* Tabs */}
+              <div className="hidden sm:flex rounded-xl overflow-hidden"
+                   style={{ border: '1px solid rgba(255,255,255,0.4)' }}>
                 <button
                   onClick={() => setActiveTab('ficha')}
-                  className={`px-3 py-1.5 text-sm font-medium ${activeTab === 'ficha' ? 'bg-white text-indigo-700' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                  className="px-3 py-1.5 text-sm font-medium transition"
+                  style={activeTab === 'ficha'
+                    ? { background: COLORS.white, color: COLORS.headerFrom }
+                    : { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}
                 >
                   Ficha
                 </button>
                 <button
-                  onClick={async () => { setActiveTab('chat'); await loadConversation(); }}
-                  className={`px-3 py-1.5 text-sm font-medium ${activeTab === 'chat' ? 'bg-white text-indigo-700' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                  onClick={() => setActiveTab('chat')}
+                  className="px-3 py-1.5 text-sm font-medium transition"
+                  style={activeTab === 'chat'
+                    ? { background: COLORS.white, color: COLORS.headerFrom }
+                    : { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}
                 >
                   Chat
                 </button>
               </div>
 
+              {/* Asistencia */}
               {canShowAsistio && (
                 <button
                   onClick={toggleAsistio}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition
-                    ${asistio
-                      ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700'
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition"
+                  style={
+                    asistio
+                      ? { background: '#059669', color: '#FFFFFF', borderColor: '#047857' }
+                      : { background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' }
+                  }
                   title={asistio ? 'Marcar como NO asistió' : 'Marcar como asistió'}
                 >
                   <CheckCircle className="w-4 h-4" />
@@ -428,7 +428,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               {!isEditing ? (
                 <button
                   onClick={() => { setActiveTab('ficha'); setIsEditing(true); setEditData(c); }}
-                  className="btn-secondary"
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
+                  style={{ background: '#F9FAFB', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
                   title="Editar"
                 >
                   <Edit2 className="w-5 h-5" />
@@ -436,38 +437,87 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                 </button>
               ) : (
                 <>
-                  <button onClick={handleSave} disabled={saving} className="btn-primary disabled:opacity-60" title="Guardar">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
+                    style={{ background: COLORS.headerFrom, color: COLORS.white }}
+                    title="Guardar"
+                  >
                     <Save className="w-5 h-5" /> Guardar
                   </button>
-                  <button onClick={() => { setIsEditing(false); setEditData(c); }} disabled={saving} className="btn-ghost disabled:opacity-60" title="Cancelar">
+                  <button
+                    onClick={() => { setIsEditing(false); setEditData(c); }}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
+                    style={{ background: '#FFFFFF', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
+                    title="Cancelar"
+                  >
                     <X className="w-5 h-5" /> Cancelar
                   </button>
                 </>
               )}
 
-              <button onClick={onClose} className="btn-icon hover:bg-white/20 text-white" aria-label="Cerrar" title="Cerrar">
+              <button
+                onClick={onClose}
+                className="p-2 rounded-xl transition"
+                style={{ color: '#FFFFFF' }}
+                aria-label="Cerrar"
+                title="Cerrar"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
           </div>
 
-          <div className="mt-3 flex md:hidden flex-wrap items-center gap-2">
-            {etapaBadge}
-            {categoriaBadge}
-            {agendaBadge}
-            {consentBadge}
+          {/* Source + sede */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <SourceSelector value={currentSource} onChange={applySourceSideEffects} />
+            {!!currentSource && (
+              <span
+                className="inline-flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-xl"
+                style={{ color: '#FFFFFF', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)' }}
+              >
+                Origen: <strong className="ml-1">{currentSource}</strong>
+                {SOURCE_TO_SEDE[currentSource] && (
+                  <span className="ml-2 inline-flex items-center gap-1">
+                    <MapPin className="w-4 h-4" /> {SOURCE_TO_SEDE[currentSource]}
+                  </span>
+                )}
+              </span>
+            )}
           </div>
 
-          <div className="mt-4 px-0 py-3 bg-white/20 rounded-xl border border-white/30 flex flex-wrap items-center gap-2">
-            <a href={waLink} target="_blank" rel="noreferrer" className="btn bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ring-emerald-600/10 border border-emerald-200">
+          {/* Acciones rápidas */}
+          <div
+            className="mt-4 px-3 py-3 rounded-xl flex flex-wrap items-center gap-2"
+            style={{ background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)' }}
+          >
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
+              style={{ background: COLORS.emerald50, color: '#065F46', border: `1px solid ${COLORS.emerald200}` }}
+            >
               <MessageCircle className="w-4 h-4" />
               {formatWhatsApp(c.whatsapp)}
             </a>
-            <button onClick={() => handleCopy((c?.whatsapp || '').replace('@s.whatsapp.net', ''))} className="btn bg-neutral-100 text-neutral-800 hover:bg-neutral-200">
+            <button
+              onClick={() => handleCopy((c?.whatsapp || '').replace('@s.whatsapp.net', ''))}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
+              style={{ background: COLORS.slate100, color: COLORS.black, border: `1px solid ${COLORS.slate200}` }}
+            >
               <Copy className="w-4 h-4" /> Copiar número
             </button>
             {safeStr(c?.ciudad) && (
-              <a href={mapsLink} target="_blank" rel="noreferrer" className="btn bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200">
+              <a
+                href={mapsLink}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
+                style={{ background: COLORS.purple50, color: COLORS.purple700, border: `1px solid ${COLORS.purple200}` }}
+              >
                 <MapPin className="w-4 h-4" /> {safeStr(c?.ciudad)}
               </a>
             )}
@@ -477,7 +527,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                 <button
                   onClick={handleBotToggle}
                   disabled={saving}
-                  className={on ? 'btn-primary disabled:opacity-60' : 'btn-secondary disabled:opacity-60'}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
+                  style={
+                    on
+                      ? { background: COLORS.headerFrom, color: COLORS.white }
+                      : { background: '#FFFFFF', color: COLORS.black, border: `1px solid ${COLORS.border}` }
+                  }
                   title={on ? 'Apagar bot para este número' : 'Encender bot para este número'}
                 >
                   <Bot className="w-4 h-4" /> {on ? 'Apagar bot' : 'Encender bot'}
@@ -490,16 +545,30 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
         {/* BODY */}
         <div className="flex-1 flex flex-col min-h-0">
           {activeTab === 'ficha' ? (
-            <div ref={fichaTopRef} className="flex-1 overflow-y-auto p-6 bg-neutral-50/60 dark:bg-neutral-950/60">
+            <div ref={fichaTopRef} className="flex-1 overflow-y-auto p-6"
+                 style={{ background: '#F7F7FB' }}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {sections.map((section, idx) => (
-                  <section key={idx} className="card card-hover">
-                    <div className="card-body">
+                  <section
+                    key={idx}
+                    className="rounded-2xl overflow-hidden"
+                    style={{
+                      background: COLORS.white,
+                      border: `1px solid ${COLORS.borderSoft}`,
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    <div className="p-5">
                       <div className="flex items-center mb-4">
-                        <div className="w-9 h-9 mr-3 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-300 flex items-center justify-center">
+                        <div
+                          className="w-9 h-9 mr-3 rounded-xl flex items-center justify-center"
+                          style={{ background: COLORS.indigo50, color: COLORS.headerFrom }}
+                        >
                           <section.icon className="w-5 h-5" />
                         </div>
-                        <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">{section.title}</h3>
+                        <h3 className="text-lg font-semibold" style={{ color: COLORS.black }}>
+                          {section.title}
+                        </h3>
                       </div>
 
                       <div className="space-y-4">
@@ -513,12 +582,19 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                             : '';
 
                           return (
-                            <div key={`${section.title}-${j}`} className="group flex items-start gap-3 p-3 rounded-xl border border-neutral-200/70 dark:border-neutral-800 bg-white/70 dark:bg-neutral-900/60 hover:shadow-sm transition">
-                              <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 flex items-center justify-center mt-0.5">
+                            <div
+                              key={`${section.title}-${j}`}
+                              className="group flex items-start gap-3 p-3 rounded-xl transition"
+                              style={{ background: COLORS.neutral50, border: `1px solid ${COLORS.border}` }}
+                            >
+                              <div
+                                className="w-8 h-8 rounded-lg flex items-center justify-center mt-0.5"
+                                style={{ background: COLORS.neutral100, color: COLORS.muted }}
+                              >
                                 <field.icon className="w-4 h-4" />
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="section-title !normal-case !tracking-normal !text-xs !text-neutral-500 dark:!text-neutral-400 mb-1">
+                                <p className="text-xs mb-1" style={{ color: COLORS.muted }}>
                                   {field.label}
                                 </p>
 
@@ -532,17 +608,22 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                       {String(c.categoria_contacto).replace('_', ' ')}
                                     </span>
                                   ) : field.key === 'fecha_agenda' && value ? (
-                                    <span className="inline-flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                                    <span className="inline-flex items-center gap-2"
+                                          style={{ color: COLORS.purple700 }}>
                                       <Calendar className="w-4 h-4" />
                                       {formatDate(String(value))}
                                     </span>
                                   ) : field.key === 'whatsapp' && value ? (
-                                    <span className="inline-flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+                                    <span className="inline-flex items-center gap-2"
+                                          style={{ color: '#047857' }}>
                                       <Phone className="w-4 h-4" />
                                       {formatWhatsApp(String(value))}
                                     </span>
                                   ) : (
-                                    <p className={`text-sm break-words ${isEmpty ? 'text-neutral-400 italic' : 'text-neutral-900 dark:text-neutral-100'}`}>
+                                    <p
+                                      className="text-sm break-words"
+                                      style={{ color: isEmpty ? COLORS.muted : COLORS.black, fontStyle: isEmpty ? 'italic' : 'normal' }}
+                                    >
                                       {isEmpty ? '— sin dato —' : safeStr(value)}
                                     </p>
                                   )
@@ -557,7 +638,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                             if (v === CUSTOM_VALUE) setVal('agenda_ciudad_sede', '');
                                             else setVal('agenda_ciudad_sede', v);
                                           }}
-                                          className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                          className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                          style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                         >
                                           {SEDE_OPCIONES.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                                           <option value={CUSTOM_VALUE}>Escribir…</option>
@@ -568,7 +650,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                             value={safeStr(getVal('agenda_ciudad_sede'))}
                                             onChange={(e) => setVal('agenda_ciudad_sede', e.target.value)}
                                             placeholder="Escribe la sede…"
-                                            className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                            className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                            style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                           />
                                         )}
                                       </div>
@@ -576,35 +659,40 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                       <textarea
                                         value={value ?? ''}
                                         onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
                                         rows={3}
+                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                       />
                                     ) : field.type === 'datetime' ? (
                                       <input
                                         type="datetime-local"
                                         value={value ?? ''}
                                         onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                       />
                                     ) : field.type === 'email' ? (
                                       <input
                                         type="email"
                                         value={value ?? ''}
                                         onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                       />
                                     ) : field.type === 'number' ? (
                                       <input
                                         type="number"
                                         value={value ?? ''}
                                         onChange={(e) => setVal(field.key, e.target.value === '' ? '' : Number(e.target.value))}
-                                        className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                       />
                                     ) : field.type === 'boolean' ? (
                                       <select
                                         value={value === true ? 'true' : value === false ? 'false' : ''}
                                         onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                        className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                       >
                                         <option value="true">Sí</option>
                                         <option value="false">No</option>
@@ -614,7 +702,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                         type="text"
                                         value={value ?? ''}
                                         onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/60 focus:border-indigo-500 dark:border-neutral-700 dark:bg-neutral-900"
+                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
                                       />
                                     )}
                                   </>
@@ -630,72 +719,11 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               </div>
             </div>
           ) : (
-            <div className="flex-1 min-h-0 flex flex-col bg-white">
-              <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-neutral-50">
-                {chatLoading && (
-                  <div className="flex items-center justify-center py-6 text-neutral-600 text-sm">
-                    Cargando conversación…
-                  </div>
-                )}
-                {chatError && (
-                  <div className="mx-auto max-w-md w-full p-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm">
-                    {chatError}
-                  </div>
-                )}
-                {!chatLoading && !chatError && msgs.length === 0 && (
-                  <div className="mx-auto max-w-md w-full p-3 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-sm">
-                    No hay mensajes todavía. ¡Envía el primero!
-                  </div>
-                )}
-                {msgs.map((m) => {
-                  const isMe = m.type === 'ai'; // yo = AI
-                  return (
-                    <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm shadow
-                        ${isMe ? 'bg-indigo-600 text-white' : 'bg-white text-neutral-900 border border-neutral-200'}`}>
-                        {m.content.split('\n').map((line, i) => (
-                          <p key={i} className="whitespace-pre-wrap">{line}</p>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="border-t border-neutral-200 p-3 bg-white">
-                <form
-                  onSubmit={(e) => { e.preventDefault(); if (!sending && input.trim()) sendMessage(); }}
-                  className="flex items-end gap-2"
-                >
-                  <textarea
-                    ref={chatInputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Escribe un mensaje…"
-                    className="flex-1 resize-none rounded-xl border border-neutral-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
-                    rows={1}
-                    onKeyDown={(e) => {
-                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                        e.preventDefault();
-                        if (!sending && input.trim()) sendMessage();
-                      }
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !input.trim()}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
-                    title="Enviar"
-                  >
-                    <Send className="w-4 h-4" />
-                    Enviar
-                  </button>
-                </form>
-                <div className="mt-1 text-[11px] text-neutral-500">
-                  Enviando a: <span className="font-mono">{c?.whatsapp}</span>
-                </div>
-              </div>
-            </div>
+            <ChatPanel
+              client={c}
+              source={currentSource}
+              onSourceChange={applySourceSideEffects}
+            />
           )}
         </div>
       </div>
