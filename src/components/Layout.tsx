@@ -9,6 +9,7 @@ import {
   Menu,
   X,
   Truck,
+  MessageSquare,
   BarChart3, // 👈 icono para Resultados
 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const navigationItems = [
   { id: "precios", name: "Precios", icon: DollarSign },
   { id: "wpp", name: "WPP", icon: Bot },               // 👈 nueva sección
   { id: "crm", name: "CRM", icon: Users },
+  { id: "conversaciones", name: "Conversaciones", icon: MessageSquare }, // ← usar id como el resto
   { id: "agenda", name: "Agenda", icon: Calendar },
   { id: "envios", name: "Envíos", icon: Truck },
   { id: "resultados", name: "Resultados", icon: BarChart3 }, // 👈 resultados
@@ -32,6 +34,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const pageTitle = (() => {
+    if (currentPage === "conversaciones") return "Conversaciones";
     if (currentPage === "crm") return "CRM";
     if (currentPage === "envios") return "Envíos";
     if (currentPage === "agenda") return "Agenda";

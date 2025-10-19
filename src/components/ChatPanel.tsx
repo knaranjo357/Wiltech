@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Repeat2, Copy, Check } from 'lucide-react';
+import { Send, Repeat2, Copy, Check, ArrowDown } from 'lucide-react';
 import { Client } from '../types/client';
 import { ApiService } from '../services/apiService';
 import { SourceSelector } from './SourceSelector';
@@ -18,7 +18,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // --- scroll control ---
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true); // si el usuario está en el final, auto-scroll se mantiene activo
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const phone = useMemo(
@@ -26,14 +30,42 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
     [client?.whatsapp]
   );
 
-  const autoScroll = () => {
+  const scrollToBottom = (smooth = false) => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto',
+    });
   };
+
+  // Detectar si el usuario está en el fondo para decidir si autoscrollear o no
   useEffect(() => {
-    autoScroll();
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const atBottom = distance < 8;
+      stickToBottomRef.current = atBottom;
+      setShowJumpToBottom(!atBottom);
+    };
+
+    el.addEventListener('scroll', onScroll, { passive: true });
+    // inicial
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Autoscroll SOLO si estamos pegados al final (o al cargar por primera vez)
+  useEffect(() => {
+    if (stickToBottomRef.current) {
+      // Esperar al layout para evitar "recortes" en el scroll
+      requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(false)));
+    }
   }, [msgs]);
 
+  // Auto-resize del textarea
   const autoResize = () => {
     const ta = inputRef.current;
     if (!ta) return;
@@ -64,6 +96,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
           }))
         : [];
       setMsgs(normalized);
+
+      // Al cambiar de conversación, arrancamos pegados al final
+      stickToBottomRef.current = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(false)));
+
+      // Enfocar el input
       setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e: any) {
       setError(e?.message || 'No se pudo cargar la conversación');
@@ -80,11 +118,21 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || !client?.whatsapp) return;
-    const optimistic: ChatMsg = { id: `local-${Date.now()}`, type: 'ai', content: text, createdAt: Date.now() };
+
+    // al enviar, forzamos stick al fondo
+    stickToBottomRef.current = true;
+
+    const optimistic: ChatMsg = {
+      id: `local-${Date.now()}`,
+      type: 'ai',
+      content: text,
+      createdAt: Date.now(),
+    };
     setMsgs((prev) => [...prev, optimistic]);
     setInput('');
     setSending(true);
     setError(null);
+
     try {
       const body: any = { whatsapp: client.whatsapp, mensaje: text };
       if (source) body.source = source;
@@ -112,21 +160,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
   };
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col"
-      style={{ background: '#FFFFFF' }} // fondo fijo
-    >
+    <div className="flex flex-col h-full min-h-0" style={{ background: '#FFFFFF' }}>
       {/* Header */}
       <div
-        className="flex items-center justify-between gap-3 px-3 py-2 border-b"
-        style={{
-          background: '#FFFFFF',
-          borderColor: '#E5E7EB', // gray-200
-        }}
+        className="flex items-center justify-between gap-3 px-3 py-2 border-b shrink-0"
+        style={{ background: '#FFFFFF', borderColor: '#E5E7EB' }}
       >
         <div className="flex items-center gap-2 text-sm" style={{ color: '#6B7280' }}>
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center font-semibold"
-            style={{ background: '#EEF2FF', color: '#3730A3', border: '1px solid #E0E7FF' }} // indigo-50/800
+            style={{ background: '#EEF2FF', color: '#3730A3', border: '1px solid #E0E7FF' }}
             title="Cliente"
           >
             {client?.nombre?.trim()?.[0]?.toUpperCase() || 'C'}
@@ -154,11 +197,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
           <button
             onClick={loadConversation}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm"
-            style={{
-              border: '1px solid #D1D5DB', // gray-300
-              background: '#FFFFFF',
-              color: '#374151',
-            }}
+            style={{ border: '1px solid #D1D5DB', background: '#FFFFFF', color: '#374151' }}
             title="Recargar"
           >
             <Repeat2 className="w-4 h-4" /> Actualizar
@@ -166,11 +205,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
         </div>
       </div>
 
-      {/* Mensajes */}
+      {/* Mensajes (scroll interno real) */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3"
-        style={{ background: '#F6F7FB' }} // fondo conversación fijo
+        className="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain"
+        style={{ background: '#F6F7FB' }}
         aria-live="polite"
       >
         {loading && (
@@ -183,9 +222,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
           <div
             className="mx-auto max-w-md w-full p-3 rounded-lg text-sm"
             style={{
-              border: '1px solid #FCA5A5', // red-300
-              background: '#FEF2F2', // red-50
-              color: '#B91C1C', // red-700
+              border: '1px solid #FCA5A5',
+              background: '#FEF2F2',
+              color: '#B91C1C',
             }}
           >
             {error}
@@ -208,10 +247,25 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
         {msgs.map((m) => (
           <ChatBubble key={m.id} msg={m} />
         ))}
+
+        {/* Botón "Saltar al final" cuando el usuario está scrolleado hacia arriba */}
+        {showJumpToBottom && (
+          <div className="sticky bottom-3 flex justify-end">
+            <button
+              onClick={() => scrollToBottom(true)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow border"
+              style={{ background: '#FFFFFF', borderColor: '#E5E7EB', color: '#374151' }}
+              title="Saltar al final"
+            >
+              <ArrowDown className="w-4 h-4" />
+              Al final
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Input */}
-      <div className="p-3 border-t" style={{ borderColor: '#E5E7EB', background: '#FFFFFF' }}>
+      {/* Composer */}
+      <div className="p-3 border-t shrink-0" style={{ borderColor: '#E5E7EB', background: '#FFFFFF' }}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -246,7 +300,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onSourceCh
             disabled={sending || !input.trim()}
             className="inline-flex items-center gap-2 px-3 py-2 rounded-xl"
             style={{
-              background: '#4F46E5', // indigo-600
+              background: '#4F46E5',
               color: '#FFFFFF',
               opacity: sending || !input.trim() ? 0.6 : 1,
             }}

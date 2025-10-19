@@ -9,8 +9,9 @@ import { EnviosPage } from "./pages/EnviosPage";
 import { Resultados } from "./pages/Resultados";
 import { WppPage } from "./pages/WppPage";
 import { AgentePage } from "./pages/AgentePage";
+import ConversacionesPage from "./pages/ConversacionesPage"; 
 
-type PageKey = "precios" | "wpp" | "crm" | "agenda" | "envios" | "resultados" | "agente";
+type PageKey = "precios" | "wpp" | "crm" | "agenda" | "envios" | "resultados" | "agente"| "conversaciones";
 
 function App() {
   const { loading, isAuthenticated } = useAuth();
@@ -25,6 +26,7 @@ function App() {
       "/envios": "envios",
       "/resultados": "resultados",
       "/agente": "agente",
+      "/conversaciones": "conversaciones",
     }),
     []
   );
@@ -38,6 +40,7 @@ function App() {
       envios: "/envios",
       resultados: "/resultados",
       agente: "/agente",
+      conversaciones: "/conversaciones",
     }),
     []
   );
@@ -130,6 +133,8 @@ function App() {
         return <Resultados />;
       case "agente":
         return <AgentePage />;
+      case "conversaciones":
+        return <ConversacionesPage />;
       default:
         return <PreciosPage />;
     }
