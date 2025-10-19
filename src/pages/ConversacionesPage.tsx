@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
-import { RefreshCw, Search, MessageSquare, Clock, ArrowUpDown } from 'lucide-react';
+import { RefreshCw, Search, MessageSquare, Clock, ArrowUpDown, Bot, User } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
 import { formatDate, formatWhatsApp } from '../utils/clientHelpers';
 import { ChatPanel } from '../components/ChatPanel';
+import { ClientModal } from '../components/ClientModal';
 
 /** ================== Utilidades ================== */
 const canon = (v: unknown) =>
@@ -46,6 +47,8 @@ type ChatRow = {
   ciudad?: string;
   source?: string | null;
   created: string | number | Date | null;
+  /** Flag usado en el proyecto para encender/apagar el bot */
+  consentimiento_contacto?: boolean | '' | null;
 };
 
 /** Dedup por whatsapp => conservar el más reciente por created */
@@ -55,15 +58,15 @@ function dedupeByWhatsapp(clients: Client[]): ChatRow[] {
     const wa = String(c.whatsapp || '').trim();
     if (!wa) continue;
     const current = map.get(wa);
-    const created = c.created ?? null;
     const candidate: ChatRow = {
       row_number: c.row_number,
       nombre: fmt(c.nombre, 'Sin nombre'),
       whatsapp: wa,
-      modelo: fmt(c.modelo, ''),
+      modelo: fmt((c as any).modelo, ''),
       ciudad: fmt((c as any).ciudad ?? (c as any).guia_ciudad ?? '', ''),
       source: (c as any).source ?? null,
-      created,
+      created: (c as any).created ?? null,
+      consentimiento_contacto: (c as any).consentimiento_contacto ?? null,
     };
     if (!current || parseDateSafe(candidate.created) > parseDateSafe(current.created)) {
       map.set(wa, candidate);
@@ -71,6 +74,22 @@ function dedupeByWhatsapp(clients: Client[]): ChatRow[] {
   }
   return Array.from(map.values());
 }
+
+/** Helper: convertir ChatRow -> Client mínimo
+ *  Nota: Tipamos vía `unknown as Client` para respetar el contrato del ClientModal
+ *  sin requerir todas las ~30+ propiedades del tipo `Client`.
+ */
+const rowToClient = (r: ChatRow): Client =>
+  ({
+    row_number: r.row_number,
+    nombre: r.nombre,
+    whatsapp: r.whatsapp,
+    modelo: r.modelo,
+    ciudad: r.ciudad,
+    created: r.created,
+    source: r.source,
+    consentimiento_contacto: r.consentimiento_contacto ?? null,
+  } as unknown as Client);
 
 /** ================== Página ================== */
 const DEFAULT_PAGE_SIZE = 80;
@@ -90,16 +109,19 @@ export const ConversacionesPage: React.FC = () => {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [page, setPage] = useState(1); // 1-based
 
-  // selección
+  // selección (panel derecho)
   const [selected, setSelected] = useState<ChatRow | null>(null);
   const [selectedSource, setSelectedSource] = useState<string>('');
+
+  // diálogo de chat (ClientModal)
+  const [viewClient, setViewClient] = useState<Client | null>(null);
+  const [savingRow, setSavingRow] = useState<number | null>(null);
 
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastScrollTopRef = useRef(0);
 
   const fetchList = async () => {
     try {
-      // preservar la posición actual del scroll de la lista
       lastScrollTopRef.current = listRef.current?.scrollTop ?? 0;
 
       setLoading(true);
@@ -118,7 +140,6 @@ export const ConversacionesPage: React.FC = () => {
       setError(e?.message || 'No se pudo cargar las conversaciones');
     } finally {
       setLoading(false);
-      // restaurar scroll de la lista tras el render
       requestAnimationFrame(() => {
         if (listRef.current) listRef.current.scrollTop = lastScrollTopRef.current;
       });
@@ -142,10 +163,14 @@ export const ConversacionesPage: React.FC = () => {
         const nextRow: ChatRow = {
           ...prevRow,
           nombre: detail.nombre !== undefined ? fmt(detail.nombre, prevRow.nombre) : prevRow.nombre,
-          modelo: detail.modelo !== undefined ? fmt(detail.modelo, prevRow.modelo) : prevRow.modelo,
+          modelo: (detail as any).modelo ?? prevRow.modelo,
           ciudad: (detail as any).ciudad ?? (detail as any).guia_ciudad ?? prevRow.ciudad,
           source: (detail as any).source ?? prevRow.source,
           created: (detail as any).created ?? prevRow.created,
+          consentimiento_contacto:
+            (detail as any).consentimiento_contacto !== undefined
+              ? (detail as any).consentimiento_contacto
+              : prevRow.consentimiento_contacto,
         };
         const copy = [...prev];
         copy[idx] = nextRow;
@@ -157,12 +182,20 @@ export const ConversacionesPage: React.FC = () => {
         return {
           ...prevSel,
           nombre: detail.nombre !== undefined ? fmt(detail.nombre, prevSel.nombre) : prevSel.nombre,
-          modelo: detail.modelo !== undefined ? fmt(detail.modelo, prevSel.modelo) : prevSel.modelo,
+          modelo: (detail as any).modelo ?? prevSel.modelo,
           ciudad: (detail as any).ciudad ?? (detail as any).guia_ciudad ?? prevSel.ciudad,
           source: (detail as any).source ?? prevSel.source,
           created: (detail as any).created ?? prevSel.created,
+          consentimiento_contacto:
+            (detail as any).consentimiento_contacto !== undefined
+              ? (detail as any).consentimiento_contacto
+              : prevSel.consentimiento_contacto,
         };
       });
+
+      setViewClient(v =>
+        v && detail && v.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v
+      );
     };
 
     window.addEventListener('client:updated', onExternalUpdate as any);
@@ -177,6 +210,79 @@ export const ConversacionesPage: React.FC = () => {
       window.removeEventListener('storage', onStorage);
     };
   }, []);
+
+  /** Guardado desde el diálogo / toggles (optimista + rollback) */
+  const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
+    if (!payload.row_number) return false;
+
+    setSavingRow(payload.row_number);
+    const prevAll = all;
+    const prevSelected = selected;
+    const prevModal = viewClient;
+
+    // Optimista en lista:
+    setAll(prev =>
+      prev.map(r =>
+        r.row_number === payload.row_number
+          ? ({
+              ...r,
+              ...payload,
+              nombre: payload.nombre ?? r.nombre,
+              modelo: (payload as any).modelo ?? r.modelo,
+              ciudad: (payload as any).ciudad ?? r.ciudad,
+              source: (payload as any).source ?? r.source,
+              created: (payload as any).created ?? r.created,
+              consentimiento_contacto:
+                (payload as any).consentimiento_contacto !== undefined
+                  ? (payload as any).consentimiento_contacto
+                  : r.consentimiento_contacto,
+            } as ChatRow)
+          : r
+      )
+    );
+    // Optimista en seleccionado:
+    setSelected(s =>
+      s && s.row_number === payload.row_number
+        ? ({
+            ...s,
+            ...payload,
+            nombre: payload.nombre ?? s.nombre,
+            modelo: (payload as any).modelo ?? s.modelo,
+            ciudad: (payload as any).ciudad ?? s.ciudad,
+            source: (payload as any).source ?? s.source,
+            created: (payload as any).created ?? s.created,
+            consentimiento_contacto:
+              (payload as any).consentimiento_contacto !== undefined
+                ? (payload as any).consentimiento_contacto
+                : s.consentimiento_contacto,
+          } as ChatRow)
+        : s
+    );
+    // Optimista en diálogo:
+    setViewClient(v => (v && v.row_number === payload.row_number ? ({ ...v, ...payload } as Client) : v));
+
+    try {
+      if (typeof (ClientService as any).updateClient === 'function') {
+        await (ClientService as any).updateClient(payload);
+      } else {
+        await fetch('/api/clients/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+      }
+      return true;
+    } catch (e) {
+      // rollback
+      setAll(prevAll);
+      setSelected(prevSelected);
+      setViewClient(prevModal);
+      setError('No se pudo guardar los cambios');
+      return false;
+    } finally {
+      setSavingRow(null);
+    }
+  };
 
   /** Filtros + búsqueda */
   const filtered = useMemo(() => {
@@ -205,7 +311,6 @@ export const ConversacionesPage: React.FC = () => {
     return [...filtered].sort((a, b) => {
       const da = parseDateSafe(a.created);
       const db = parseDateSafe(b.created);
-      // desc => más recientes primero
       return sortOrder === 'desc' ? db - da : da - db;
     });
   }, [filtered, sortOrder]);
@@ -231,11 +336,39 @@ export const ConversacionesPage: React.FC = () => {
     return { all: all.length, wiltech: wil, wiltechBga: bga };
   }, [all]);
 
-  /** Seleccionar conversación */
+  /** Seleccionar conversación (panel derecho) */
   const onPick = (row: ChatRow) => {
     setSelected(row);
     setSelectedSource(row.source || '');
-    // no tocamos el scroll general; solo se actualiza el panel derecho
+  };
+
+  /** Abrir diálogo de chat (no llamamos “modal” en la UI) */
+  const openChatDialog = (row: ChatRow, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setViewClient(rowToClient(row));
+  };
+
+  /** Toggle Bot ON/OFF usando la misma semántica que tu ListView */
+  const toggleBot = async (row: ChatRow, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const botOn =
+      row.consentimiento_contacto === true ||
+      row.consentimiento_contacto === '' ||
+      row.consentimiento_contacto === null;
+
+    const newValue = botOn ? false : true;
+
+    if (botOn) {
+      const ok = window.confirm(
+        '¿Desea apagar el bot para este contacto?\n' +
+          'El asistente dejará de escribir automáticamente por WhatsApp.\n' +
+          'Podrá volver a activarlo cuando quiera.'
+      );
+      if (!ok) return;
+    }
+
+    if (!row.row_number) return;
+    await onUpdate({ row_number: row.row_number, consentimiento_contacto: newValue } as Partial<Client>);
   };
 
   /** Botón de orden (fecha) */
@@ -270,12 +403,15 @@ export const ConversacionesPage: React.FC = () => {
     </button>
   );
 
-  /** Item de lista */
-  const RowItem: React.FC<{ row: ChatRow; active: boolean; onClick: () => void }> = ({
-    row,
-    active,
-    onClick,
-  }) => {
+  /** Item de lista con botones "Chat" y Toggle Bot a la derecha */
+  const RowItem: React.FC<{
+    row: ChatRow;
+    active: boolean;
+    onClick: () => void;
+    onOpenDialog: (e?: React.MouseEvent) => void;
+    onToggleBot: (e?: React.MouseEvent) => void;
+    busy?: boolean;
+  }> = ({ row, active, onClick, onOpenDialog, onToggleBot, busy }) => {
     const createdHuman = row.created ? formatDate(String(row.created)) : '—';
     const source = row.source || '';
     const sourceColor =
@@ -285,10 +421,17 @@ export const ConversacionesPage: React.FC = () => {
         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
         : 'bg-slate-50 text-slate-700 border-slate-200';
 
+    const botOn =
+      row.consentimiento_contacto === true ||
+      row.consentimiento_contacto === '' ||
+      row.consentimiento_contacto === null;
+
     return (
-      <button
+      <div
         onClick={onClick}
-        className={`w-full text-left p-3 rounded-xl border transition flex items-start gap-3 ${
+        role="button"
+        tabIndex={0}
+        className={`w-full p-3 rounded-xl border transition flex items-start gap-3 ${
           active ? 'bg-white border-indigo-200 shadow-sm' : 'bg-white/70 hover:bg-white border-gray-200'
         }`}
         title="Abrir conversación"
@@ -296,6 +439,8 @@ export const ConversacionesPage: React.FC = () => {
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold">
           {row.nombre?.trim()?.[0]?.toUpperCase() || 'C'}
         </div>
+
+        {/* Contenido principal */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate font-medium text-gray-900">{row.nombre || 'Sin nombre'}</p>
@@ -315,7 +460,38 @@ export const ConversacionesPage: React.FC = () => {
             {row.modelo && <span className="ml-2 truncate">• {row.modelo}</span>}
           </div>
         </div>
-      </button>
+
+        {/* Acciones a la derecha */}
+        <div className="shrink-0 flex flex-col sm:flex-row gap-2">
+          {/* Abrir Info */}
+          <button
+            onClick={onOpenDialog}
+            title="Abrir Info"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs disabled:opacity-50"
+            aria-label="Abrir Info"
+            disabled={busy}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Info
+          </button>
+
+          {/* Toggle Bot ON/OFF con iconos usuario/robot */}
+          <button
+            onClick={onToggleBot}
+            title={botOn ? 'Desactivar bot' : 'Activar bot'}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs disabled:opacity-50 ${
+              botOn
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+            aria-label={botOn ? 'Bot encendido' : 'Bot apagado'}
+            disabled={busy}
+          >
+            {botOn ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
+            {botOn ? 'Bot' : 'Humano'}
+          </button>
+        </div>
+      </div>
     );
   };
 
@@ -430,6 +606,9 @@ export const ConversacionesPage: React.FC = () => {
                   row={row}
                   active={selected?.whatsapp === row.whatsapp}
                   onClick={() => onPick(row)}
+                  onOpenDialog={(e) => openChatDialog(row, e)}
+                  onToggleBot={(e) => toggleBot(row, e)}
+                  busy={savingRow === row.row_number}
                 />
               ))}
 
@@ -462,7 +641,6 @@ export const ConversacionesPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            // ChatPanel maneja su scroll interno (mensajes) y el composer abajo.
             <div className="h-full w-full flex flex-col min-h-0">
               <div className="flex-1 min-h-0">
                 <ChatPanel
@@ -481,6 +659,14 @@ export const ConversacionesPage: React.FC = () => {
           )}
         </div>
       </main>
+
+      {/* Diálogo de cliente (con Chat y demás) */}
+      <ClientModal
+        isOpen={!!viewClient}
+        onClose={() => setViewClient(null)}
+        client={viewClient}
+        onUpdate={onUpdate}
+      />
     </div>
   );
 };
