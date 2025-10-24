@@ -38,6 +38,7 @@ const fmt = (v: unknown, placeholder = ''): string => {
 };
 
 type SortOrder = 'asc' | 'desc';
+type SortKey = 'created' | 'last_msg';
 
 type ChatRow = {
   row_number?: number;
@@ -47,6 +48,8 @@ type ChatRow = {
   ciudad?: string;
   source?: string | null;
   created: string | number | Date | null;
+  /** Última vez que el usuario nos escribió (puede venir null) */
+  last_msg?: string | number | Date | null;
   /** Flag usado en el proyecto para encender/apagar el bot */
   consentimiento_contacto?: boolean | '' | null;
 };
@@ -66,6 +69,7 @@ function dedupeByWhatsapp(clients: Client[]): ChatRow[] {
       ciudad: fmt((c as any).ciudad ?? (c as any).guia_ciudad ?? '', ''),
       source: (c as any).source ?? null,
       created: (c as any).created ?? null,
+      last_msg: (c as any).last_msg ?? null,
       consentimiento_contacto: (c as any).consentimiento_contacto ?? null,
     };
     if (!current || parseDateSafe(candidate.created) > parseDateSafe(current.created)) {
@@ -75,10 +79,7 @@ function dedupeByWhatsapp(clients: Client[]): ChatRow[] {
   return Array.from(map.values());
 }
 
-/** Helper: convertir ChatRow -> Client mínimo
- *  Nota: Tipamos vía `unknown as Client` para respetar el contrato del ClientModal
- *  sin requerir todas las ~30+ propiedades del tipo `Client`.
- */
+/** Helper: convertir ChatRow -> Client mínimo */
 const rowToClient = (r: ChatRow): Client =>
   ({
     row_number: r.row_number,
@@ -103,7 +104,8 @@ export const ConversacionesPage: React.FC = () => {
   const [q, setQ] = useState('');
   const dq = useDeferredValue(q);
   const [sourceFilter, setSourceFilter] = useState<string>(''); // '', 'Wiltech', 'WiltechBga'
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc'); // SOLO fecha asc/desc
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc'); // asc/desc
+  const [sortKey, setSortKey] = useState<SortKey>('created'); // created | last_msg
 
   // paginación
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -130,7 +132,7 @@ export const ConversacionesPage: React.FC = () => {
       const rows = dedupeByWhatsapp(Array.isArray(data) ? (data as Client[]) : []);
       setAll(rows);
 
-      // selección inicial: más reciente
+      // selección inicial: más reciente por created (se mantiene)
       const first =
         [...rows].sort((a, b) => parseDateSafe(b.created) - parseDateSafe(a.created))[0] ?? null;
       setSelected(first || null);
@@ -167,6 +169,7 @@ export const ConversacionesPage: React.FC = () => {
           ciudad: (detail as any).ciudad ?? (detail as any).guia_ciudad ?? prevRow.ciudad,
           source: (detail as any).source ?? prevRow.source,
           created: (detail as any).created ?? prevRow.created,
+          last_msg: (detail as any).last_msg ?? prevRow.last_msg,
           consentimiento_contacto:
             (detail as any).consentimiento_contacto !== undefined
               ? (detail as any).consentimiento_contacto
@@ -186,6 +189,7 @@ export const ConversacionesPage: React.FC = () => {
           ciudad: (detail as any).ciudad ?? (detail as any).guia_ciudad ?? prevSel.ciudad,
           source: (detail as any).source ?? prevSel.source,
           created: (detail as any).created ?? prevSel.created,
+          last_msg: (detail as any).last_msg ?? prevSel.last_msg,
           consentimiento_contacto:
             (detail as any).consentimiento_contacto !== undefined
               ? (detail as any).consentimiento_contacto
@@ -232,6 +236,7 @@ export const ConversacionesPage: React.FC = () => {
               ciudad: (payload as any).ciudad ?? r.ciudad,
               source: (payload as any).source ?? r.source,
               created: (payload as any).created ?? r.created,
+              last_msg: (payload as any).last_msg ?? r.last_msg,
               consentimiento_contacto:
                 (payload as any).consentimiento_contacto !== undefined
                   ? (payload as any).consentimiento_contacto
@@ -251,6 +256,7 @@ export const ConversacionesPage: React.FC = () => {
             ciudad: (payload as any).ciudad ?? s.ciudad,
             source: (payload as any).source ?? s.source,
             created: (payload as any).created ?? s.created,
+            last_msg: (payload as any).last_msg ?? s.last_msg,
             consentimiento_contacto:
               (payload as any).consentimiento_contacto !== undefined
                 ? (payload as any).consentimiento_contacto
@@ -306,19 +312,19 @@ export const ConversacionesPage: React.FC = () => {
     return rows;
   }, [all, dq, sourceFilter]);
 
-  /** Orden SOLO por fecha */
+  /** Orden por clave seleccionada (created | last_msg) */
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      const da = parseDateSafe(a.created);
-      const db = parseDateSafe(b.created);
+      const da = parseDateSafe(sortKey === 'last_msg' ? a.last_msg : a.created);
+      const db = parseDateSafe(sortKey === 'last_msg' ? b.last_msg : b.created);
       return sortOrder === 'desc' ? db - da : da - db;
     });
-  }, [filtered, sortOrder]);
+  }, [filtered, sortOrder, sortKey]);
 
   /** Reset de paginación en cambios */
   useEffect(() => {
     setPage(1);
-  }, [dq, sourceFilter, sortOrder, all.length]);
+  }, [dq, sourceFilter, sortOrder, sortKey, all.length]);
 
   /** Paginación real (slice) */
   const total = sorted.length;
@@ -371,16 +377,16 @@ export const ConversacionesPage: React.FC = () => {
     await onUpdate({ row_number: row.row_number, consentimiento_contacto: newValue } as Partial<Client>);
   };
 
-  /** Botón de orden (fecha) */
-  const SortByDateButton: React.FC = () => (
+  /** Botón de orden (asc/desc) */
+  const SortOrderButton: React.FC = () => (
     <button
       onClick={() => setSortOrder(prev => (prev === 'desc' ? 'asc' : 'desc'))}
       className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border border-gray-200 bg-white"
-      title="Cambiar orden por fecha"
+      title="Cambiar orden asc/desc"
     >
       <ArrowUpDown className="w-4 h-4" />
       <span className="inline-flex items-center gap-1 text-xs">
-        Fecha {sortOrder === 'desc' ? '↓' : '↑'}
+        {sortOrder === 'desc' ? 'Desc' : 'Asc'}
       </span>
     </button>
   );
@@ -411,8 +417,10 @@ export const ConversacionesPage: React.FC = () => {
     onOpenDialog: (e?: React.MouseEvent) => void;
     onToggleBot: (e?: React.MouseEvent) => void;
     busy?: boolean;
-  }> = ({ row, active, onClick, onOpenDialog, onToggleBot, busy }) => {
-    const createdHuman = row.created ? formatDate(String(row.created)) : '—';
+    sortKey: SortKey;
+  }> = ({ row, active, onClick, onOpenDialog, onToggleBot, busy, sortKey }) => {
+    const timeRaw = sortKey === 'last_msg' ? row.last_msg : row.created;
+    const createdHuman = timeRaw ? formatDate(String(timeRaw)) : '—';
     const source = row.source || '';
     const sourceColor =
       source === 'WiltechBga'
@@ -434,7 +442,7 @@ export const ConversacionesPage: React.FC = () => {
         className={`w-full p-3 rounded-xl border transition flex items-start gap-3 ${
           active ? 'bg-white border-indigo-200 shadow-sm' : 'bg-white/70 hover:bg-white border-gray-200'
         }`}
-        title="Abrir conversación"
+        title={`Ordenado por: ${sortKey === 'last_msg' ? 'Último mensaje' : 'Fecha de creación'}`}
       >
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-indigo-50 text-indigo-700 border border-indigo-100 font-semibold">
           {row.nombre?.trim()?.[0]?.toUpperCase() || 'C'}
@@ -551,8 +559,17 @@ export const ConversacionesPage: React.FC = () => {
                 />
               </div>
 
-              {/* Orden únicamente por fecha asc/desc */}
-              <SortByDateButton />
+              {/* Orden: clave + dirección */}
+              <select
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
+                title="Ordenar por"
+              >
+                <option value="created">Creación</option>
+                <option value="last_msg">Último mensaje</option>
+              </select>
+              <SortOrderButton />
             </div>
 
             {/* Tags Wiltech / WiltechBga */}
@@ -609,6 +626,7 @@ export const ConversacionesPage: React.FC = () => {
                   onOpenDialog={(e) => openChatDialog(row, e)}
                   onToggleBot={(e) => toggleBot(row, e)}
                   busy={savingRow === row.row_number}
+                  sortKey={sortKey}
                 />
               ))}
 

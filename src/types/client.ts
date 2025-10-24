@@ -95,4 +95,6 @@ export interface Client {
   created: Nullable<string>;
   asistio_agenda:Nullable<Boolean>;
   source: Nullable<string>;
+  last_msg: Nullable<string>;
+  estado_envio: Nullable<string>;
 }

@@ -1,3 +1,4 @@
+// components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
@@ -5,7 +6,13 @@ import {
   Truck, Edit2, Save, Bot, CheckCircle,
 } from 'lucide-react';
 import { Client } from '../types/client';
-import { formatDate, formatWhatsApp, getEtapaColor, getCategoriaColor } from '../utils/clientHelpers';
+import {
+  formatDate,
+  formatWhatsApp,
+  getEtapaColor,
+  getCategoriaColor,
+  deriveEnvioUI, // ← usar helper canónico
+} from '../utils/clientHelpers';
 import { ChatPanel } from './ChatPanel';
 import { SourceSelector, SOURCE_TO_SEDE } from './SourceSelector';
 
@@ -55,15 +62,15 @@ const safeStr = (v?: unknown) => {
 
 // ========= Paleta fija =========
 const COLORS = {
-  overlay: 'rgba(17, 24, 39, 0.7)', // gris muy oscuro translúcido
-  headerFrom: '#4F46E5', // indigo-600
-  headerTo: '#A21CAF',   // fuchsia-800
+  overlay: 'rgba(17, 24, 39, 0.7)',
+  headerFrom: '#4F46E5',
+  headerTo: '#A21CAF',
   white: '#FFFFFF',
-  black: '#111827', // gray-900
+  black: '#111827',
   text: '#111827',
-  muted: '#6B7280', // gray-500
-  border: '#E5E7EB', // gray-200
-  borderSoft: '#F3F4F6', // gray-100
+  muted: '#6B7280',
+  border: '#E5E7EB',
+  borderSoft: '#F3F4F6',
   slate100: '#F1F5F9',
   slate200: '#E2E8F0',
   emerald50: '#ECFDF5',
@@ -199,9 +206,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     const prev = editData.asistio_agenda;
     setEditData(p => ({ ...p, asistio_agenda: next }));
     try {
-      const ok = await onUpdate({ row_number: c.row_number, asistio_agenda: next });
+      const ok = await onUpdate({ row_number: c.row_number, asistio_agenda: next as any });
       if (!ok) setEditData(p => ({ ...p, asistio_agenda: prev }));
-      else notifyGlobalUpdate({ row_number: c.row_number, asistio_agenda: next });
+      else notifyGlobalUpdate({ row_number: c.row_number, asistio_agenda: next as any });
     } catch {
       setEditData(p => ({ ...p, asistio_agenda: prev }));
     }
@@ -268,6 +275,19 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     );
   }, [c?.fecha_agenda]);
 
+  const envioBadge = useMemo(() => {
+    const st = deriveEnvioUI(c);
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${st.classes}`}
+        title="Estado de envío"
+      >
+        <Truck className="w-3.5 h-3.5" />
+        {st.label}
+      </span>
+    );
+  }, [c]);
+
   // Source → efectos (auto sede)
   const applySourceSideEffects = (nextSource: string) => {
     setEditData(prev => {
@@ -330,6 +350,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       { label: 'Guía retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
       { label: 'Asegurado', key: 'asegurado', icon: ShieldCheck, type: 'boolean' },
       { label: 'Valor seguro', key: 'valor_seguro', icon: DollarSign, type: 'number' },
+      { label: 'Estado envío', key: 'estado_envio', icon: Truck, type: 'text' },
     ]},
   ];
 
@@ -381,6 +402,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               {etapaBadge}
               {categoriaBadge}
               {agendaBadge}
+              {envioBadge} {/* badge unificado */}
               {consentBadge}
             </div>
 
@@ -581,6 +603,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                             ? (SEDE_OPCIONES.includes(safeStr(value)) ? safeStr(value) : CUSTOM_VALUE)
                             : '';
 
+                          const isEstadoEnvio = field.key === 'estado_envio';
+
                           return (
                             <div
                               key={`${section.title}-${j}`}
@@ -599,7 +623,17 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                 </p>
 
                                 {!isEditing ? (
-                                  Lower.startsWith('etapa') && c.estado_etapa ? (
+                                  isEstadoEnvio ? (
+                                    (() => {
+                                      const st = deriveEnvioUI(c);
+                                      return (
+                                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${st.classes}`}>
+                                          <Truck className="w-3.5 h-3.5" />
+                                          {st.label}
+                                        </span>
+                                      );
+                                    })()
+                                  ) : Lower.startsWith('etapa') && c.estado_etapa ? (
                                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getEtapaColor(c.estado_etapa as any)}`}>
                                       {String(c.estado_etapa).replace('_', ' ')}
                                     </span>
@@ -655,6 +689,24 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                           />
                                         )}
                                       </div>
+                                    ) : isEstadoEnvio ? (
+                                      (() => {
+                                        // coacción: solo aceptamos 'envio_gestionado' o 'no_aplica'
+                                        const raw = String(getVal('estado_envio') ?? '').toLowerCase();
+                                        const coerced = raw === 'envio_gestionado' || raw === 'no_aplica' ? raw : '';
+                                        return (
+                                          <select
+                                            value={coerced}
+                                            onChange={(e) => setVal('estado_envio', e.target.value as any)}
+                                            className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
+                                            style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
+                                          >
+                                            <option value="">— (sin estado) —</option>
+                                            <option value="envio_gestionado">Envío gestionado</option>
+                                            <option value="no_aplica">No aplica</option>
+                                          </select>
+                                        );
+                                      })()
                                     ) : field.type === 'textarea' ? (
                                       <textarea
                                         value={value ?? ''}

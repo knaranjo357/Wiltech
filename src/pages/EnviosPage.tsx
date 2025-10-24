@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Truck, RefreshCw, Phone, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
-import { formatWhatsApp, formatDate } from '../utils/clientHelpers';
+import { formatWhatsApp, formatDate, deriveEnvioUI, ENVIO_LABELS } from '../utils/clientHelpers';
+import type { EnvioUIKey } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 
 /** ================== Normalizadores & validaciones ================== */
@@ -38,8 +39,8 @@ const parseDateSafe = (v: unknown): number => {
   if (!v) return 0;
   const raw = String(v).trim();
   if (!raw) return 0;
-  // Si viene como "2025-09-04 10:00" lo pasamos a ISO
-  const iso = raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') + (raw.length === 16 ? ':00' : '') : raw;
+  const iso =
+    raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') + (raw.length === 16 ? ':00' : '') : raw;
   const time = Date.parse(iso);
   return Number.isNaN(time) ? 0 : time;
 };
@@ -60,6 +61,29 @@ const hasSedeCiudadDireccionValid = (c: Client): boolean => {
   return true;
 };
 
+/** ================== Estado de envío: usar helper canónico ================== */
+/** Orden lógico para ordenar por estado (de más “pendiente” a más “resuelto”) */
+const STATE_ORDER: EnvioUIKey[] = [
+  'faltan_datos',
+  'datos_completos',
+  'ida',
+  'retorno',
+  'ida_y_retorno',
+  'envio_gestionado',
+  'no_aplica',
+];
+
+/** Colores de fila (badge ya viene con clases desde deriveEnvioUI → ENVIO_CLASSES) */
+const ROW_CLASSES: Record<EnvioUIKey, string> = {
+  faltan_datos: 'bg-orange-50 ring-1 ring-orange-200 hover:bg-orange-100/70',
+  datos_completos: 'bg-yellow-50 ring-1 ring-yellow-200 hover:bg-yellow-100/70',
+  ida: 'bg-sky-50 ring-1 ring-sky-200 hover:bg-sky-100/70',
+  retorno: 'bg-indigo-50 ring-1 ring-indigo-200 hover:bg-indigo-100/70',
+  ida_y_retorno: 'bg-emerald-50 ring-1 ring-emerald-200 hover:bg-emerald-100/70',
+  envio_gestionado: 'bg-emerald-50 ring-1 ring-emerald-200 hover:bg-emerald-100/70',
+  no_aplica: 'bg-slate-50 ring-1 ring-slate-200 hover:bg-slate-100/70',
+};
+
 type SortKey =
   | 'cliente'
   | 'whatsapp'
@@ -70,6 +94,7 @@ type SortKey =
   | 'ret'
   | 'asegurado'
   | 'valorSeguro'
+  | 'estadoEnvio'
   | 'created';
 
 type SortOrder = 'asc' | 'desc';
@@ -82,10 +107,11 @@ export const EnviosPage: React.FC = () => {
   const [cityFilter, setCityFilter] = useState<string>('');
   const [sedeFilter, setSedeFilter] = useState<string>('');
   const [search, setSearch] = useState<string>('');
+  const [stateFilter, setStateFilter] = useState<'' | EnvioUIKey>('');
 
   const [viewClient, setViewClient] = useState<Client | null>(null);
 
-  // Orden por defecto: Fecha registro (created) descendente (más recientes primero)
+  // Orden por defecto
   const [sort, setSort] = useState<{ key: SortKey; order: SortOrder }>({
     key: 'created',
     order: 'desc',
@@ -145,10 +171,10 @@ export const EnviosPage: React.FC = () => {
     };
   }, []);
 
-  /** === Opcional: estado de guardado por si quieres bloquear algo en la tabla === */
+  /** === Estado de guardado por fila === */
   const [savingRow, setSavingRow] = useState<number | null>(null);
 
-  /** === onUpdate usado por el modal (mismo contrato) === */
+  /** === onUpdate usado por el modal === */
   const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
     if (!payload.row_number) return false;
 
@@ -188,7 +214,7 @@ export const EnviosPage: React.FC = () => {
     }
   };
 
-  /** === Ciudades & Sedes únicas (derivadas) === */
+  /** === Ciudades & Sedes únicas === */
   const cities = useMemo(() => {
     const s = new Set<string>();
     clients.forEach(c => {
@@ -221,6 +247,10 @@ export const EnviosPage: React.FC = () => {
       data = data.filter(c => normalize(String(c.agenda_ciudad_sede || '')) === nf);
     }
 
+    if (stateFilter) {
+      data = data.filter(c => deriveEnvioUI(c).key === stateFilter);
+    }
+
     if (search.trim()) {
       const q = normalize(search.trim());
       data = data.filter(c => {
@@ -246,7 +276,7 @@ export const EnviosPage: React.FC = () => {
     }
 
     return data;
-  }, [clients, cityFilter, sedeFilter, search]);
+  }, [clients, cityFilter, sedeFilter, stateFilter, search]);
 
   /** === Ordenamiento === */
   const sorted = useMemo(() => {
@@ -271,7 +301,11 @@ export const EnviosPage: React.FC = () => {
         case 'valorSeguro': {
           const v = fmt(c.valor_seguro) || '';
           const n = Number(v.toString().replace(/[^\d.-]/g, ''));
-          return Number.isFinite(n) ? n : -Infinity; // vacíos al final si asc
+          return Number.isFinite(n) ? n : -Infinity;
+        }
+        case 'estadoEnvio': {
+          const st = deriveEnvioUI(c).key;
+          return STATE_ORDER.indexOf(st);
         }
         case 'created':
           return parseDateSafe(c.created);
@@ -286,14 +320,12 @@ export const EnviosPage: React.FC = () => {
       const va = getKeyValue(a, sort.key);
       const vb = getKeyValue(b, sort.key);
 
-      // num vs string
       if (typeof va === 'number' || typeof vb === 'number') {
         const na = typeof va === 'number' ? va : 0;
         const nb = typeof vb === 'number' ? vb : 0;
         return (na - nb) * dir;
       }
-      // string
-      return (String(va).localeCompare(String(vb), 'es', { numeric: true, sensitivity: 'base' })) * dir;
+      return String(va).localeCompare(String(vb), 'es', { numeric: true, sensitivity: 'base' }) * dir;
     });
   }, [filtered, sort]);
 
@@ -355,6 +387,19 @@ export const EnviosPage: React.FC = () => {
               <option value="">Todas las ciudades</option>
               {cities.map(c => (
                 <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+
+            {/* Filtro por estado de envío (claves del helper) */}
+            <select
+              value={stateFilter}
+              onChange={(e) => setStateFilter(e.target.value as EnvioUIKey | '')}
+              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-500"
+              title="Filtrar por estado de envío"
+            >
+              <option value="">Todos los estados</option>
+              {STATE_ORDER.map(k => (
+                <option key={k} value={k}>{ENVIO_LABELS[k]}</option>
               ))}
             </select>
 
@@ -460,7 +505,13 @@ export const EnviosPage: React.FC = () => {
                       Valor seguro {sortIcon('valorSeguro')}
                     </button>
                   </th>
-                  {/* Nueva columna */}
+                  {/* Nueva columna: Estado envío */}
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                    <button className={headerBtn} onClick={() => onSort('estadoEnvio')}>
+                      Estado envío {sortIcon('estadoEnvio')}
+                    </button>
+                  </th>
+                  {/* Fecha registro */}
                   <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                     <button className={headerBtn} onClick={() => onSort('created')}>
                       Fecha registro {sortIcon('created')}
@@ -482,14 +533,18 @@ export const EnviosPage: React.FC = () => {
                   const createdRaw = c.created ? String(c.created) : '';
                   const createdHuman = createdRaw ? formatDate(createdRaw) : '-';
 
+                  const envio = deriveEnvioUI(c); // ← unificado
+                  const rowClass = ROW_CLASSES[envio.key];
+
                   return (
                     <tr
                       key={`${c.row_number}-${i}`}
-                      className="hover:bg-gradient-to-r hover:from-purple-50/50 hover:to-blue-50/50 transition-colors cursor-pointer"
+                      className={`transition-colors cursor-pointer ${rowClass}`}
                       onClick={() => setViewClient(c)}
                       tabIndex={0}
                       role="button"
                       aria-label={`Abrir modal de ${nombre || 'cliente'}`}
+                      data-estado-envio={envio.key}
                     >
                       <td className="px-4 py-4">
                         <div className="text-gray-900 font-medium">{nombre}</div>
@@ -508,6 +563,14 @@ export const EnviosPage: React.FC = () => {
                       <td className="px-4 py-4 text-gray-900">{ret}</td>
                       <td className="px-4 py-4 text-gray-900">{asegurado}</td>
                       <td className="px-4 py-4 text-gray-900">{valorSeguro}</td>
+
+                      {/* Estado envío (badge del helper: clases + label) */}
+                      <td className="px-4 py-4">
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${envio.classes}`}>
+                          {ENVIO_LABELS[envio.key]}
+                        </span>
+                      </td>
+
                       <td className="px-4 py-4 text-gray-900">{createdHuman}</td>
                     </tr>
                   );
@@ -515,7 +578,7 @@ export const EnviosPage: React.FC = () => {
 
                 {sorted.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={11} className="px-4 py-10 text-center text-gray-500">
                       No hay registros que cumplan con SEDE, CIUDAD y DIRECCIÓN (sin “No aplica”).
                     </td>
                   </tr>
