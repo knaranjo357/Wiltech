@@ -37,6 +37,14 @@ const fmt = (v: unknown, placeholder = ''): string => {
   return s;
 };
 
+// === Helpers para manejo de source dinámico ===
+const SOURCE_EMPTY = '__EMPTY__';
+const labelSource = (s?: string | null) => {
+  const str = (s ?? '').toString().trim();
+  return str ? str : '(sin source)';
+};
+
+/** ================== Tipos ================== */
 type SortOrder = 'asc' | 'desc';
 type SortKey = 'created' | 'last_msg';
 
@@ -103,7 +111,7 @@ export const ConversacionesPage: React.FC = () => {
   // búsqueda / filtros / orden
   const [q, setQ] = useState('');
   const dq = useDeferredValue(q);
-  const [sourceFilter, setSourceFilter] = useState<string>(''); // '', 'Wiltech', 'WiltechBga'
+  const [sourceFilter, setSourceFilter] = useState<string>(''); // '', SOURCE_EMPTY o el valor del source
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc'); // asc/desc
   const [sortKey, setSortKey] = useState<SortKey>('created'); // created | last_msg
 
@@ -290,12 +298,32 @@ export const ConversacionesPage: React.FC = () => {
     }
   };
 
+  /** Estadísticas dinámicas de sources */
+  const sourceStats = useMemo(() => {
+    const map = new Map<string, { label: string; count: number }>();
+    for (const r of all) {
+      const raw = (r.source ?? '').toString().trim();
+      const key = raw ? raw : SOURCE_EMPTY;
+      const label = key === SOURCE_EMPTY ? '(sin source)' : key;
+      const prev = map.get(key);
+      map.set(key, { label, count: (prev?.count ?? 0) + 1 });
+    }
+    const items = Array.from(map.entries())
+      .map(([value, v]) => ({ value, ...v }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    return { total: all.length, items };
+  }, [all]);
+
   /** Filtros + búsqueda */
   const filtered = useMemo(() => {
     let rows = [...all];
 
     if (sourceFilter) {
-      rows = rows.filter(r => (r.source || '') === sourceFilter);
+      rows = rows.filter(r => {
+        const raw = (r.source ?? '').toString().trim();
+        const key = raw ? raw : SOURCE_EMPTY;
+        return key === sourceFilter;
+      });
     }
 
     if (dq.trim()) {
@@ -330,17 +358,6 @@ export const ConversacionesPage: React.FC = () => {
   const total = sorted.length;
   const showing = Math.min(page * pageSize, total);
   const paged = useMemo(() => sorted.slice(0, showing), [sorted, showing]);
-
-  /** Conteos por tag */
-  const counts = useMemo(() => {
-    let wil = 0;
-    let bga = 0;
-    for (const r of all) {
-      if (r.source === 'Wiltech') wil++;
-      else if (r.source === 'WiltechBga') bga++;
-    }
-    return { all: all.length, wiltech: wil, wiltechBga: bga };
-  }, [all]);
 
   /** Seleccionar conversación (panel derecho) */
   const onPick = (row: ChatRow) => {
@@ -391,24 +408,6 @@ export const ConversacionesPage: React.FC = () => {
     </button>
   );
 
-  /** Chip/tag */
-  const Chip: React.FC<{ active?: boolean; onClick: () => void; children: React.ReactNode }> = ({
-    active,
-    onClick,
-    children,
-  }) => (
-    <button
-      onClick={onClick}
-      className={`px-2.5 py-1 rounded-full text-xs border transition ${
-        active
-          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-          : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200'
-      }`}
-    >
-      {children}
-    </button>
-  );
-
   /** Item de lista con botones "Chat" y Toggle Bot a la derecha */
   const RowItem: React.FC<{
     row: ChatRow;
@@ -452,11 +451,10 @@ export const ConversacionesPage: React.FC = () => {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="truncate font-medium text-gray-900">{row.nombre || 'Sin nombre'}</p>
-            {source && (
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${sourceColor}`}>
-                {source}
-              </span>
-            )}
+            {/* Siempre mostrar una chapita, incluso si no hay source */}
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${sourceColor}`}>
+              {labelSource(source)}
+            </span>
           </div>
           <div className="mt-0.5 text-xs text-gray-600 flex items-center gap-2">
             <MessageSquare className="w-3.5 h-3.5" />
@@ -572,20 +570,34 @@ export const ConversacionesPage: React.FC = () => {
               <SortOrderButton />
             </div>
 
-            {/* Tags Wiltech / WiltechBga */}
+            {/* Filtro por canal/source: lista desplegable dinámica */}
             <div className="flex items-center gap-2 flex-wrap">
-              <Chip active={sourceFilter === ''} onClick={() => setSourceFilter('')}>
-                Todos ({counts.all})
-              </Chip>
-              <Chip active={sourceFilter === 'Wiltech'} onClick={() => setSourceFilter('Wiltech')}>
-                Wiltech ({counts.wiltech})
-              </Chip>
-              <Chip
-                active={sourceFilter === 'WiltechBga'}
-                onClick={() => setSourceFilter('WiltechBga')}
+              <select
+                value={sourceFilter}
+                onChange={(e) => {
+                  setSourceFilter(e.target.value);
+                  setPage(1);
+                }}
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
+                title="Filtrar por canal (source)"
               >
-                WiltechBga ({counts.wiltechBga})
-              </Chip>
+                <option value="">{`Todos (${sourceStats.total})`}</option>
+                {sourceStats.items.map((it) => (
+                  <option key={it.value} value={it.value}>
+                    {`${it.label} (${it.count})`}
+                  </option>
+                ))}
+              </select>
+
+              {sourceFilter && (
+                <button
+                  onClick={() => setSourceFilter('')}
+                  className="text-[11px] px-2 py-1 rounded-lg border border-gray-200 bg-white hover:bg-gray-50"
+                  title="Quitar filtro"
+                >
+                  Quitar filtro
+                </button>
+              )}
             </div>
           </div>
 
