@@ -1,15 +1,16 @@
-import React, { useEffect, useMemo, useState } from 'react';
+// src/pages/AgendaPage.tsx
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Calendar, Clock, RefreshCw, Phone, X, CheckCircle, MapPin, ChevronRight } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { Client } from '../types/client';
 import { getEtapaColor, getCategoriaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 
-/** ================== Config Sedes / Source ================== */
-const SEDE_OPCIONES = ['Bogotá', 'Bucaramanga', 'Barranquilla', 'Barrancabermeja'] as const;
-type Sede = (typeof SEDE_OPCIONES)[number];
-
-const SOURCE_TO_SEDE: Record<string, Sede> = {
+/** ================== (Opcional) Mapeo Source -> Sede ==================
+ * Se usa solo como fallback cuando no viene agenda_ciudad_sede ni ciudad
+ * (puedes ampliarlo si tienes otros sources)
+ */
+const SOURCE_TO_SEDE: Record<string, string> = {
   Wiltech: 'Bogotá',
   WiltechBga: 'Bucaramanga',
 };
@@ -126,29 +127,42 @@ const getClientSede = (c: Client): string => {
   if (byAgenda) return byAgenda;
   const src = safeText((c as any).source);
   if (src && SOURCE_TO_SEDE[src]) return SOURCE_TO_SEDE[src];
-  return safeText(c.ciudad);
+  const byCity = safeText(c.ciudad);
+  return byCity;
 };
 
-/** ================== Modal para elegir Sede ================== */
+/** ================== Modal para elegir Sede (DINÁMICO) ================== */
 const SedeModal: React.FC<{
   isOpen: boolean;
+  options: string[];
   defaultSede?: string;
-  onSelect: (sede: Sede | 'Todas') => void;
-}> = ({ isOpen, defaultSede, onSelect }) => {
+  onSelect: (sede: string | 'Todas') => void;
+}> = ({ isOpen, options, defaultSede, onSelect }) => {
   const [remember, setRemember] = useState(true);
-  const [sel, setSel] = useState<Sede | 'Todas'>(() => {
-    const candidate = (defaultSede || '') as Sede | 'Todas';
-    return (candidate && (SEDE_OPCIONES as readonly string[]).includes(candidate)) ? (candidate as Sede) : 'Bogotá';
-  });
+  const initial = defaultSede && (defaultSede === 'Todas' || options.includes(defaultSede))
+    ? defaultSede
+    : (options[0] ?? 'Todas');
+
+  const [sel, setSel] = useState<string | 'Todas'>(initial || 'Todas');
+
+  useEffect(() => {
+    // Si cambian las options (primera carga), re-evaluamos selección por defecto
+    const next = defaultSede && (defaultSede === 'Todas' || options.includes(defaultSede))
+      ? defaultSede
+      : (options[0] ?? 'Todas');
+    setSel(next || 'Todas');
+  }, [options, defaultSede]);
 
   if (!isOpen) return null;
 
-  const persist = (value: Sede | 'Todas') => {
-    if (remember) {
-      try { localStorage.setItem('agenda:selectedSede', value); } catch {}
-    } else {
-      try { localStorage.removeItem('agenda:selectedSede'); } catch {}
-    }
+  const persist = (value: string | 'Todas') => {
+    try {
+      if (remember) {
+        localStorage.setItem('agenda:selectedSede', value);
+      } else {
+        localStorage.removeItem('agenda:selectedSede');
+      }
+    } catch {}
   };
 
   const confirm = () => {
@@ -170,22 +184,26 @@ const SedeModal: React.FC<{
         </div>
 
         <div className="p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {SEDE_OPCIONES.map((s) => {
-              const active = sel === s;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setSel(s)}
-                  className={`flex items-center justify-between w-full px-4 py-3 rounded-xl border text-left transition
-                    ${active ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-neutral-200 hover:bg-neutral-50'}`}
-                >
-                  <span className="font-medium">{s}</span>
-                  {active && <ChevronRight className="w-4 h-4 text-indigo-600" />}
-                </button>
-              );
-            })}
-          </div>
+          {options.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {options.map((s) => {
+                const active = sel === s;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setSel(s)}
+                    className={`flex items-center justify-between w-full px-4 py-3 rounded-xl border text-left transition
+                      ${active ? 'border-indigo-500 ring-2 ring-indigo-200 bg-indigo-50' : 'border-neutral-200 hover:bg-neutral-50'}`}
+                  >
+                    <span className="font-medium">{s}</span>
+                    {active && <ChevronRight className="w-4 h-4 text-indigo-600" />}
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-sm text-neutral-600">No se detectaron sedes aún.</div>
+          )}
 
           <div className="flex items-center justify-between pt-2">
             <label className="inline-flex items-center gap-2 text-sm text-neutral-700">
@@ -200,6 +218,7 @@ const SedeModal: React.FC<{
             <button
               onClick={confirm}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+              disabled={options.length === 0}
             >
               Confirmar
             </button>
@@ -230,9 +249,12 @@ export const AgendaPage: React.FC = () => {
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRow, setSavingRow] = useState<number | null>(null);
 
-  // Sede seleccionada
-  const [selectedSede, setSelectedSede] = useState<Sede | 'Todas' | ''>('');
+  // Sede seleccionada (dinámica)
+  const [selectedSede, setSelectedSede] = useState<string | 'Todas' | ''>('');
   const [showSedeModal, setShowSedeModal] = useState<boolean>(false);
+
+  // Para controlar inicialización después de tener sedes
+  const initRef = useRef(false);
 
   /** === Carga inicial === */
   const fetchClients = async () => {
@@ -255,20 +277,52 @@ export const AgendaPage: React.FC = () => {
   };
 
   useEffect(() => {
-    // Preguntar sede al inicio
+    fetchClients();
+  }, []);
+
+  /** === Detectar sedes dinámicamente a partir de los clientes === */
+  const sedes = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of clients) {
+      const s = safeText(getClientSede(c));
+      if (s && s !== 'N/A' && s !== '-' && s !== '—') {
+        set.add(s);
+      }
+    }
+    return Array.from(set).sort((a, b) =>
+      a.localeCompare(b, 'es', { sensitivity: 'base' })
+    );
+  }, [clients]);
+
+  /** === Inicializar selección de sede cuando ya hay sedes detectadas === */
+  useEffect(() => {
+    if (initRef.current) return;
+    if (loading) return;            // espera a que termine la carga
+    if (clients.length === 0) {     // si no hay clientes, no mostramos modal
+      initRef.current = true;
+      setSelectedSede('Todas');
+      setShowSedeModal(false);
+      return;
+    }
+
     const saved = (() => {
       try { return localStorage.getItem('agenda:selectedSede') || ''; } catch { return ''; }
     })();
 
-    if (saved) {
-      setSelectedSede(saved as Sede | 'Todas');
+    if (saved && (saved === 'Todas' || sedes.includes(saved))) {
+      setSelectedSede(saved as string);
       setShowSedeModal(false);
     } else {
-      setShowSedeModal(true);
+      if (sedes.length <= 1) {
+        setSelectedSede(sedes[0] ?? 'Todas');
+        setShowSedeModal(false);
+      } else {
+        setShowSedeModal(true);
+      }
     }
 
-    fetchClients();
-  }, []);
+    initRef.current = true;
+  }, [sedes, clients, loading]);
 
   /** === Sincronización con otras vistas/pestañas === */
   useEffect(() => {
@@ -339,7 +393,7 @@ export const AgendaPage: React.FC = () => {
 
     // Filtro por sede (si hay selección y no es "Todas")
     if (selectedSede && selectedSede !== 'Todas') {
-      const target = normalize(selectedSede);
+      const target = normalize(String(selectedSede));
       filtered = filtered.filter((c) => normalize(getClientSede(c)) === target);
     }
 
@@ -405,9 +459,10 @@ export const AgendaPage: React.FC = () => {
   /** ===== Render ===== */
   return (
     <div className="space-y-6">
-      {/* Modal de selección de sede al inicio */}
+      {/* Modal de selección de sede al inicio (dinámico) */}
       <SedeModal
         isOpen={showSedeModal}
+        options={sedes}
         defaultSede={(selectedSede as string) || undefined}
         onSelect={(s) => { setSelectedSede(s); setShowSedeModal(false); }}
       />
@@ -427,6 +482,7 @@ export const AgendaPage: React.FC = () => {
               onClick={() => setShowSedeModal(true)}
               className="text-sm px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50"
               title="Cambiar sede"
+              disabled={sedes.length === 0}
             >
               Cambiar sede
             </button>
@@ -669,7 +725,7 @@ export const AgendaPage: React.FC = () => {
         </div>
       )}
 
-      {/* Modal de cliente (incluye Chat con source y todo lo demás) */}
+      {/* Modal de cliente */}
       <ClientModal
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}

@@ -1,3 +1,4 @@
+// src/pages/ConversacionesPage.tsx
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue } from 'react';
 import { RefreshCw, Search, MessageSquare, Clock, ArrowUpDown, Bot, User } from 'lucide-react';
 import { Client } from '../types/client';
@@ -37,6 +38,12 @@ const fmt = (v: unknown, placeholder = ''): string => {
   return s;
 };
 
+const toNumOrNull = (v: any): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
 // === Helpers para manejo de source dinámico ===
 const SOURCE_EMPTY = '__EMPTY__';
 const labelSource = (s?: string | null) => {
@@ -60,6 +67,8 @@ type ChatRow = {
   last_msg?: string | number | Date | null;
   /** Flag usado en el proyecto para encender/apagar el bot */
   consentimiento_contacto?: boolean | '' | null;
+  /** 🔑 NECESARIO para ChatPanel */
+  subscriber_id?: number | null;
 };
 
 /** Dedup por whatsapp => conservar el más reciente por created */
@@ -79,6 +88,8 @@ function dedupeByWhatsapp(clients: Client[]): ChatRow[] {
       created: (c as any).created ?? null,
       last_msg: (c as any).last_msg ?? null,
       consentimiento_contacto: (c as any).consentimiento_contacto ?? null,
+      // ⬇️ transportar el subscriber_id que viene del backend (como número)
+      subscriber_id: toNumOrNull((c as any).subscriber_id),
     };
     if (!current || parseDateSafe(candidate.created) > parseDateSafe(current.created)) {
       map.set(wa, candidate);
@@ -90,14 +101,16 @@ function dedupeByWhatsapp(clients: Client[]): ChatRow[] {
 /** Helper: convertir ChatRow -> Client mínimo */
 const rowToClient = (r: ChatRow): Client =>
   ({
-    row_number: r.row_number,
+    row_number: r.row_number as number,
     nombre: r.nombre,
     whatsapp: r.whatsapp,
     modelo: r.modelo,
     ciudad: r.ciudad,
-    created: r.created,
-    source: r.source,
-    consentimiento_contacto: r.consentimiento_contacto ?? null,
+    created: r.created as any,
+    source: r.source as any,
+    consentimiento_contacto: (r.consentimiento_contacto ?? null) as any,
+    // ⬇️ pasar el subscriber_id hacia el ChatPanel
+    subscriber_id: (r.subscriber_id ?? null) as any,
   } as unknown as Client);
 
 /** ================== Página ================== */
@@ -182,6 +195,11 @@ export const ConversacionesPage: React.FC = () => {
             (detail as any).consentimiento_contacto !== undefined
               ? (detail as any).consentimiento_contacto
               : prevRow.consentimiento_contacto,
+          // ⬇️ actualizar si llegó subscriber_id del evento
+          subscriber_id:
+            (detail as any).subscriber_id !== undefined
+              ? toNumOrNull((detail as any).subscriber_id)
+              : prevRow.subscriber_id ?? null,
         };
         const copy = [...prev];
         copy[idx] = nextRow;
@@ -202,11 +220,17 @@ export const ConversacionesPage: React.FC = () => {
             (detail as any).consentimiento_contacto !== undefined
               ? (detail as any).consentimiento_contacto
               : prevSel.consentimiento_contacto,
+          subscriber_id:
+            (detail as any).subscriber_id !== undefined
+              ? toNumOrNull((detail as any).subscriber_id)
+              : prevSel.subscriber_id ?? null,
         };
       });
 
       setViewClient(v =>
-        v && detail && v.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v
+        v && detail && v.row_number === detail.row_number
+          ? ({ ...v, ...detail } as Client)
+          : v
       );
     };
 
@@ -249,6 +273,10 @@ export const ConversacionesPage: React.FC = () => {
                 (payload as any).consentimiento_contacto !== undefined
                   ? (payload as any).consentimiento_contacto
                   : r.consentimiento_contacto,
+              subscriber_id:
+                (payload as any).subscriber_id !== undefined
+                  ? toNumOrNull((payload as any).subscriber_id)
+                  : r.subscriber_id ?? null,
             } as ChatRow)
           : r
       )
@@ -269,6 +297,10 @@ export const ConversacionesPage: React.FC = () => {
               (payload as any).consentimiento_contacto !== undefined
                 ? (payload as any).consentimiento_contacto
                 : s.consentimiento_contacto,
+            subscriber_id:
+              (payload as any).subscriber_id !== undefined
+                ? toNumOrNull((payload as any).subscriber_id)
+                : s.subscriber_id ?? null,
           } as ChatRow)
         : s
     );
@@ -674,15 +706,8 @@ export const ConversacionesPage: React.FC = () => {
             <div className="h-full w-full flex flex-col min-h-0">
               <div className="flex-1 min-h-0">
                 <ChatPanel
-                  client={{
-                    nombre: selected.nombre,
-                    whatsapp: selected.whatsapp,
-                    modelo: selected.modelo,
-                    ciudad: selected.ciudad as any,
-                    row_number: selected.row_number as any,
-                  } as Client}
+                  client={rowToClient(selected)}
                   source={selectedSource}
-                  onSourceChange={setSelectedSource}
                 />
               </div>
             </div>

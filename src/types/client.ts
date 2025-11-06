@@ -97,4 +97,5 @@ export interface Client {
   source: Nullable<string>;
   last_msg: Nullable<string>;
   estado_envio: Nullable<string>;
+  subscriber_id: Nullable<number>;
 }

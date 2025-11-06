@@ -11,10 +11,9 @@ import {
   formatWhatsApp,
   getEtapaColor,
   getCategoriaColor,
-  deriveEnvioUI, // ← usar helper canónico
+  deriveEnvioUI,
 } from '../utils/clientHelpers';
 import { ChatPanel } from './ChatPanel';
-import { SourceSelector, SOURCE_TO_SEDE } from './SourceSelector';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -30,9 +29,6 @@ type FieldDef<K extends keyof Client = keyof Client> = {
   icon: React.ComponentType<any>;
   type?: FieldType;
 };
-
-const SEDE_OPCIONES = ['Bogotá', 'Bucaramanga', 'Barranquilla', 'Barrancabermeja'];
-const CUSTOM_VALUE = '__custom__';
 
 // ========= Utils =========
 const parseAgendaDate = (raw?: string | null): Date | null => {
@@ -60,7 +56,7 @@ const safeStr = (v?: unknown) => {
   return l === 'null' || l === 'undefined' ? '' : s;
 };
 
-// ========= Paleta fija =========
+// ========= Paleta =========
 const COLORS = {
   overlay: 'rgba(17, 24, 39, 0.7)',
   headerFrom: '#4F46E5',
@@ -75,16 +71,9 @@ const COLORS = {
   slate200: '#E2E8F0',
   emerald50: '#ECFDF5',
   emerald200: '#A7F3D0',
-  emerald600: '#059669',
   purple50: '#F5F3FF',
   purple200: '#DDD6FE',
   purple700: '#6D28D9',
-  indigo50: '#EEF2FF',
-  indigo700: '#4338CA',
-  indigo800: '#3730A3',
-  neutral50: '#FAFAFA',
-  neutral100: '#F5F5F5',
-  neutral200: '#E5E7EB',
 };
 
 // ========= Componente =========
@@ -288,39 +277,26 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     );
   }, [c]);
 
-  // Source → efectos (auto sede)
-  const applySourceSideEffects = (nextSource: string) => {
-    setEditData(prev => {
-      const currSede = String(prev.agenda_ciudad_sede ?? c.agenda_ciudad_sede ?? '').trim();
-      const mapped = SOURCE_TO_SEDE[nextSource];
-      const shouldAuto = !currSede || Object.values(SOURCE_TO_SEDE).includes(currSede);
-      return {
-        ...prev,
-        source: nextSource,
-        agenda_ciudad_sede: shouldAuto && mapped ? mapped : prev.agenda_ciudad_sede,
-      };
-    });
-  };
-
-  // Secciones
+  // Secciones (¡source es un campo normal y editable!)
   const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; }> = [
     { title: 'Información Personal', icon: User, fields: [
       { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
       { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text' },
       { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
     ]},
+    { title: 'Estado y Seguimiento', icon: Calendar, fields: [
+      { label: 'Source (origen)', key: 'source', icon: Settings, type: 'text' }, // <— editable
+      { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
+      { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
+      { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
+      { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
+      { label: 'Sede/Ciudad agenda', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' }, // texto libre
+    ]},
     { title: 'Dispositivo y Servicio', icon: Smartphone, fields: [
       { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
       { label: 'Intención', key: 'intencion', icon: Settings, type: 'text' },
       { label: 'Detalles', key: 'detalles', icon: FileText, type: 'textarea' },
       { label: 'Modo de recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
-    ]},
-    { title: 'Estado y Seguimiento', icon: Calendar, fields: [
-      { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
-      { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
-      { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
-      { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
-      { label: 'Sede/Ciudad agenda', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
     ]},
     { title: 'Diagnóstico y Precios', icon: PackageSearch, fields: [
       { label: 'Diagnóstico requerido', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
@@ -360,7 +336,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   }, [isEditing, activeTab]);
 
   if (!shouldRender) return null;
-  const currentSource = (editData.source ?? c.source) || '';
 
   return (
     <div
@@ -379,40 +354,33 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       >
         {/* Header */}
         <div
-          className="relative px-6 py-5 text-white"
-          style={{
-            backgroundImage: `linear-gradient(90deg, ${COLORS.headerFrom}, ${COLORS.headerTo})`,
-          }}
+          className="relative px-4 sm:px-6 py-5 text-white"
+          style={{ backgroundImage: `linear-gradient(90deg, ${COLORS.headerFrom}, ${COLORS.headerTo})` }}
         >
-          <div className="relative flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-semibold"
-                   style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)' }}>
+          <div className="relative flex items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <div
+                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center text-base sm:text-lg font-semibold"
+                style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)' }}
+              >
                 {initials}
               </div>
               <div className="min-w-0">
-                <h2 id="client-modal-title" className="text-2xl md:text-3xl font-semibold tracking-tight truncate">
+                <h2 id="client-modal-title" className="text-xl sm:text-3xl font-semibold tracking-tight truncate">
                   {safeStr(c?.nombre) || 'Sin nombre'}
                 </h2>
                 <p className="opacity-90 truncate">{safeStr(c?.modelo) || 'Sin modelo'}</p>
               </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-2">
-              {etapaBadge}
-              {categoriaBadge}
-              {agendaBadge}
-              {envioBadge} {/* badge unificado */}
-              {consentBadge}
-            </div>
-
             <div className="flex items-center gap-2 shrink-0">
-              {/* Tabs */}
-              <div className="hidden sm:flex rounded-xl overflow-hidden"
+              {/* Tabs (SIEMPRE visibles, también en móvil) */}
+              <div className="flex rounded-xl overflow-hidden"
                    style={{ border: '1px solid rgba(255,255,255,0.4)' }}>
                 <button
                   onClick={() => setActiveTab('ficha')}
                   className="px-3 py-1.5 text-sm font-medium transition"
+                  aria-pressed={activeTab === 'ficha'}
                   style={activeTab === 'ficha'
                     ? { background: COLORS.white, color: COLORS.headerFrom }
                     : { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}
@@ -422,6 +390,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                 <button
                   onClick={() => setActiveTab('chat')}
                   className="px-3 py-1.5 text-sm font-medium transition"
+                  aria-pressed={activeTab === 'chat'}
                   style={activeTab === 'chat'
                     ? { background: COLORS.white, color: COLORS.headerFrom }
                     : { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}
@@ -434,7 +403,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               {canShowAsistio && (
                 <button
                   onClick={toggleAsistio}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition"
                   style={
                     asistio
                       ? { background: '#059669', color: '#FFFFFF', borderColor: '#047857' }
@@ -443,14 +412,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   title={asistio ? 'Marcar como NO asistió' : 'Marcar como asistió'}
                 >
                   <CheckCircle className="w-4 h-4" />
-                  {asistio ? 'Asistió' : 'Marcar asistencia'}
+                  {asistio ? 'Asistió' : 'Asistencia'}
                 </button>
               )}
 
               {!isEditing ? (
                 <button
                   onClick={() => { setActiveTab('ficha'); setIsEditing(true); setEditData(c); }}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
+                  className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
                   style={{ background: '#F9FAFB', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
                   title="Editar"
                 >
@@ -458,7 +427,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   Editar
                 </button>
               ) : (
-                <>
+                <div className="hidden sm:flex items-center gap-2">
                   <button
                     onClick={handleSave}
                     disabled={saving}
@@ -477,7 +446,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   >
                     <X className="w-5 h-5" /> Cancelar
                   </button>
-                </>
+                </div>
               )}
 
               <button
@@ -492,28 +461,19 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             </div>
           </div>
 
-          {/* Source + sede */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <SourceSelector value={currentSource} onChange={applySourceSideEffects} />
-            {!!currentSource && (
-              <span
-                className="inline-flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-xl"
-                style={{ color: '#FFFFFF', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)' }}
-              >
-                Origen: <strong className="ml-1">{currentSource}</strong>
-                {SOURCE_TO_SEDE[currentSource] && (
-                  <span className="ml-2 inline-flex items-center gap-1">
-                    <MapPin className="w-4 h-4" /> {SOURCE_TO_SEDE[currentSource]}
-                  </span>
-                )}
-              </span>
-            )}
+          {/* Badges resumidos (muestran en móvil también) */}
+          <div className="px-4 sm:px-6 mt-3 flex flex-wrap items-center gap-2">
+            {etapaBadge}
+            {categoriaBadge}
+            {agendaBadge}
+            {envioBadge}
+            {consentBadge}
           </div>
 
           {/* Acciones rápidas */}
           <div
-            className="mt-4 px-3 py-3 rounded-xl flex flex-wrap items-center gap-2"
-            style={{ background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)' }}
+            className="mt-4 mx-4 sm:mx-6 px-3 py-3 rounded-xl flex flex-wrap items-center gap-2"
+            style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}
           >
             <a
               href={waLink}
@@ -567,8 +527,59 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
         {/* BODY */}
         <div className="flex-1 flex flex-col min-h-0">
           {activeTab === 'ficha' ? (
-            <div ref={fichaTopRef} className="flex-1 overflow-y-auto p-6"
-                 style={{ background: '#F7F7FB' }}>
+            <div ref={fichaTopRef} className="flex-1 overflow-y-auto p-4 sm:p-6" style={{ background: '#F7F7FB' }}>
+              {/* Botones móviles de edición / asistencia */}
+              <div className="sm:hidden mb-4 flex items-center gap-2">
+                {canShowAsistio && (
+                  <button
+                    onClick={toggleAsistio}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition"
+                    style={
+                      asistio
+                        ? { background: '#059669', color: '#FFFFFF', borderColor: '#047857' }
+                        : { background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' }
+                    }
+                    title={asistio ? 'Marcar como NO asistió' : 'Marcar como asistió'}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {asistio ? 'Asistió' : 'Asistencia'}
+                  </button>
+                )}
+
+                {!isEditing ? (
+                  <button
+                    onClick={() => { setIsEditing(true); setEditData(c); }}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
+                    style={{ background: '#F9FAFB', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
+                    title="Editar"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                    Editar
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
+                      style={{ background: COLORS.headerFrom, color: COLORS.white }}
+                      title="Guardar"
+                    >
+                      <Save className="w-5 h-5" /> Guardar
+                    </button>
+                    <button
+                      onClick={() => { setIsEditing(false); setEditData(c); }}
+                      disabled={saving}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
+                      style={{ background: '#FFFFFF', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
+                      title="Cancelar"
+                    >
+                      <X className="w-5 h-5" /> Cancelar
+                    </button>
+                  </>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {sections.map((section, idx) => (
                   <section
@@ -584,7 +595,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                       <div className="flex items-center mb-4">
                         <div
                           className="w-9 h-9 mr-3 rounded-xl flex items-center justify-center"
-                          style={{ background: COLORS.indigo50, color: COLORS.headerFrom }}
+                          style={{ background: '#EEF2FF', color: COLORS.headerFrom }}
                         >
                           <section.icon className="w-5 h-5" />
                         </div>
@@ -598,22 +609,17 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                           const value = getVal(field.key);
                           const Lower = field.label.toLowerCase();
                           const isEmpty = !safeStr(value);
-                          const isSedeField = field.key === 'agenda_ciudad_sede';
-                          const sedeSelectValue = isSedeField
-                            ? (SEDE_OPCIONES.includes(safeStr(value)) ? safeStr(value) : CUSTOM_VALUE)
-                            : '';
-
                           const isEstadoEnvio = field.key === 'estado_envio';
 
                           return (
                             <div
                               key={`${section.title}-${j}`}
                               className="group flex items-start gap-3 p-3 rounded-xl transition"
-                              style={{ background: COLORS.neutral50, border: `1px solid ${COLORS.border}` }}
+                              style={{ background: '#FAFAFA', border: `1px solid ${COLORS.border}` }}
                             >
                               <div
                                 className="w-8 h-8 rounded-lg flex items-center justify-center mt-0.5"
-                                style={{ background: COLORS.neutral100, color: COLORS.muted }}
+                                style={{ background: COLORS.slate100, color: COLORS.muted }}
                               >
                                 <field.icon className="w-4 h-4" />
                               </div>
@@ -642,14 +648,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                       {String(c.categoria_contacto).replace('_', ' ')}
                                     </span>
                                   ) : field.key === 'fecha_agenda' && value ? (
-                                    <span className="inline-flex items-center gap-2"
-                                          style={{ color: COLORS.purple700 }}>
+                                    <span className="inline-flex items-center gap-2" style={{ color: COLORS.purple700 }}>
                                       <Calendar className="w-4 h-4" />
                                       {formatDate(String(value))}
                                     </span>
                                   ) : field.key === 'whatsapp' && value ? (
-                                    <span className="inline-flex items-center gap-2"
-                                          style={{ color: '#047857' }}>
+                                    <span className="inline-flex items-center gap-2" style={{ color: '#047857' }}>
                                       <Phone className="w-4 h-4" />
                                       {formatWhatsApp(String(value))}
                                     </span>
@@ -663,35 +667,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   )
                                 ) : (
                                   <>
-                                    {isSedeField ? (
-                                      <div className="flex flex-col gap-2">
-                                        <select
-                                          value={sedeSelectValue}
-                                          onChange={(e) => {
-                                            const v = e.target.value;
-                                            if (v === CUSTOM_VALUE) setVal('agenda_ciudad_sede', '');
-                                            else setVal('agenda_ciudad_sede', v);
-                                          }}
-                                          className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                          style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                        >
-                                          {SEDE_OPCIONES.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-                                          <option value={CUSTOM_VALUE}>Escribir…</option>
-                                        </select>
-                                        {sedeSelectValue === CUSTOM_VALUE && (
-                                          <input
-                                            type="text"
-                                            value={safeStr(getVal('agenda_ciudad_sede'))}
-                                            onChange={(e) => setVal('agenda_ciudad_sede', e.target.value)}
-                                            placeholder="Escribe la sede…"
-                                            className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                            style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                          />
-                                        )}
-                                      </div>
-                                    ) : isEstadoEnvio ? (
+                                    {isEstadoEnvio ? (
                                       (() => {
-                                        // coacción: solo aceptamos 'envio_gestionado' o 'no_aplica'
+                                        // coerción controlada
                                         const raw = String(getVal('estado_envio') ?? '').toLowerCase();
                                         const coerced = raw === 'envio_gestionado' || raw === 'no_aplica' ? raw : '';
                                         return (
@@ -773,8 +751,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
           ) : (
             <ChatPanel
               client={c}
-              source={currentSource}
-              onSourceChange={applySourceSideEffects}
+              // Enviar siempre el source actual (editable en “Estado y Seguimiento”)
+              source={(editData.source ?? c.source) as any}
             />
           )}
         </div>
