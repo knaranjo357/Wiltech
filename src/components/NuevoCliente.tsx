@@ -1,3 +1,4 @@
+// components/NuevoCliente.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
@@ -22,6 +23,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { Client } from '../types/client';
+import { ClientService } from '../services/clientService';
 
 /** ===================== Helpers ===================== **/
 
@@ -61,7 +63,7 @@ function safe(v?: string | number | null) {
   return v !== undefined && v !== null && String(v).trim() ? String(v) : '';
 }
 
-/** Estructura de campos para pintar inputs de forma declarativa */
+/** Estructura de campos para inputs declarativos */
 type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean';
 type FieldDef<K extends keyof Client = keyof Client> = {
   label: string;
@@ -122,9 +124,9 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     guia_email: '',
     guia_numero_ida: '',
     guia_numero_retorno: '',
-    asegurado: false as any, // depende de tu tipo (boolean)
-    valor_seguro: '' as any, // depende de tu tipo (number | string)
-    consentimiento_contacto: true as any, // por defecto on (bot activo)
+    asegurado: false as any,
+    valor_seguro: '' as any,
+    consentimiento_contacto: true as any,
   });
 
   const waParsed = useMemo(() => toWaJid(String(form.whatsapp || '')), [form.whatsapp]);
@@ -135,7 +137,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     if (e.target === overlayRef.current) setOpen(false);
   };
 
-  // Cerrar con Esc
+  // Cerrar con Esc + bloquear scroll body
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -153,7 +155,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
   const setVal = <K extends keyof Client>(key: K, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
-  /** Secciones (mismas que tu modal para mantener consistencia visual) */
+  /** Secciones (misma estructura visual) */
   const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef> }> = [
     {
       title: 'Información Personal',
@@ -228,7 +230,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     },
   ];
 
-  /** Submit */
+  /** Submit usando ClientService (con token automático vía ApiService) */
   const handleSubmit = async () => {
     setError(null);
 
@@ -248,16 +250,8 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     try {
       setSaving(true);
 
-      const res = await fetch('https://n8n.alliasoft.com/webhook/wiltech/clientes-nuevo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(txt || `Error ${res.status}`);
-      }
+      // ⬇️ Aquí ya viaja Authorization: Bearer <token> gracias a ApiService
+      await ClientService.createClient(payload);
 
       // Notificar globalmente y callback opcional
       try {
@@ -481,4 +475,3 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
 };
 
 export default NuevoCliente;
-
