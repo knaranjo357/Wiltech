@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from "react";
+import React, { ReactNode, useState, useMemo } from "react";
 import { useAuth } from "../hooks/useAuth";
 import {
   DollarSign,
@@ -10,8 +10,18 @@ import {
   X,
   Truck,
   MessageSquare,
-  BarChart3, // 👈 icono para Resultados
+  BarChart3,
+  LucideIcon,
+  BrainCircuit,
+  ChevronLeft,  // Icono para colapsar
+  ChevronRight, // Icono para expandir
 } from "lucide-react";
+
+interface NavItem {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+}
 
 interface LayoutProps {
   children: ReactNode;
@@ -19,70 +29,96 @@ interface LayoutProps {
   onPageChange: (page: string) => void;
 }
 
-const navigationItems = [
+const navigationItems: NavItem[] = [
   { id: "precios", name: "Precios", icon: DollarSign },
-  { id: "wpp", name: "WPP", icon: Bot },               // 👈 nueva sección
+  // { id: "wpp", name: "WhatsApp", icon: Bot },
   { id: "crm", name: "CRM", icon: Users },
-  { id: "conversaciones", name: "Conversaciones", icon: MessageSquare }, // ← usar id como el resto
+  { id: "conversaciones", name: "Conversaciones", icon: MessageSquare },
   { id: "agenda", name: "Agenda", icon: Calendar },
   { id: "envios", name: "Envíos", icon: Truck },
-  { id: "resultados", name: "Resultados", icon: BarChart3 }, // 👈 resultados
+  { id: "resultados", name: "Resultados", icon: BarChart3 },
+  // { id: "agente", name: "Agente IA", icon: BrainCircuit },
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) => {
   const { user, logout } = useAuth();
+  
+  // Controla si el sidebar está visible en móvil
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  
+  // Controla si el sidebar está minimizado en escritorio
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const pageTitle = (() => {
-    if (currentPage === "conversaciones") return "Conversaciones";
-    if (currentPage === "crm") return "CRM";
-    if (currentPage === "envios") return "Envíos";
-    if (currentPage === "agenda") return "Agenda";
-    if (currentPage === "precios") return "Precios";
-    if (currentPage === "wpp") return "WhatsApp";
-    if (currentPage === "resultados") return "Resultados";
+  const pageTitle = useMemo(() => {
+    const activeItem = navigationItems.find((item) => item.id === currentPage);
+    if (activeItem) return activeItem.name;
     return currentPage.charAt(0).toUpperCase() + currentPage.slice(1);
-  })();
+  }, [currentPage]);
+
+  const userInitial = useMemo(() => {
+    return (user?.email?.[0] ?? "U").toUpperCase();
+  }, [user?.email]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
+      
+      {/* === Mobile overlay === */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-200/50 transform transition-transform duration-300 md:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${
+          sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
+        onClick={() => setSidebarOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* === Sidebar === */}
+      <aside
+        className={`
+          fixed inset-y-0 left-0 z-50 bg-white/90 backdrop-blur-xl shadow-2xl border-r border-gray-200/50 
+          transform transition-all duration-300 ease-in-out
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} 
+          md:translate-x-0 
+          ${isCollapsed ? "w-20" : "w-64"} 
+        `}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200/50">
+          
+          {/* -- Header Sidebar -- */}
+          <div className={`flex items-center p-6 border-b border-gray-200/50 ${isCollapsed ? "justify-center" : "justify-between"}`}>
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shrink-0">
                 <Bot className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              {/* Ocultamos el texto si está colapsado con overflow hidden y width transition */}
+              <span 
+                className={`text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap overflow-hidden transition-all duration-300
+                ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"}`}
+              >
                 Wiltech
               </span>
             </div>
+
+            {/* Botón Toggle Desktop */}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className={`hidden md:flex absolute -right-3 top-8 bg-white border border-gray-200 rounded-full p-1 shadow-md hover:bg-gray-50 transition-transform duration-300 ${isCollapsed ? "rotate-180" : ""}`}
+              title={isCollapsed ? "Expandir menú" : "Colapsar menú"}
+            >
+              <ChevronLeft className="w-3 h-3 text-gray-500" />
+            </button>
+
+            {/* Botón Cerrar Móvil */}
             <button
               onClick={() => setSidebarOpen(false)}
               className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-2">
+          {/* -- Navigation Items -- */}
+          <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden">
             {navigationItems.map((item) => {
-              const Icon = item.icon as any;
               const isActive = currentPage === item.id;
               return (
                 <button
@@ -91,62 +127,111 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                     onPageChange(item.id);
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all duration-300 ${
-                    isActive
-                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg transform scale-[1.02]"
-                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                  }`}
+                  // "group" permite controlar el hover de los hijos (tooltip)
+                  className={`
+                    group relative flex items-center w-full rounded-xl transition-all duration-200
+                    ${isCollapsed ? "justify-center px-2 py-3" : "justify-start px-4 py-3 space-x-3"}
+                    ${isActive 
+                      ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md" 
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"}
+                  `}
                 >
-                  <Icon className={`w-5 h-5 ${isActive ? "text-white" : "text-gray-500"}`} />
-                  <span className="font-medium">{item.name}</span>
+                  <item.icon
+                    className={`w-5 h-5 shrink-0 transition-colors ${
+                      isActive ? "text-white" : "text-gray-500 group-hover:text-gray-700"
+                    }`}
+                  />
+                  
+                  {/* Texto normal (visible si expandido) */}
+                  {!isCollapsed && (
+                    <span className="font-medium whitespace-nowrap animate-fadeIn">
+                      {item.name}
+                    </span>
+                  )}
+
+                  {/* TOOLTIP (visible solo en hover cuando está colapsado) */}
+                  {isCollapsed && (
+                    <div className="absolute left-full ml-4 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap z-50">
+                      {item.name}
+                      {/* Flechita del tooltip */}
+                      <div className="absolute top-1/2 -left-1 -mt-1 border-4 border-transparent border-r-gray-800" />
+                    </div>
+                  )}
                 </button>
               );
             })}
           </nav>
 
-          {/* User info / logout */}
-          <div className="p-4 border-t border-gray-200/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-semibold text-sm">
-                    {user?.email?.charAt(0)?.toUpperCase?.()}
+          {/* -- User Footer -- */}
+          <div className="p-4 border-t border-gray-200/50 bg-gray-50/50">
+            <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between"}`}>
+              <div className="flex items-center space-x-3 min-w-0">
+                <div className="w-9 h-9 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-sm shrink-0" title={user?.email}>
+                  <span className="text-white font-bold text-sm">
+                    {userInitial}
                   </span>
                 </div>
-                <span className="text-sm font-medium text-gray-700 truncate max-w-[120px]">
-                  {user?.email}
-                </span>
+                
+                {!isCollapsed && (
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-semibold text-gray-700 truncate block max-w-[100px]">
+                      {user?.email || "Usuario"}
+                    </span>
+                    <span className="text-xs text-gray-500 truncate">
+                      Conectado
+                    </span>
+                  </div>
+                )}
               </div>
+              
+              {!isCollapsed && (
+                <button
+                  onClick={logout}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+            
+            {/* Botón logout para modo colapsado (opcional, o usar el avatar para un menú dropdown, aquí lo simplifico) */}
+            {isCollapsed && (
               <button
                 onClick={logout}
-                className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                className="mt-3 w-full p-2 flex justify-center text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                 title="Cerrar sesión"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-5 h-5" />
               </button>
-            </div>
+            )}
           </div>
         </div>
-      </div>
+      </aside>
 
-      {/* Main */}
-      <div className="md:ml-64">
+      {/* === Main Content Wrapper === */}
+      {/* Ajustamos el margen izquierdo según el estado isCollapsed */}
+      <div className={`transition-all duration-300 ${isCollapsed ? "md:ml-20" : "md:ml-64"}`}>
+        
         {/* Top bar */}
-        <header className="bg-white/80 backdrop-blur-sm shadow-sm border-b border-gray-200/50">
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50">
           <div className="flex items-center justify-between px-6 py-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-            <h1 className="text-2xl font-bold text-gray-800">{pageTitle}</h1>
-            <div className="w-10 md:w-0" />
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+            </div>
+
           </div>
         </header>
 
         {/* Content */}
-        <main className="p-6">{children}</main>
+        <main className="p-4 sm:p-6 lg:p-8 animate-fadeIn">
+          {children}
+        </main>
       </div>
     </div>
   );

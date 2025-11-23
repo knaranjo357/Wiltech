@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
   Copy, MessageCircle, ShieldCheck, PackageSearch, ClipboardList, Building2, ClipboardCheck,
-  Truck, Edit2, Save, Bot, CheckCircle,
+  Truck, Edit2, Save, Bot, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { Client } from '../types/client';
 import {
@@ -30,7 +30,7 @@ type FieldDef<K extends keyof Client = keyof Client> = {
   type?: FieldType;
 };
 
-// ========= Utils =========
+// ========= Utils & Helpers =========
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
@@ -56,40 +56,18 @@ const safeStr = (v?: unknown) => {
   return l === 'null' || l === 'undefined' ? '' : s;
 };
 
-// ========= Paleta =========
-const COLORS = {
-  overlay: 'rgba(17, 24, 39, 0.7)',
-  headerFrom: '#4F46E5',
-  headerTo: '#A21CAF',
-  white: '#FFFFFF',
-  black: '#111827',
-  text: '#111827',
-  muted: '#6B7280',
-  border: '#E5E7EB',
-  borderSoft: '#F3F4F6',
-  slate100: '#F1F5F9',
-  slate200: '#E2E8F0',
-  emerald50: '#ECFDF5',
-  emerald200: '#A7F3D0',
-  purple50: '#F5F3FF',
-  purple200: '#DDD6FE',
-  purple700: '#6D28D9',
-};
-
-// ========= Componente =========
 export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, client, onUpdate }) => {
   const shouldRender = Boolean(isOpen && client);
   const c = (client ?? {}) as Client;
-
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  // Estado
+  // State
   const [activeTab, setActiveTab] = useState<'ficha' | 'chat'>('ficha');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Client>>({});
   const [saving, setSaving] = useState(false);
 
-  // Al abrir
+  // Init logic
   useEffect(() => {
     if (!shouldRender) return;
     setActiveTab('ficha');
@@ -97,7 +75,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     setEditData(c);
   }, [shouldRender]); // eslint-disable-line
 
-  // Hotkeys + bloqueo scroll fondo
+  // Close / Esc logic
   useEffect(() => {
     if (!shouldRender) return;
     const onKey = (e: KeyboardEvent) => {
@@ -113,31 +91,32 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       }
     };
     document.addEventListener('keydown', onKey);
-    const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = original;
+      document.body.style.overflow = '';
     };
   }, [shouldRender, isEditing, activeTab, onClose, c]);
 
   const onOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) {
       if (isEditing) {
-        setIsEditing(false);
-        setEditData(c || {});
-      } else if (activeTab === 'chat') {
-        setActiveTab('ficha');
+         // Confirmar salir si edita? Por ahora simple:
+         setIsEditing(false);
+         setEditData(c || {});
       } else {
-        onClose();
+         onClose();
       }
     }
   };
 
-  // Helpers
+  // Data accessors
   const getVal = <K extends keyof Client>(key: K): any => (editData[key] ?? c[key]) as any;
   const setVal = <K extends keyof Client>(key: K, value: any) => setEditData(prev => ({ ...prev, [key]: value }));
+
+  // Actions
   const handleCopy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch {} };
+  
   const notifyGlobalUpdate = (payload: Partial<Client>) => {
     try { window.dispatchEvent(new CustomEvent<Partial<Client>>('client:updated', { detail: payload })); } catch {}
     try { localStorage.setItem('crm:client-updated', JSON.stringify({ row_number: payload.row_number, at: Date.now() })); } catch {}
@@ -155,19 +134,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     } finally { setSaving(false); }
   };
 
-  // Bot on/off
   const isBotOn = (v: any) => v === true || v === '' || v === null;
   const handleBotToggle = async () => {
     const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto) as any;
     const currentlyOn = isBotOn(currentRaw);
-    const newValue = currentlyOn ? false : true;
+    const newValue = !currentlyOn;
 
     if (currentlyOn) {
-      const ok = window.confirm(
-        '¿Desea apagar el bot para este contacto?\n' +
-        'El asistente dejará de escribir automáticamente por WhatsApp.\n' +
-        'Podrá volver a activarlo cuando quiera.'
-      );
+      const ok = window.confirm('¿Desea apagar el bot para este contacto?');
       if (!ok) return;
     }
 
@@ -186,10 +160,10 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     } finally { setSaving(false); }
   };
 
-  // Asistencia
   const agendaDate = parseAgendaDate(c?.fecha_agenda ?? null);
   const canShowAsistio = !!agendaDate;
   const asistio = Boolean(editData.asistio_agenda ?? c?.asistio_agenda);
+  
   const toggleAsistio = async () => {
     const next = !asistio;
     const prev = editData.asistio_agenda;
@@ -203,137 +177,63 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     }
   };
 
-  // Datos memorizados
+  // Memos
   const phoneE164 = (c?.whatsapp || '').replace('@s.whatsapp.net', '');
   const waLink = useMemo(() => `https://wa.me/${phoneE164}`, [phoneE164]);
-  const mapsLink = useMemo(() => {
-    const q = encodeURIComponent(safeStr(c?.ciudad) || 'Colombia');
-    return `https://www.google.com/maps/search/?api=1&query=${q}`;
-  }, [c?.ciudad]);
+  const mapsLink = useMemo(() => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(safeStr(c?.ciudad) || 'Colombia')}`, [c?.ciudad]);
   const initials = useMemo(() => {
     const name = safeStr(c?.nombre);
-    if (!name) return '👤';
+    if (!name) return 'Cn';
     const parts = name.split(' ').filter(Boolean);
     return (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
   }, [c?.nombre]);
 
-  const consentBadge = useMemo(() => {
-    const raw = (editData.consentimiento_contacto ?? c?.consentimiento_contacto) as any;
-    const on = isBotOn(raw);
-    return on ? (
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
-        style={{ background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' }}>
-        <ShieldCheck className="w-3.5 h-3.5" />
-        Bot activo
-      </span>
-    ) : (
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
-        style={{ background: COLORS.slate100, color: '#0F172A', borderColor: COLORS.slate200 }}>
-        <ShieldCheck className="w-3.5 h-3.5" />
-        Bot inactivo
-      </span>
-    );
-  }, [editData.consentimiento_contacto, c?.consentimiento_contacto]);
-
-  const etapaBadge = useMemo(() => {
-    if (!c?.estado_etapa) return null;
-    return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${getEtapaColor(c.estado_etapa as any)}`} title="Etapa">
-        {String(c.estado_etapa).replace('_', ' ')}
-      </span>
-    );
-  }, [c?.estado_etapa]);
-
-  const categoriaBadge = useMemo(() => {
-    if (!c?.categoria_contacto) return null;
-    return (
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${getCategoriaColor(c.categoria_contacto as any)}`} title="Categoría">
-        {String(c.categoria_contacto).replace('_', ' ')}
-      </span>
-    );
-  }, [c?.categoria_contacto]);
-
-  const agendaBadge = useMemo(() => {
-    if (!c?.fecha_agenda) return null;
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border"
-        style={{ background: COLORS.purple50, color: COLORS.purple700, borderColor: COLORS.purple200 }}>
-        <Calendar className="w-3.5 h-3.5" />
-        {formatDate(c.fecha_agenda)}
-      </span>
-    );
-  }, [c?.fecha_agenda]);
-
-  const envioBadge = useMemo(() => {
-    const st = deriveEnvioUI(c);
-    return (
-      <span
-        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${st.classes}`}
-        title="Estado de envío"
-      >
-        <Truck className="w-3.5 h-3.5" />
-        {st.label}
-      </span>
-    );
-  }, [c]);
-
-  // Secciones (¡source es un campo normal y editable!)
-  const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; }> = [
-    { title: 'Información Personal', icon: User, fields: [
+  // Sections Config
+  const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
+    { title: 'Información Personal', icon: User, iconColor: 'text-blue-600 bg-blue-50', fields: [
       { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
       { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text' },
       { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
     ]},
-    { title: 'Estado y Seguimiento', icon: Calendar, fields: [
-      { label: 'Source (origen)', key: 'source', icon: Settings, type: 'text' }, // <— editable
+    { title: 'Estado y Seguimiento', icon: Calendar, iconColor: 'text-purple-600 bg-purple-50', fields: [
+      { label: 'Source (origen)', key: 'source', icon: Settings, type: 'text' },
       { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
       { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
       { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
       { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
-      { label: 'Sede/Ciudad agenda', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' }, // texto libre
+      { label: 'Sede/Ciudad', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
     ]},
-    { title: 'Dispositivo y Servicio', icon: Smartphone, fields: [
+    { title: 'Dispositivo', icon: Smartphone, iconColor: 'text-indigo-600 bg-indigo-50', fields: [
       { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
       { label: 'Intención', key: 'intencion', icon: Settings, type: 'text' },
       { label: 'Detalles', key: 'detalles', icon: FileText, type: 'textarea' },
-      { label: 'Modo de recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
+      { label: 'Recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
     ]},
-    { title: 'Diagnóstico y Precios', icon: PackageSearch, fields: [
-      { label: 'Diagnóstico requerido', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
+    { title: 'Diagnóstico y Costos', icon: DollarSign, iconColor: 'text-green-600 bg-green-50', fields: [
+      { label: 'Diagnóstico req.', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
       { label: 'Equipo manipulado', key: 'equipo_manipulado', icon: ClipboardList, type: 'text' },
-      { label: 'Precio diagnóstico informado', key: 'precio_diagnostico_informado', icon: DollarSign, type: 'text' },
-      { label: 'Precio reparación estimado', key: 'precio_reparacion_estimado', icon: DollarSign, type: 'text' },
-      { label: 'Precio máximo informado', key: 'precio_maximo_informado', icon: DollarSign, type: 'text' },
-      { label: 'Estado búsqueda de precios', key: 'buscar_precios_status', icon: DollarSign, type: 'text' },
-      { label: 'Descuento multi-reparación', key: 'descuento_multi_reparacion', icon: DollarSign, type: 'text' },
-      { label: 'Servicios adicionales', key: 'servicios_adicionales', icon: Settings, type: 'text' },
+      { label: 'Precio diag.', key: 'precio_diagnostico_informado', icon: DollarSign, type: 'text' },
+      { label: 'Precio rep. est.', key: 'precio_reparacion_estimado', icon: DollarSign, type: 'text' },
+      { label: 'Precio máximo', key: 'precio_maximo_informado', icon: DollarSign, type: 'text' },
+      { label: 'Búsqueda precios', key: 'buscar_precios_status', icon: DollarSign, type: 'text' },
+      { label: 'Servicios extra', key: 'servicios_adicionales', icon: Settings, type: 'text' },
     ]},
-    { title: 'Notas y Observaciones', icon: FileText, fields: [
-      { label: 'Notas del cliente', key: 'notas_cliente', icon: FileText, type: 'textarea' },
+    { title: 'Notas', icon: FileText, iconColor: 'text-amber-600 bg-amber-50', fields: [
+      { label: 'Notas cliente', key: 'notas_cliente', icon: FileText, type: 'textarea' },
       { label: 'Notas internas', key: 'notas', icon: FileText, type: 'textarea' },
-      { label: 'Observaciones técnicas', key: 'observaciones_tecnicas', icon: FileText, type: 'textarea' },
-      { label: 'Interés en accesorios', key: 'interes_accesorios', icon: Settings, type: 'text' },
+      { label: 'Obs. técnicas', key: 'observaciones_tecnicas', icon: FileText, type: 'textarea' },
     ]},
-    { title: 'Guía / Envío', icon: Truck, fields: [
-      { label: 'Nombre completo', key: 'guia_nombre_completo', icon: User, type: 'text' },
+    { title: 'Logística y Envío', icon: Truck, iconColor: 'text-orange-600 bg-orange-50', fields: [
+      { label: 'Nombre Guía', key: 'guia_nombre_completo', icon: User, type: 'text' },
       { label: 'Cédula / ID', key: 'guia_cedula_id', icon: ClipboardList, type: 'text' },
-      { label: 'Teléfono', key: 'guia_telefono', icon: Phone, type: 'text' },
       { label: 'Dirección', key: 'guia_direccion', icon: MapPin, type: 'text' },
-      { label: 'Ciudad', key: 'guia_ciudad', icon: MapPin, type: 'text' },
-      { label: 'Departamento/Estado', key: 'guia_departamento_estado', icon: MapPin, type: 'text' },
-      { label: 'Email', key: 'guia_email', icon: User, type: 'email' },
-      { label: 'Guía ida', key: 'guia_numero_ida', icon: Truck, type: 'text' },
-      { label: 'Guía retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
+      { label: 'Ciudad Guía', key: 'guia_ciudad', icon: MapPin, type: 'text' },
+      { label: 'Guía Ida', key: 'guia_numero_ida', icon: Truck, type: 'text' },
+      { label: 'Guía Retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
       { label: 'Asegurado', key: 'asegurado', icon: ShieldCheck, type: 'boolean' },
-      { label: 'Valor seguro', key: 'valor_seguro', icon: DollarSign, type: 'number' },
       { label: 'Estado envío', key: 'estado_envio', icon: Truck, type: 'text' },
     ]},
   ];
-
-  const fichaTopRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    if (isEditing && activeTab === 'ficha') fichaTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [isEditing, activeTab]);
 
   if (!shouldRender) return null;
 
@@ -341,421 +241,267 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     <div
       ref={overlayRef}
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-[120] backdrop-blur-sm"
-      style={{ background: COLORS.overlay }}
+      className="fixed inset-0 z-[120] bg-gray-900/60 backdrop-blur-sm flex justify-end sm:justify-center sm:items-center transition-opacity duration-300"
       role="dialog"
-      aria-modal="true"
-      aria-labelledby="client-modal-title"
     >
+      {/* Modal Window */}
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="absolute inset-0 w-screen h-screen flex flex-col"
-        style={{ background: COLORS.white }}
+        className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300"
       >
-        {/* Header */}
-        <div
-          className="relative px-4 sm:px-6 py-5 text-white"
-          style={{ backgroundImage: `linear-gradient(90deg, ${COLORS.headerFrom}, ${COLORS.headerTo})` }}
-        >
-          <div className="relative flex items-center justify-between gap-3 sm:gap-4">
-            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-              <div
-                className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center text-base sm:text-lg font-semibold"
-                style={{ background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)' }}
-              >
+        
+        {/* === HEADER === */}
+        <div className="relative shrink-0 bg-white border-b border-gray-100 z-20">
+          
+          {/* Top Bar: Title & Controls */}
+          <div className="px-4 sm:px-8 py-5 flex flex-col md:flex-row gap-4 md:items-center justify-between bg-gradient-to-r from-white via-white to-gray-50/50">
+            <div className="flex items-center gap-4">
+              {/* Avatar */}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-blue-200">
                 {initials}
               </div>
-              <div className="min-w-0">
-                <h2 id="client-modal-title" className="text-xl sm:text-3xl font-semibold tracking-tight truncate">
-                  {safeStr(c?.nombre) || 'Sin nombre'}
+              
+              {/* Info Principal */}
+              <div>
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
+                  {safeStr(c?.nombre) || 'Cliente Nuevo'}
                 </h2>
-                <p className="opacity-90 truncate">{safeStr(c?.modelo) || 'Sin modelo'}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              {/* Tabs (SIEMPRE visibles, también en móvil) */}
-              <div className="flex rounded-xl overflow-hidden"
-                   style={{ border: '1px solid rgba(255,255,255,0.4)' }}>
-                <button
-                  onClick={() => setActiveTab('ficha')}
-                  className="px-3 py-1.5 text-sm font-medium transition"
-                  aria-pressed={activeTab === 'ficha'}
-                  style={activeTab === 'ficha'
-                    ? { background: COLORS.white, color: COLORS.headerFrom }
-                    : { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}
-                >
-                  Ficha
-                </button>
-                <button
-                  onClick={() => setActiveTab('chat')}
-                  className="px-3 py-1.5 text-sm font-medium transition"
-                  aria-pressed={activeTab === 'chat'}
-                  style={activeTab === 'chat'
-                    ? { background: COLORS.white, color: COLORS.headerFrom }
-                    : { background: 'rgba(255,255,255,0.08)', color: '#FFFFFF' }}
-                >
-                  Chat
-                </button>
-              </div>
-
-              {/* Asistencia */}
-              {canShowAsistio && (
-                <button
-                  onClick={toggleAsistio}
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition"
-                  style={
-                    asistio
-                      ? { background: '#059669', color: '#FFFFFF', borderColor: '#047857' }
-                      : { background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' }
-                  }
-                  title={asistio ? 'Marcar como NO asistió' : 'Marcar como asistió'}
-                >
-                  <CheckCircle className="w-4 h-4" />
-                  {asistio ? 'Asistió' : 'Asistencia'}
-                </button>
-              )}
-
-              {!isEditing ? (
-                <button
-                  onClick={() => { setActiveTab('ficha'); setIsEditing(true); setEditData(c); }}
-                  className="hidden sm:inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
-                  style={{ background: '#F9FAFB', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
-                  title="Editar"
-                >
-                  <Edit2 className="w-5 h-5" />
-                  Editar
-                </button>
-              ) : (
-                <div className="hidden sm:flex items-center gap-2">
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
-                    style={{ background: COLORS.headerFrom, color: COLORS.white }}
-                    title="Guardar"
-                  >
-                    <Save className="w-5 h-5" /> Guardar
-                  </button>
-                  <button
-                    onClick={() => { setIsEditing(false); setEditData(c); }}
-                    disabled={saving}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
-                    style={{ background: '#FFFFFF', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
-                    title="Cancelar"
-                  >
-                    <X className="w-5 h-5" /> Cancelar
-                  </button>
+                <div className="flex items-center gap-2 text-gray-500 text-sm mt-0.5">
+                  <Smartphone className="w-4 h-4" />
+                  <span>{safeStr(c?.modelo) || 'Sin modelo'}</span>
                 </div>
-              )}
+              </div>
+            </div>
 
-              <button
-                onClick={onClose}
-                className="p-2 rounded-xl transition"
-                style={{ color: '#FFFFFF' }}
-                aria-label="Cerrar"
-                title="Cerrar"
-              >
-                <X className="w-6 h-6" />
-              </button>
+            {/* Actions Group */}
+            <div className="flex flex-wrap items-center gap-3">
+               {/* Tabs Switcher */}
+               <div className="bg-gray-100 p-1 rounded-xl flex items-center font-medium text-sm">
+                  <button
+                    onClick={() => setActiveTab('ficha')}
+                    className={`px-4 py-1.5 rounded-lg transition-all shadow-sm ${activeTab === 'ficha' ? 'bg-white text-gray-900' : 'bg-transparent text-gray-500 hover:text-gray-700 shadow-none'}`}
+                  >
+                    Ficha
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('chat')}
+                    className={`px-4 py-1.5 rounded-lg transition-all shadow-sm ${activeTab === 'chat' ? 'bg-white text-gray-900' : 'bg-transparent text-gray-500 hover:text-gray-700 shadow-none'}`}
+                  >
+                    Chat
+                  </button>
+               </div>
+
+               <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block" />
+
+               {/* Edit/Save Controls */}
+               {isEditing ? (
+                 <>
+                   <button
+                     onClick={handleSave}
+                     disabled={saving}
+                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black transition shadow-md disabled:opacity-70"
+                   >
+                     {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Save className="w-4 h-4" />}
+                     <span className="text-sm font-medium">Guardar</span>
+                   </button>
+                   <button
+                     onClick={() => { setIsEditing(false); setEditData(c); }}
+                     disabled={saving}
+                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                   >
+                     <X className="w-4 h-4" />
+                   </button>
+                 </>
+               ) : (
+                 <button
+                   onClick={() => { setActiveTab('ficha'); setIsEditing(true); setEditData(c); }}
+                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition shadow-sm"
+                 >
+                   <Edit2 className="w-4 h-4" />
+                   <span className="text-sm font-medium">Editar</span>
+                 </button>
+               )}
+
+               <button
+                 onClick={onClose}
+                 className="p-2 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition"
+                 aria-label="Cerrar"
+               >
+                 <X className="w-6 h-6" />
+               </button>
             </div>
           </div>
 
-          {/* Badges resumidos (muestran en móvil también) */}
-          <div className="px-4 sm:px-6 mt-3 flex flex-wrap items-center gap-2">
-            {etapaBadge}
-            {categoriaBadge}
-            {agendaBadge}
-            {envioBadge}
-            {consentBadge}
-          </div>
+          {/* Quick Info Bar (Badges & Links) */}
+          <div className="px-4 sm:px-8 pb-4 flex flex-col xl:flex-row gap-4 xl:items-center justify-between">
+            {/* Badges */}
+            <div className="flex flex-wrap items-center gap-2">
+               {c?.estado_etapa && (
+                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getEtapaColor(c.estado_etapa as any)}`}>
+                   {String(c.estado_etapa).replace(/_/g, ' ')}
+                 </span>
+               )}
+               {c?.categoria_contacto && (
+                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getCategoriaColor(c.categoria_contacto as any)}`}>
+                   {String(c.categoria_contacto).replace(/_/g, ' ')}
+                 </span>
+               )}
+               {deriveEnvioUI(c).label !== 'No aplica' && (
+                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${deriveEnvioUI(c).classes}`}>
+                   <Truck className="w-3 h-3" />
+                   {deriveEnvioUI(c).label}
+                 </span>
+               )}
+               
+               {/* Bot Status Badge */}
+               <button 
+                 onClick={handleBotToggle}
+                 disabled={saving}
+                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition active:scale-95
+                   ${isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) 
+                     ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
+                     : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
+               >
+                 {isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? <Bot className="w-3 h-3"/> : <AlertCircle className="w-3 h-3"/>}
+                 {isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'Bot Activo' : 'Bot Inactivo'}
+               </button>
 
-          {/* Acciones rápidas */}
-          <div
-            className="mt-4 mx-4 sm:mx-6 px-3 py-3 rounded-xl flex flex-wrap items-center gap-2"
-            style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.06)' }}
-          >
-            <a
-              href={waLink}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
-              style={{ background: COLORS.emerald50, color: '#065F46', border: `1px solid ${COLORS.emerald200}` }}
-            >
-              <MessageCircle className="w-4 h-4" />
-              {formatWhatsApp(c.whatsapp)}
-            </a>
-            <button
-              onClick={() => handleCopy((c?.whatsapp || '').replace('@s.whatsapp.net', ''))}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
-              style={{ background: COLORS.slate100, color: COLORS.black, border: `1px solid ${COLORS.slate200}` }}
-            >
-              <Copy className="w-4 h-4" /> Copiar número
-            </button>
-            {safeStr(c?.ciudad) && (
-              <a
-                href={mapsLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
-                style={{ background: COLORS.purple50, color: COLORS.purple700, border: `1px solid ${COLORS.purple200}` }}
-              >
-                <MapPin className="w-4 h-4" /> {safeStr(c?.ciudad)}
-              </a>
-            )}
-            {(() => {
-              const on = isBotOn(editData.consentimiento_contacto ?? c?.consentimiento_contacto);
-              return (
-                <button
-                  onClick={handleBotToggle}
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
-                  style={
-                    on
-                      ? { background: COLORS.headerFrom, color: COLORS.white }
-                      : { background: '#FFFFFF', color: COLORS.black, border: `1px solid ${COLORS.border}` }
-                  }
-                  title={on ? 'Apagar bot para este número' : 'Encender bot para este número'}
-                >
-                  <Bot className="w-4 h-4" /> {on ? 'Apagar bot' : 'Encender bot'}
-                </button>
-              );
-            })()}
+               {/* Asistencia Status */}
+               {canShowAsistio && (
+                 <button
+                   onClick={toggleAsistio}
+                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition active:scale-95
+                     ${asistio ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}
+                 >
+                   {asistio ? <CheckCircle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
+                   {asistio ? 'Asistió a Cita' : 'Pendiente Asistencia'}
+                 </button>
+               )}
+            </div>
+
+            {/* Action Links */}
+            <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1 xl:pb-0">
+               <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition border border-green-100 whitespace-nowrap">
+                 <MessageCircle className="w-4 h-4" /> {formatWhatsApp(c.whatsapp)}
+               </a>
+               <button onClick={() => handleCopy(phoneE164)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition border border-transparent hover:border-gray-200" title="Copiar número">
+                 <Copy className="w-4 h-4" />
+               </button>
+               {safeStr(c?.ciudad) && (
+                 <a href={mapsLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition border border-blue-100 whitespace-nowrap">
+                   <MapPin className="w-4 h-4" /> {safeStr(c?.ciudad)}
+                 </a>
+               )}
+            </div>
           </div>
         </div>
 
-        {/* BODY */}
-        <div className="flex-1 flex flex-col min-h-0">
+        {/* === BODY === */}
+        <div className="flex-1 overflow-hidden flex flex-col bg-gray-50/50 relative">
           {activeTab === 'ficha' ? (
-            <div ref={fichaTopRef} className="flex-1 overflow-y-auto p-4 sm:p-6" style={{ background: '#F7F7FB' }}>
-              {/* Botones móviles de edición / asistencia */}
-              <div className="sm:hidden mb-4 flex items-center gap-2">
-                {canShowAsistio && (
-                  <button
-                    onClick={toggleAsistio}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm font-medium transition"
-                    style={
-                      asistio
-                        ? { background: '#059669', color: '#FFFFFF', borderColor: '#047857' }
-                        : { background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0' }
-                    }
-                    title={asistio ? 'Marcar como NO asistió' : 'Marcar como asistió'}
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    {asistio ? 'Asistió' : 'Asistencia'}
-                  </button>
-                )}
-
-                {!isEditing ? (
-                  <button
-                    onClick={() => { setIsEditing(true); setEditData(c); }}
-                    className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition"
-                    style={{ background: '#F9FAFB', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
-                    title="Editar"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                    Editar
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={handleSave}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
-                      style={{ background: COLORS.headerFrom, color: COLORS.white }}
-                      title="Guardar"
-                    >
-                      <Save className="w-5 h-5" /> Guardar
-                    </button>
-                    <button
-                      onClick={() => { setIsEditing(false); setEditData(c); }}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 px-3 py-2 rounded-xl transition disabled:opacity-60"
-                      style={{ background: '#FFFFFF', color: COLORS.black, border: `1px solid ${COLORS.border}` }}
-                      title="Cancelar"
-                    >
-                      <X className="w-5 h-5" /> Cancelar
-                    </button>
-                  </>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto">
                 {sections.map((section, idx) => (
-                  <section
+                  <div
                     key={idx}
-                    className="rounded-2xl overflow-hidden"
-                    style={{
-                      background: COLORS.white,
-                      border: `1px solid ${COLORS.borderSoft}`,
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.06)',
-                    }}
+                    className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden"
                   >
-                    <div className="p-5">
-                      <div className="flex items-center mb-4">
-                        <div
-                          className="w-9 h-9 mr-3 rounded-xl flex items-center justify-center"
-                          style={{ background: '#EEF2FF', color: COLORS.headerFrom }}
-                        >
-                          <section.icon className="w-5 h-5" />
-                        </div>
-                        <h3 className="text-lg font-semibold" style={{ color: COLORS.black }}>
-                          {section.title}
-                        </h3>
+                    {/* Section Header */}
+                    <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${section.iconColor}`}>
+                        <section.icon className="w-5 h-5" />
                       </div>
-
-                      <div className="space-y-4">
-                        {section.fields.map((field, j) => {
-                          const value = getVal(field.key);
-                          const Lower = field.label.toLowerCase();
-                          const isEmpty = !safeStr(value);
-                          const isEstadoEnvio = field.key === 'estado_envio';
-
-                          return (
-                            <div
-                              key={`${section.title}-${j}`}
-                              className="group flex items-start gap-3 p-3 rounded-xl transition"
-                              style={{ background: '#FAFAFA', border: `1px solid ${COLORS.border}` }}
-                            >
-                              <div
-                                className="w-8 h-8 rounded-lg flex items-center justify-center mt-0.5"
-                                style={{ background: COLORS.slate100, color: COLORS.muted }}
-                              >
-                                <field.icon className="w-4 h-4" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs mb-1" style={{ color: COLORS.muted }}>
-                                  {field.label}
-                                </p>
-
-                                {!isEditing ? (
-                                  isEstadoEnvio ? (
-                                    (() => {
-                                      const st = deriveEnvioUI(c);
-                                      return (
-                                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${st.classes}`}>
-                                          <Truck className="w-3.5 h-3.5" />
-                                          {st.label}
-                                        </span>
-                                      );
-                                    })()
-                                  ) : Lower.startsWith('etapa') && c.estado_etapa ? (
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold border ${getEtapaColor(c.estado_etapa as any)}`}>
-                                      {String(c.estado_etapa).replace('_', ' ')}
-                                    </span>
-                                  ) : Lower.startsWith('categoría') && c.categoria_contacto ? (
-                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getCategoriaColor(c.categoria_contacto as any)}`}>
-                                      {String(c.categoria_contacto).replace('_', ' ')}
-                                    </span>
-                                  ) : field.key === 'fecha_agenda' && value ? (
-                                    <span className="inline-flex items-center gap-2" style={{ color: COLORS.purple700 }}>
-                                      <Calendar className="w-4 h-4" />
-                                      {formatDate(String(value))}
-                                    </span>
-                                  ) : field.key === 'whatsapp' && value ? (
-                                    <span className="inline-flex items-center gap-2" style={{ color: '#047857' }}>
-                                      <Phone className="w-4 h-4" />
-                                      {formatWhatsApp(String(value))}
-                                    </span>
-                                  ) : (
-                                    <p
-                                      className="text-sm break-words"
-                                      style={{ color: isEmpty ? COLORS.muted : COLORS.black, fontStyle: isEmpty ? 'italic' : 'normal' }}
-                                    >
-                                      {isEmpty ? '— sin dato —' : safeStr(value)}
-                                    </p>
-                                  )
-                                ) : (
-                                  <>
-                                    {isEstadoEnvio ? (
-                                      (() => {
-                                        // coerción controlada
-                                        const raw = String(getVal('estado_envio') ?? '').toLowerCase();
-                                        const coerced = raw === 'envio_gestionado' || raw === 'no_aplica' ? raw : '';
-                                        return (
-                                          <select
-                                            value={coerced}
-                                            onChange={(e) => setVal('estado_envio', e.target.value as any)}
-                                            className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                            style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                          >
-                                            <option value="">— (sin estado) —</option>
-                                            <option value="envio_gestionado">Envío gestionado</option>
-                                            <option value="no_aplica">No aplica</option>
-                                          </select>
-                                        );
-                                      })()
-                                    ) : field.type === 'textarea' ? (
-                                      <textarea
-                                        value={value ?? ''}
-                                        onChange={(e) => setVal(field.key, e.target.value)}
-                                        rows={3}
-                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                      />
-                                    ) : field.type === 'datetime' ? (
-                                      <input
-                                        type="datetime-local"
-                                        value={value ?? ''}
-                                        onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                      />
-                                    ) : field.type === 'email' ? (
-                                      <input
-                                        type="email"
-                                        value={value ?? ''}
-                                        onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                      />
-                                    ) : field.type === 'number' ? (
-                                      <input
-                                        type="number"
-                                        value={value ?? ''}
-                                        onChange={(e) => setVal(field.key, e.target.value === '' ? '' : Number(e.target.value))}
-                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                      />
-                                    ) : field.type === 'boolean' ? (
-                                      <select
-                                        value={value === true ? 'true' : value === false ? 'false' : ''}
-                                        onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                      >
-                                        <option value="true">Sí</option>
-                                        <option value="false">No</option>
-                                      </select>
-                                    ) : (
-                                      <input
-                                        type="text"
-                                        value={value ?? ''}
-                                        onChange={(e) => setVal(field.key, e.target.value)}
-                                        className="w-full text-sm px-3 py-2 rounded-lg shadow-sm"
-                                        style={{ background: COLORS.white, color: COLORS.text, border: `1px solid ${COLORS.border}` }}
-                                      />
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <h3 className="font-semibold text-gray-900 text-lg">{section.title}</h3>
                     </div>
-                  </section>
+
+                    {/* Fields Grid */}
+                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                      {section.fields.map((field, j) => {
+                        const value = getVal(field.key);
+                        const isEmpty = !safeStr(value);
+                        const isFullWidth = field.type === 'textarea';
+                        
+                        return (
+                          <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
+                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide pl-1 flex items-center gap-1.5">
+                               {field.label}
+                            </label>
+
+                            {isEditing ? (
+                                /* === Edit Mode Inputs === */
+                                field.key === 'estado_envio' ? (
+                                  <select
+                                    value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
+                                    onChange={(e) => setVal('estado_envio', e.target.value as any)}
+                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
+                                  >
+                                    <option value="">(Seleccionar)</option>
+                                    <option value="envio_gestionado">Envío gestionado</option>
+                                    <option value="no_aplica">No aplica</option>
+                                  </select>
+                                ) : field.type === 'textarea' ? (
+                                  <textarea
+                                    value={value ?? ''}
+                                    onChange={(e) => setVal(field.key, e.target.value)}
+                                    rows={3}
+                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
+                                  />
+                                ) : field.type === 'boolean' ? (
+                                  <select
+                                    value={value === true ? 'true' : 'false'}
+                                    onChange={(e) => setVal(field.key, e.target.value === 'true')}
+                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
+                                  >
+                                    <option value="true">Sí</option>
+                                    <option value="false">No</option>
+                                  </select>
+                                ) : (
+                                  <input
+                                    type={field.type === 'datetime' ? 'datetime-local' : field.type === 'number' ? 'number' : 'text'}
+                                    value={value ?? ''}
+                                    onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
+                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
+                                  />
+                                )
+                            ) : (
+                                /* === View Mode Values === */
+                                <div className="min-h-[24px] flex items-center">
+                                  {field.key === 'estado_envio' && value ? (
+                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${deriveEnvioUI({ ...c, ...editData }).classes}`}>
+                                        <Truck className="w-3 h-3"/> {deriveEnvioUI({ ...c, ...editData }).label}
+                                     </span>
+                                  ) : isEmpty ? (
+                                     <span className="text-gray-300 text-sm italic select-none">-</span>
+                                  ) : field.key === 'whatsapp' ? (
+                                     <span className="text-sm font-medium text-gray-900 font-mono bg-gray-50 px-2 py-0.5 rounded">{formatWhatsApp(String(value))}</span>
+                                  ) : field.key === 'fecha_agenda' ? (
+                                     <span className="text-sm font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded flex items-center gap-2">
+                                        <Calendar className="w-3.5 h-3.5"/> {formatDate(String(value))}
+                                     </span>
+                                  ) : (
+                                     <span className="text-sm font-medium text-gray-900 break-words leading-relaxed">
+                                        {String(value)}
+                                     </span>
+                                  )}
+                                </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
+              <div className="h-12"></div> {/* Spacer bottom */}
             </div>
           ) : (
             <ChatPanel
               client={c}
-              // Enviar siempre el source actual (editable en “Estado y Seguimiento”)
               source={(editData.source ?? c.source) as any}
             />
           )}
         </div>
+
       </div>
     </div>
   );

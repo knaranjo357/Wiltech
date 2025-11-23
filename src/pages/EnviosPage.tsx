@@ -1,130 +1,63 @@
+// src/pages/EnviosPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
-import { Truck, RefreshCw, Phone, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { 
+  Truck, RefreshCw, Phone, MapPin, Search, ArrowRight, 
+  Package, ShieldCheck, AlertTriangle, CheckCircle2, X
+} from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
-import { formatWhatsApp, formatDate, deriveEnvioUI, ENVIO_LABELS } from '../utils/clientHelpers';
+import { formatWhatsApp, deriveEnvioUI, ENVIO_LABELS } from '../utils/clientHelpers';
 import type { EnvioUIKey } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 
-/** ================== Normalizadores & validaciones ================== */
-const normalize = (s: string) =>
-  s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-
-const canon = (v: unknown) =>
-  String(v ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+/** ================== Helpers ================== */
+const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
 
 const isInvalidNoAplica = (v: unknown) => {
-  const c = canon(v);
-  return c === '' || c === 'no aplica' || c === 'no';
+  const c = String(v || '').toLowerCase().trim();
+  return !c || c === 'no aplica' || c === 'no' || c === 'null' || c === 'undefined';
 };
 
-/** Oculta null/undefined/"null"/"undefined"/"No aplica" */
-const fmt = (v: unknown, placeholder = ''): string => {
-  const s = (v ?? '').toString().trim();
-  if (!s) return placeholder;
-  const lower = s.toLowerCase();
-  if (lower === 'null' || lower === 'undefined' || isInvalidNoAplica(s)) return placeholder;
-  return s;
-};
-
-/** Parse seguro de fecha (admite "YYYY-MM-DD HH:mm" o ISO) */
-const parseDateSafe = (v: unknown): number => {
-  if (!v) return 0;
-  const raw = String(v).trim();
-  if (!raw) return 0;
-  const iso =
-    raw.includes(' ') && !raw.includes('T') ? raw.replace(' ', 'T') + (raw.length === 16 ? ':00' : '') : raw;
-  const time = Date.parse(iso);
-  return Number.isNaN(time) ? 0 : time;
+const safeText = (v: unknown) => {
+  if (isInvalidNoAplica(v)) return '';
+  return String(v).trim();
 };
 
 /**
- * Mostrar SOLO registros que tengan:
- * - SEDE (agenda_ciudad_sede)
- * - CIUDAD (guia_ciudad)
- * - DIRECCIÓN (guia_direccion)
- * Y ninguno sea "No aplica"/"no".
+ * FILTRO ESTRICTO:
+ * Para estar en "Envíos", el cliente DEBE tener una intención logística:
+ * 1. Sede definida (Origen)
+ * 2. Ciudad de destino definida
+ * 3. Dirección definida
  */
-const hasSedeCiudadDireccionValid = (c: Client): boolean => {
-  const sede = c?.agenda_ciudad_sede != null ? String(c.agenda_ciudad_sede).trim() : '';
-  const ciudad = c?.guia_ciudad != null ? String(c.guia_ciudad).trim() : '';
-  const direccion = c?.guia_direccion != null ? String(c.guia_direccion).trim() : '';
-  if (!sede || !ciudad || !direccion) return false;
-  if (isInvalidNoAplica(sede) || isInvalidNoAplica(ciudad) || isInvalidNoAplica(direccion)) return false;
-  return true;
+const hasLogisticsData = (c: Client): boolean => {
+  return !!(safeText(c.agenda_ciudad_sede) && safeText(c.guia_ciudad) && safeText(c.guia_direccion));
 };
 
-/** ================== Estado de envío: usar helper canónico ================== */
-/** Orden lógico para ordenar por estado (de más “pendiente” a más “resuelto”) */
-const STATE_ORDER: EnvioUIKey[] = [
-  'faltan_datos',
-  'datos_completos',
-  'ida',
-  'retorno',
-  'ida_y_retorno',
-  'envio_gestionado',
-  'no_aplica',
-];
-
-/** Colores de fila (badge ya viene con clases desde deriveEnvioUI → ENVIO_CLASSES) */
-const ROW_CLASSES: Record<EnvioUIKey, string> = {
-  faltan_datos: 'bg-orange-50 ring-1 ring-orange-200 hover:bg-orange-100/70',
-  datos_completos: 'bg-yellow-50 ring-1 ring-yellow-200 hover:bg-yellow-100/70',
-  ida: 'bg-sky-50 ring-1 ring-sky-200 hover:bg-sky-100/70',
-  retorno: 'bg-indigo-50 ring-1 ring-indigo-200 hover:bg-indigo-100/70',
-  ida_y_retorno: 'bg-emerald-50 ring-1 ring-emerald-200 hover:bg-emerald-100/70',
-  envio_gestionado: 'bg-emerald-50 ring-1 ring-emerald-200 hover:bg-emerald-100/70',
-  no_aplica: 'bg-slate-50 ring-1 ring-slate-200 hover:bg-slate-100/70',
-};
-
-type SortKey =
-  | 'cliente'
-  | 'whatsapp'
-  | 'sede'
-  | 'ciudad'
-  | 'direccion'
-  | 'ida'
-  | 'ret'
-  | 'asegurado'
-  | 'valorSeguro'
-  | 'estadoEnvio'
-  | 'created';
-
-type SortOrder = 'asc' | 'desc';
-
+/** ================== Componente Principal ================== */
 export const EnviosPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [cityFilter, setCityFilter] = useState<string>('');
-  const [sedeFilter, setSedeFilter] = useState<string>('');
-  const [search, setSearch] = useState<string>('');
-  const [stateFilter, setStateFilter] = useState<'' | EnvioUIKey>('');
+  // Filtros
+  const [search, setSearch] = useState('');
+  const [sedeFilter, setSedeFilter] = useState<string>('Todas');
+  const [statusFilter, setStatusFilter] = useState<EnvioUIKey | 'Todas'>('Todas');
 
+  // Estado UI
   const [viewClient, setViewClient] = useState<Client | null>(null);
+  const [savingRow, setSavingRow] = useState<number | null>(null);
 
-  // Orden por defecto
-  const [sort, setSort] = useState<{ key: SortKey; order: SortOrder }>({
-    key: 'created',
-    order: 'desc',
-  });
-
-  /** === Carga inicial === */
+  /** --- Carga de datos --- */
   const fetchClients = async () => {
     try {
       setLoading(true);
       setError(null);
       const data = await ClientService.getClients();
       const arr = Array.isArray(data) ? (data as Client[]) : [];
-      setClients(arr.filter(hasSedeCiudadDireccionValid));
+      // Filtramos SOLO los que tienen datos logísticos mínimos
+      setClients(arr.filter(hasLogisticsData));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar envíos');
     } finally {
@@ -132,464 +65,324 @@ export const EnviosPage: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  useEffect(() => { fetchClients(); }, []);
 
-  /** === Sincronización con otras vistas/pestañas === */
+  /** --- Realtime Update --- */
   useEffect(() => {
     const onExternalUpdate = (ev: Event) => {
       const detail = (ev as CustomEvent<Partial<Client>>).detail;
-      if (!detail || !('row_number' in detail)) return;
-
+      if (!detail?.row_number) return;
+      
       setClients(prev => {
-        const next = prev.map(c =>
-          c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c
-        );
-        return next.filter(hasSedeCiudadDireccionValid);
+        // Actualizamos o removemos si ya no cumple los requisitos logísticos
+        const updated = prev.map(c => c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c);
+        return updated.filter(hasLogisticsData); 
       });
-
-      setViewClient(v => {
-        if (!v || !detail || v.row_number !== detail.row_number) return v;
-        const merged = { ...v, ...detail } as Client;
-        return hasSedeCiudadDireccionValid(merged) ? merged : null;
-      });
+      
+      setViewClient(v => (v?.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v));
     };
-
     window.addEventListener('client:updated', onExternalUpdate as any);
-
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'crm:client-updated' && e.newValue) {
-        fetchClients();
-      }
-    };
-    window.addEventListener('storage', onStorage);
-
-    return () => {
-      window.removeEventListener('client:updated', onExternalUpdate as any);
-      window.removeEventListener('storage', onStorage);
-    };
+    return () => window.removeEventListener('client:updated', onExternalUpdate as any);
   }, []);
 
-  /** === Estado de guardado por fila === */
-  const [savingRow, setSavingRow] = useState<number | null>(null);
-
-  /** === onUpdate usado por el modal === */
+  /** --- Update Logic --- */
   const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
     if (!payload.row_number) return false;
-
     setSavingRow(payload.row_number);
     const prevClients = clients;
-    const prevView = viewClient;
 
-    const patchedClients = prevClients
-      .map(c => (c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c))
-      .filter(hasSedeCiudadDireccionValid);
-    setClients(patchedClients);
-
-    setViewClient(v => {
-      if (!v || v.row_number !== payload.row_number) return v;
-      const merged = { ...v, ...payload } as Client;
-      return hasSedeCiudadDireccionValid(merged) ? merged : null;
-    });
+    // Optimista
+    setClients(prev => prev.map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c));
+    if (viewClient && viewClient.row_number === payload.row_number) {
+      setViewClient(prev => ({ ...prev!, ...payload } as Client));
+    }
 
     try {
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        await fetch('/api/clients/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+        await fetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
       return true;
     } catch (e) {
-      setClients(prevClients);
-      setViewClient(prevView);
-      setError('No se pudo guardar los cambios');
+      setClients(prevClients); // Rollback
+      alert("Error al guardar");
       return false;
     } finally {
       setSavingRow(null);
     }
   };
 
-  /** === Ciudades & Sedes únicas === */
-  const cities = useMemo(() => {
+  /** --- Listas para selectores --- */
+  const sedesList = useMemo(() => {
     const s = new Set<string>();
-    clients.forEach(c => {
-      const city = (c.guia_ciudad && String(c.guia_ciudad).trim()) || '';
-      if (city && !isInvalidNoAplica(city)) s.add(city);
-    });
-    return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+    clients.forEach(c => { if(safeText(c.agenda_ciudad_sede)) s.add(safeText(c.agenda_ciudad_sede)); });
+    return Array.from(s).sort();
   }, [clients]);
 
-  const sedes = useMemo(() => {
-    const s = new Set<string>();
-    clients.forEach(c => {
-      const sede = (c.agenda_ciudad_sede && String(c.agenda_ciudad_sede).trim()) || '';
-      if (sede && !isInvalidNoAplica(sede)) s.add(sede);
-    });
-    return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
-  }, [clients]);
-
-  /** === Filtrado === */
+  /** --- Filtrado --- */
   const filtered = useMemo(() => {
     let data = [...clients];
 
-    if (cityFilter) {
-      const nf = normalize(cityFilter);
-      data = data.filter(c => normalize(String(c.guia_ciudad || '')) === nf);
+    // 1. Sede
+    if (sedeFilter !== 'Todas') {
+      data = data.filter(c => safeText(c.agenda_ciudad_sede) === sedeFilter);
     }
 
-    if (sedeFilter) {
-      const nf = normalize(sedeFilter);
-      data = data.filter(c => normalize(String(c.agenda_ciudad_sede || '')) === nf);
+    // 2. Estado Envío
+    if (statusFilter !== 'Todas') {
+      data = data.filter(c => deriveEnvioUI(c).key === statusFilter);
     }
 
-    if (stateFilter) {
-      data = data.filter(c => deriveEnvioUI(c).key === stateFilter);
-    }
-
+    // 3. Búsqueda Global
     if (search.trim()) {
-      const q = normalize(search.trim());
-      data = data.filter(c => {
-        const nombre = normalize(String(c.nombre || ''));
-        const modelo = normalize(String(c.modelo || ''));
-        const dir = normalize(String(c.guia_direccion || ''));
-        const ida = normalize(String(c.guia_numero_ida || ''));
-        const ret = normalize(String(c.guia_numero_retorno || ''));
-        const ciudad = normalize(String(c.guia_ciudad || ''));
-        const sede = normalize(String(c.agenda_ciudad_sede || ''));
-        const tel = String(c.whatsapp || '').replace('@s.whatsapp.net', '');
-        return (
-          nombre.includes(q) ||
-          modelo.includes(q) ||
-          dir.includes(q) ||
-          ida.includes(q) ||
-          ret.includes(q) ||
-          ciudad.includes(q) ||
-          sede.includes(q) ||
-          tel.includes(q)
-        );
-      });
+      const q = normalize(search);
+      data = data.filter(c => 
+        normalize(safeText(c.nombre)).includes(q) ||
+        normalize(safeText(c.guia_numero_ida)).includes(q) ||
+        normalize(safeText(c.guia_numero_retorno)).includes(q) ||
+        normalize(safeText(c.guia_direccion)).includes(q) ||
+        normalize(safeText(c.guia_ciudad)).includes(q) ||
+        normalize(safeText(c.modelo)).includes(q)
+      );
     }
 
-    return data;
-  }, [clients, cityFilter, sedeFilter, stateFilter, search]);
-
-  /** === Ordenamiento === */
-  const sorted = useMemo(() => {
-    const getKeyValue = (c: Client, key: SortKey): string | number => {
-      switch (key) {
-        case 'cliente':
-          return fmt(c.nombre) || '';
-        case 'whatsapp':
-          return String(c.whatsapp || '').replace('@s.whatsapp.net', '');
-        case 'sede':
-          return fmt(c.agenda_ciudad_sede) || '';
-        case 'ciudad':
-          return fmt(c.guia_ciudad) || '';
-        case 'direccion':
-          return fmt(c.guia_direccion) || '';
-        case 'ida':
-          return fmt(c.guia_numero_ida) || '';
-        case 'ret':
-          return fmt(c.guia_numero_retorno) || '';
-        case 'asegurado':
-          return fmt(c.asegurado) || '';
-        case 'valorSeguro': {
-          const v = fmt(c.valor_seguro) || '';
-          const n = Number(v.toString().replace(/[^\d.-]/g, ''));
-          return Number.isFinite(n) ? n : -Infinity;
-        }
-        case 'estadoEnvio': {
-          const st = deriveEnvioUI(c).key;
-          return STATE_ORDER.indexOf(st);
-        }
-        case 'created':
-          return parseDateSafe(c.created);
-        default:
-          return '';
-      }
+    // Ordenar: Primero los incompletos, luego pendientes de envío, luego en tránsito
+    const score = (c: Client) => {
+        const key = deriveEnvioUI(c).key;
+        if (key === 'faltan_datos') return 0;
+        if (key === 'datos_completos') return 1;
+        if (key === 'ida') return 2;
+        return 3;
     };
+    return data.sort((a,b) => score(a) - score(b));
 
-    const dir = sort.order === 'asc' ? 1 : -1;
+  }, [clients, sedeFilter, statusFilter, search]);
 
-    return [...filtered].sort((a, b) => {
-      const va = getKeyValue(a, sort.key);
-      const vb = getKeyValue(b, sort.key);
 
-      if (typeof va === 'number' || typeof vb === 'number') {
-        const na = typeof va === 'number' ? va : 0;
-        const nb = typeof vb === 'number' ? vb : 0;
-        return (na - nb) * dir;
-      }
-      return String(va).localeCompare(String(vb), 'es', { numeric: true, sensitivity: 'base' }) * dir;
-    });
-  }, [filtered, sort]);
-
-  const total = sorted.length;
-
-  /** === UI helpers de orden === */
-  const headerBtn =
-    'group inline-flex items-center gap-1 select-none hover:text-purple-700 transition cursor-pointer';
-
-  const sortIcon = (key: SortKey) => {
-    if (sort.key !== key) return <ArrowUpDown className="w-4 h-4 opacity-60 group-hover:opacity-100" />;
-    return sort.order === 'asc'
-      ? <ArrowUp className="w-4 h-4" />
-      : <ArrowDown className="w-4 h-4" />;
+  /** --- Helpers Visuales --- */
+  const handleWhatsAppClick = (whatsapp: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(`https://wa.me/${safeText(whatsapp).replace('@s.whatsapp.net', '')}`, '_blank');
   };
 
-  const onSort = (key: SortKey) => {
-    setSort(prev => (prev.key === key ? { key, order: prev.order === 'asc' ? 'desc' : 'asc' } : { key, order: 'asc' }));
+  // Icono de estado
+  const StatusIcon = ({ statusKey }: { statusKey: EnvioUIKey }) => {
+    switch(statusKey) {
+      case 'faltan_datos': return <AlertTriangle className="w-4 h-4" />;
+      case 'datos_completos': return <CheckCircle2 className="w-4 h-4" />;
+      case 'ida':
+      case 'retorno':
+      case 'ida_y_retorno': return <Truck className="w-4 h-4" />;
+      default: return <Package className="w-4 h-4" />;
+    }
   };
 
-  /** === Render === */
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-white/40 p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-purple-50 flex items-center justify-center">
-            <Truck className="w-5 h-5 text-purple-600" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800">Gestión de Envíos</h2>
-            <p className="text-sm text-gray-500">
-              {total} registro{total !== 1 ? 's' : ''} con SEDE, CIUDAD y DIRECCIÓN válidos
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-50/50 p-4 sm:p-6 space-y-6 w-full">
+      
+      {/* === Header & Filtros === */}
+      <div className="sticky top-2 z-30 w-full">
+        <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/80 p-3 md:p-4">
+           <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 justify-between">
+              
+              {/* Título e Icono */}
+              <div className="flex items-center gap-3">
+                 <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100 shadow-sm">
+                    <Truck className="w-5 h-5" />
+                 </div>
+                 <div>
+                    <h1 className="text-lg font-bold text-gray-900 leading-none">Logística</h1>
+                    <p className="text-xs text-gray-500 mt-1">{filtered.length} envíos activos</p>
+                 </div>
+              </div>
 
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-          <div className="flex gap-2 flex-wrap">
-            <select
-              value={sedeFilter}
-              onChange={(e) => setSedeFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-500"
-              title="Filtrar por sede (agenda_ciudad_sede)"
-            >
-              <option value="">Todas las sedes</option>
-              {sedes.map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+              {/* Barra Filtros */}
+              <div className="flex flex-col sm:flex-row gap-2 flex-1 md:justify-end">
+                 
+                 {/* Selector Sede */}
+                 <select 
+                   value={sedeFilter} 
+                   onChange={(e) => setSedeFilter(e.target.value)}
+                   className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-100 outline-none cursor-pointer"
+                 >
+                    <option value="Todas">Todas las Sedes</option>
+                    {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
+                 </select>
 
-            <select
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
-              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-500"
-              title="Filtrar por ciudad (guía)"
-            >
-              <option value="">Todas las ciudades</option>
-              {cities.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+                 {/* Selector Estado */}
+                 <select 
+                   value={statusFilter} 
+                   onChange={(e) => setStatusFilter(e.target.value as any)}
+                   className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-100 outline-none cursor-pointer"
+                 >
+                    <option value="Todas">Todos los Estados</option>
+                    <option value="faltan_datos">⚠️ Faltan Datos</option>
+                    <option value="datos_completos">✅ Listos para enviar</option>
+                    <option value="ida">🚚 En tránsito (Ida)</option>
+                    <option value="ida_y_retorno">🔄 Ida y Retorno</option>
+                 </select>
 
-            {/* Filtro por estado de envío (claves del helper) */}
-            <select
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value as EnvioUIKey | '')}
-              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-500"
-              title="Filtrar por estado de envío"
-            >
-              <option value="">Todos los estados</option>
-              {STATE_ORDER.map(k => (
-                <option key={k} value={k}>{ENVIO_LABELS[k]}</option>
-              ))}
-            </select>
+                 {/* Buscador */}
+                 <div className="relative w-full sm:w-64">
+                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                   </div>
+                   <input
+                     value={search}
+                     onChange={(e) => setSearch(e.target.value)}
+                     placeholder="Buscar guía, ciudad, cliente..."
+                     className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-xl text-sm focus:bg-white bg-gray-50/50 focus:ring-2 focus:ring-purple-100 transition-all"
+                   />
+                   {search && (
+                      <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <X className="w-3 h-3" />
+                      </button>
+                   )}
+                 </div>
 
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nombre, guía, dirección, modelo, WhatsApp…"
-              className="px-3 py-2 rounded-xl border border-gray-200 bg-white text-sm focus:ring-2 focus:ring-purple-500 w-64"
-            />
-          </div>
-
-          <button
-            onClick={fetchClients}
-            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 active:scale-[0.99] transition"
-            aria-label="Recargar"
-            disabled={loading || savingRow !== null}
-            title={savingRow !== null ? 'Guardando cambios…' : 'Recargar'}
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span className="text-sm">{savingRow !== null ? 'Guardando…' : 'Recargar'}</span>
-          </button>
+                 <button onClick={fetchClients} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500">
+                    <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                 </button>
+              </div>
+           </div>
         </div>
       </div>
 
-      {/* Loading / Error */}
-      {loading && (
-        <div className="flex items-center justify-center py-12">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 border-4 border-purple-600/30 border-t-purple-600 rounded-full animate-spin" />
-            <span className="text-gray-600">Cargando envíos…</span>
-          </div>
-        </div>
-      )}
+      {/* === Content List (Cards Split View) === */}
+      <div className="w-full space-y-4 pb-10">
+         {loading ? (
+           <div className="space-y-4 animate-pulse max-w-6xl mx-auto">
+             {[...Array(3)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-40 border border-gray-100"/>)}
+           </div>
+         ) : filtered.length > 0 ? (
+           filtered.map((client) => {
+             const ui = deriveEnvioUI(client);
+             const isWarning = ui.key === 'faltan_datos';
+             
+             return (
+               <div 
+                 key={client.row_number}
+                 onClick={() => setViewClient(client)}
+                 className={`group w-full bg-white rounded-2xl border transition-all duration-200 hover:shadow-lg overflow-hidden cursor-pointer relative
+                   ${isWarning ? 'border-orange-200 hover:border-orange-300' : 'border-gray-200 hover:border-purple-300'}
+                 `}
+               >
+                 <div className="flex flex-col lg:flex-row items-stretch h-full">
+                    
+                    {/* === IZQUIERDA: RUTA & DIRECCIÓN (70%) === */}
+                    <div className="flex-1 p-5 flex flex-col justify-between gap-4">
+                       
+                       {/* Route Header */}
+                       <div className="flex flex-wrap items-center gap-3 text-sm">
+                          <div className="flex items-center gap-2 font-bold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg">
+                             <MapPin className="w-4 h-4 text-gray-500" />
+                             {safeText(client.agenda_ciudad_sede) || 'Sede Origen'}
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-gray-300" />
+                          <div className="flex items-center gap-2 font-bold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg">
+                             <MapPin className="w-4 h-4 text-gray-500" />
+                             {safeText(client.guia_ciudad) || 'Ciudad Destino'}
+                          </div>
+                          
+                          {safeText(client.guia_departamento_estado) && (
+                             <span className="text-xs text-gray-400">({client.guia_departamento_estado})</span>
+                          )}
+                       </div>
 
-      {!loading && error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl">
-          <div className="flex items-start gap-3">
-            <div className="w-2 h-2 rounded-full bg-red-400 mt-2" />
-            <div className="flex-1">
-              <p className="text-red-700 font-medium">Hubo un problema</p>
-              <p className="text-red-700/90 text-sm">{error}</p>
-              <button
-                onClick={fetchClients}
-                className="mt-3 inline-flex items-center gap-2 text-sm px-3 py-2 rounded-lg border border-red-200 bg-white hover:bg-red-50 transition"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Reintentar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                       {/* Main Address */}
+                       <div className="pl-1">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-800 leading-tight">
+                             {safeText(client.guia_direccion)}
+                          </h3>
+                          <p className="text-sm text-gray-500 mt-1 font-medium">
+                             {safeText(client.guia_nombre_completo) || safeText(client.nombre)} • {safeText(client.guia_telefono) || formatWhatsApp(client.whatsapp)}
+                          </p>
+                       </div>
 
-      {/* Tabla */}
-      {!loading && !error && (
-        <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gradient-to-r from-gray-50 to-purple-50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('cliente')}>
-                      Cliente {sortIcon('cliente')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('whatsapp')}>
-                      WhatsApp {sortIcon('whatsapp')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('sede')}>
-                      Sede {sortIcon('sede')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('ciudad')}>
-                      Ciudad {sortIcon('ciudad')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('direccion')}>
-                      Dirección {sortIcon('direccion')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('ida')}>
-                      Guía ida {sortIcon('ida')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('ret')}>
-                      Guía retorno {sortIcon('ret')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('asegurado')}>
-                      Asegurado {sortIcon('asegurado')}
-                    </button>
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('valorSeguro')}>
-                      Valor seguro {sortIcon('valorSeguro')}
-                    </button>
-                  </th>
-                  {/* Nueva columna: Estado envío */}
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('estadoEnvio')}>
-                      Estado envío {sortIcon('estadoEnvio')}
-                    </button>
-                  </th>
-                  {/* Fecha registro */}
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                    <button className={headerBtn} onClick={() => onSort('created')}>
-                      Fecha registro {sortIcon('created')}
-                    </button>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sorted.map((c, i) => {
-                  const nombre = fmt(c.nombre, 'Sin nombre');
-                  const modelo = fmt(c.modelo);
-                  const sede = fmt(c.agenda_ciudad_sede, '-');
-                  const ciudad = fmt(c.guia_ciudad, '-');
-                  const direccion = fmt(c.guia_direccion, '-');
-                  const ida = fmt(c.guia_numero_ida, '-');
-                  const ret = fmt(c.guia_numero_retorno, '-');
-                  const asegurado = fmt(c.asegurado, '-');
-                  const valorSeguro = fmt(c.valor_seguro, '-');
-                  const createdRaw = c.created ? String(c.created) : '';
-                  const createdHuman = createdRaw ? formatDate(createdRaw) : '-';
+                       {/* Tracking Numbers Grid */}
+                       <div className="flex flex-wrap gap-4 mt-2">
+                          {/* IDA */}
+                          <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-dashed ${client.guia_numero_ida ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}>
+                             <div className="text-xs uppercase text-gray-500 font-bold">Guía Ida</div>
+                             <div className={`text-sm font-mono font-bold ${client.guia_numero_ida ? 'text-blue-700' : 'text-gray-400'}`}>
+                                {safeText(client.guia_numero_ida) || 'Pendiente'}
+                             </div>
+                          </div>
 
-                  const envio = deriveEnvioUI(c); // ← unificado
-                  const rowClass = ROW_CLASSES[envio.key];
+                          {/* RETORNO */}
+                          <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-dashed ${client.guia_numero_retorno ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}>
+                             <div className="text-xs uppercase text-gray-500 font-bold">Guía Retorno</div>
+                             <div className={`text-sm font-mono font-bold ${client.guia_numero_retorno ? 'text-purple-700' : 'text-gray-400'}`}>
+                                {safeText(client.guia_numero_retorno) || 'Pendiente'}
+                             </div>
+                          </div>
+                       </div>
+                    </div>
 
-                  return (
-                    <tr
-                      key={`${c.row_number}-${i}`}
-                      className={`transition-colors cursor-pointer ${rowClass}`}
-                      onClick={() => setViewClient(c)}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`Abrir modal de ${nombre || 'cliente'}`}
-                      data-estado-envio={envio.key}
-                    >
-                      <td className="px-4 py-4">
-                        <div className="text-gray-900 font-medium">{nombre}</div>
-                        {modelo && <div className="text-xs text-gray-500">{modelo}</div>}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="inline-flex items-center gap-1.5 text-green-700">
-                          <Phone className="w-4 h-4" />
-                          {formatWhatsApp(c.whatsapp)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-gray-900">{sede}</td>
-                      <td className="px-4 py-4 text-gray-900">{ciudad}</td>
-                      <td className="px-4 py-4 text-gray-900 break-words max-w-[280px]">{direccion}</td>
-                      <td className="px-4 py-4 text-gray-900">{ida}</td>
-                      <td className="px-4 py-4 text-gray-900">{ret}</td>
-                      <td className="px-4 py-4 text-gray-900">{asegurado}</td>
-                      <td className="px-4 py-4 text-gray-900">{valorSeguro}</td>
+                    {/* === DERECHA: ESTADO & ACCIONES (30%) === */}
+                    <div className={`w-full lg:w-[30%] border-t lg:border-t-0 lg:border-l border-gray-100 p-5 flex flex-col justify-between gap-4
+                       ${isWarning ? 'bg-orange-50/30' : 'bg-gray-50/50'}
+                    `}>
+                       
+                       {/* Status Badge */}
+                       <div className="flex justify-end">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border uppercase tracking-wide ${ui.classes}`}>
+                             <StatusIcon statusKey={ui.key} />
+                             {ENVIO_LABELS[ui.key]}
+                          </span>
+                       </div>
 
-                      {/* Estado envío (badge del helper: clases + label) */}
-                      <td className="px-4 py-4">
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${envio.classes}`}>
-                          {ENVIO_LABELS[envio.key]}
-                        </span>
-                      </td>
+                       {/* Insurance Info */}
+                       <div className="flex flex-col items-end text-right space-y-1">
+                          {client.asegurado ? (
+                             <div className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded-md">
+                                <ShieldCheck className="w-3.5 h-3.5" />
+                                Asegurado: {safeText(client.valor_seguro) || 'Si'}
+                             </div>
+                          ) : (
+                             <div className="text-xs text-gray-400 font-medium">No asegurado</div>
+                          )}
+                          
+                          {/* Diagnostic Price or Notes */}
+                          {client.precio_diagnostico_informado && (
+                             <span className="text-xs text-gray-500">
+                               Diag: {client.precio_diagnostico_informado}
+                             </span>
+                          )}
+                       </div>
 
-                      <td className="px-4 py-4 text-gray-900">{createdHuman}</td>
-                    </tr>
-                  );
-                })}
+                       {/* Actions Footer */}
+                       <div className="mt-auto pt-3 border-t border-gray-200/50 flex justify-end gap-2">
+                          <button 
+                             onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
+                             className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-xs font-bold transition-colors"
+                          >
+                             <Phone className="w-3.5 h-3.5" /> WhatsApp
+                          </button>
+                       </div>
 
-                {sorted.length === 0 && (
-                  <tr>
-                    <td colSpan={11} className="px-4 py-10 text-center text-gray-500">
-                      No hay registros que cumplan con SEDE, CIUDAD y DIRECCIÓN (sin “No aplica”).
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                    </div>
+                 </div>
+               </div>
+             );
+           })
+         ) : (
+           /* EMPTY STATE */
+           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200 text-center max-w-4xl mx-auto">
+              <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                 <Truck className="w-10 h-10 text-gray-300" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">No hay envíos logísticos</h3>
+              <p className="text-gray-500 max-w-md mt-2 px-4">
+                {search 
+                  ? `No se encontraron resultados para "${search}".`
+                  : `No hay clientes configurados con Sede, Ciudad y Dirección válidos.`}
+              </p>
+           </div>
+         )}
+      </div>
 
-      {/* Modal */}
       <ClientModal
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}
