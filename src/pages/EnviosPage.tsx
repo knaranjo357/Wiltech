@@ -2,7 +2,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Truck, RefreshCw, Phone, MapPin, Search, ArrowRight, 
-  Package, ShieldCheck, AlertTriangle, CheckCircle2, X
+  Package, ShieldCheck, AlertTriangle, CheckCircle2, X,
+  ArrowUpDown, Clock, MessageCircle, Bot, User, AlertCircle
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
@@ -23,6 +24,22 @@ const safeText = (v: unknown) => {
   return String(v).trim();
 };
 
+const formatTimeDate = (val: string | number | undefined) => {
+  if (!val) return '—';
+  const date = new Date(typeof val === 'number' && val < 10000000000 ? val * 1000 : val);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' });
+};
+
+// === LÓGICA DEL BOT IGUAL QUE EN EL MODAL ===
+// Consideramos encendido si es true, vacío, null o undefined (por defecto ON).
+// Consideramos apagado SOLO si es false explícito o string "false".
+const isBotOn = (v: any) => {
+  if (v === false) return false;
+  if (String(v).toLowerCase() === 'false') return false;
+  return true; 
+};
+
 /**
  * FILTRO ESTRICTO:
  * Para estar en "Envíos", el cliente DEBE tener una intención logística:
@@ -34,6 +51,9 @@ const hasLogisticsData = (c: Client): boolean => {
   return !!(safeText(c.agenda_ciudad_sede) && safeText(c.guia_ciudad) && safeText(c.guia_direccion));
 };
 
+// Tipos de ordenamiento
+type SortOption = 'priority' | 'created_desc' | 'created_asc' | 'last_msg_desc';
+
 /** ================== Componente Principal ================== */
 export const EnviosPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -44,6 +64,9 @@ export const EnviosPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [sedeFilter, setSedeFilter] = useState<string>('Todas');
   const [statusFilter, setStatusFilter] = useState<EnvioUIKey | 'Todas'>('Todas');
+  
+  // Orden por defecto: Última actividad
+  const [sortOption, setSortOption] = useState<SortOption>('last_msg_desc');
 
   // Estado UI
   const [viewClient, setViewClient] = useState<Client | null>(null);
@@ -56,7 +79,6 @@ export const EnviosPage: React.FC = () => {
       setError(null);
       const data = await ClientService.getClients();
       const arr = Array.isArray(data) ? (data as Client[]) : [];
-      // Filtramos SOLO los que tienen datos logísticos mínimos
       setClients(arr.filter(hasLogisticsData));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar envíos');
@@ -74,7 +96,6 @@ export const EnviosPage: React.FC = () => {
       if (!detail?.row_number) return;
       
       setClients(prev => {
-        // Actualizamos o removemos si ya no cumple los requisitos logísticos
         const updated = prev.map(c => c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c);
         return updated.filter(hasLogisticsData); 
       });
@@ -120,7 +141,7 @@ export const EnviosPage: React.FC = () => {
     return Array.from(s).sort();
   }, [clients]);
 
-  /** --- Filtrado --- */
+  /** --- Filtrado y Ordenamiento --- */
   const filtered = useMemo(() => {
     let data = [...clients];
 
@@ -143,30 +164,63 @@ export const EnviosPage: React.FC = () => {
         normalize(safeText(c.guia_numero_retorno)).includes(q) ||
         normalize(safeText(c.guia_direccion)).includes(q) ||
         normalize(safeText(c.guia_ciudad)).includes(q) ||
-        normalize(safeText(c.modelo)).includes(q)
+        normalize(safeText(c.modelo)).includes(q) ||
+        normalize(safeText(c.whatsapp)).includes(q) || 
+        safeText((c as any).subscriber_id).includes(q)
       );
     }
 
-    // Ordenar: Primero los incompletos, luego pendientes de envío, luego en tránsito
-    const score = (c: Client) => {
-        const key = deriveEnvioUI(c).key;
-        if (key === 'faltan_datos') return 0;
-        if (key === 'datos_completos') return 1;
-        if (key === 'ida') return 2;
-        return 3;
-    };
-    return data.sort((a,b) => score(a) - score(b));
+    // 4. Ordenamiento
+    return data.sort((a,b) => {
+      const getTs = (v: any) => {
+          if (!v) return 0;
+          return typeof v === 'number' && v < 10000000000 ? v * 1000 : new Date(v).getTime();
+      };
 
-  }, [clients, sedeFilter, statusFilter, search]);
+      if (sortOption === 'created_desc') return getTs(b.created) - getTs(a.created);
+      if (sortOption === 'created_asc') return getTs(a.created) - getTs(b.created);
+      if (sortOption === 'last_msg_desc') return getTs(b.last_msg) - getTs(a.last_msg);
+
+      // Default: Priority
+      const score = (c: Client) => {
+          const key = deriveEnvioUI(c).key;
+          if (key === 'faltan_datos') return 0;
+          if (key === 'datos_completos') return 1;
+          if (key === 'ida') return 2;
+          return 3;
+      };
+      return (score(a) - score(b)) || (getTs(b.created) - getTs(a.created));
+    });
+
+  }, [clients, sedeFilter, statusFilter, search, sortOption]);
 
 
-  /** --- Helpers Visuales --- */
+  /** --- Helpers Visuales & Actions --- */
   const handleWhatsAppClick = (whatsapp: string, e: React.MouseEvent) => {
     e.stopPropagation();
     window.open(`https://wa.me/${safeText(whatsapp).replace('@s.whatsapp.net', '')}`, '_blank');
   };
 
-  // Icono de estado
+  // === TOGGLE BOT (Mejorado) ===
+  const handleToggleBot = async (client: Client, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Usamos la misma función helper para determinar el estado actual
+    const currentlyOn = isBotOn(client.consentimiento_contacto);
+    
+    // Si está encendido y vamos a apagarlo, pedimos confirmación (igual que el modal)
+    if (currentlyOn) {
+      const confirm = window.confirm(`¿Pausar el Bot para ${client.nombre || 'este cliente'}?`);
+      if (!confirm) return;
+    }
+
+    // Invertimos el valor
+    await onUpdate({ 
+      row_number: client.row_number, 
+      consentimiento_contacto: !currentlyOn 
+    });
+  };
+
   const StatusIcon = ({ statusKey }: { statusKey: EnvioUIKey }) => {
     switch(statusKey) {
       case 'faltan_datos': return <AlertTriangle className="w-4 h-4" />;
@@ -198,7 +252,7 @@ export const EnviosPage: React.FC = () => {
               </div>
 
               {/* Barra Filtros */}
-              <div className="flex flex-col sm:flex-row gap-2 flex-1 md:justify-end">
+              <div className="flex flex-col xl:flex-row gap-2 flex-1 md:justify-end">
                  
                  {/* Selector Sede */}
                  <select 
@@ -223,6 +277,23 @@ export const EnviosPage: React.FC = () => {
                     <option value="ida_y_retorno">🔄 Ida y Retorno</option>
                  </select>
 
+                 {/* Selector Ordenamiento */}
+                 <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                       <ArrowUpDown className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <select
+                      value={sortOption}
+                      onChange={(e) => setSortOption(e.target.value as SortOption)}
+                      className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-xl text-sm focus:bg-white bg-gray-50/50 focus:ring-2 focus:ring-purple-100 outline-none cursor-pointer appearance-none"
+                    >
+                       <option value="last_msg_desc">Última Actividad (Msg)</option>
+                       <option value="priority">Orden: Prioridad</option>
+                       <option value="created_desc">Más Recientes (Creación)</option>
+                       <option value="created_asc">Más Antiguos (Creación)</option>
+                    </select>
+                 </div>
+
                  {/* Buscador */}
                  <div className="relative w-full sm:w-64">
                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -231,7 +302,7 @@ export const EnviosPage: React.FC = () => {
                    <input
                      value={search}
                      onChange={(e) => setSearch(e.target.value)}
-                     placeholder="Buscar guía, ciudad, cliente..."
+                     placeholder="Buscar guía, celular, ID..."
                      className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-xl text-sm focus:bg-white bg-gray-50/50 focus:ring-2 focus:ring-purple-100 transition-all"
                    />
                    {search && (
@@ -249,7 +320,7 @@ export const EnviosPage: React.FC = () => {
         </div>
       </div>
 
-      {/* === Content List (Cards Split View) === */}
+      {/* === Content List === */}
       <div className="w-full space-y-4 pb-10">
          {loading ? (
            <div className="space-y-4 animate-pulse max-w-6xl mx-auto">
@@ -259,6 +330,8 @@ export const EnviosPage: React.FC = () => {
            filtered.map((client) => {
              const ui = deriveEnvioUI(client);
              const isWarning = ui.key === 'faltan_datos';
+             // USAMOS LA LÓGICA CORREGIDA AQUÍ
+             const botActive = isBotOn(client.consentimiento_contacto);
              
              return (
                <div 
@@ -270,10 +343,9 @@ export const EnviosPage: React.FC = () => {
                >
                  <div className="flex flex-col lg:flex-row items-stretch h-full">
                     
-                    {/* === IZQUIERDA: RUTA & DIRECCIÓN (70%) === */}
+                    {/* === IZQUIERDA === */}
                     <div className="flex-1 p-5 flex flex-col justify-between gap-4">
                        
-                       {/* Route Header */}
                        <div className="flex flex-wrap items-center gap-3 text-sm">
                           <div className="flex items-center gap-2 font-bold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg">
                              <MapPin className="w-4 h-4 text-gray-500" />
@@ -284,13 +356,8 @@ export const EnviosPage: React.FC = () => {
                              <MapPin className="w-4 h-4 text-gray-500" />
                              {safeText(client.guia_ciudad) || 'Ciudad Destino'}
                           </div>
-                          
-                          {safeText(client.guia_departamento_estado) && (
-                             <span className="text-xs text-gray-400">({client.guia_departamento_estado})</span>
-                          )}
                        </div>
 
-                       {/* Main Address */}
                        <div className="pl-1">
                           <h3 className="text-lg sm:text-xl font-bold text-gray-800 leading-tight">
                              {safeText(client.guia_direccion)}
@@ -298,19 +365,30 @@ export const EnviosPage: React.FC = () => {
                           <p className="text-sm text-gray-500 mt-1 font-medium">
                              {safeText(client.guia_nombre_completo) || safeText(client.nombre)} • {safeText(client.guia_telefono) || formatWhatsApp(client.whatsapp)}
                           </p>
+
+                          {/* Fechas */}
+                          <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-gray-400">
+                             <div className="flex items-center gap-1 bg-gray-50 px-2 py-0.5 rounded border border-gray-100" title="Fecha de creación del cliente">
+                                <Clock className="w-3 h-3 text-gray-400" />
+                                <span>Creado: <span className="font-medium text-gray-600">{formatTimeDate(client.created)}</span></span>
+                             </div>
+                             {client.last_msg && (
+                               <div className="flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded border border-blue-100" title="Fecha del último mensaje recibido">
+                                  <MessageCircle className="w-3 h-3 text-blue-400" />
+                                  <span className="text-blue-700">Actividad: <span className="font-medium">{formatTimeDate(client.last_msg)}</span></span>
+                               </div>
+                             )}
+                          </div>
                        </div>
 
                        {/* Tracking Numbers Grid */}
                        <div className="flex flex-wrap gap-4 mt-2">
-                          {/* IDA */}
                           <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-dashed ${client.guia_numero_ida ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}>
                              <div className="text-xs uppercase text-gray-500 font-bold">Guía Ida</div>
                              <div className={`text-sm font-mono font-bold ${client.guia_numero_ida ? 'text-blue-700' : 'text-gray-400'}`}>
                                 {safeText(client.guia_numero_ida) || 'Pendiente'}
                              </div>
                           </div>
-
-                          {/* RETORNO */}
                           <div className={`flex items-center gap-3 px-3 py-2 rounded-xl border border-dashed ${client.guia_numero_retorno ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200 opacity-70'}`}>
                              <div className="text-xs uppercase text-gray-500 font-bold">Guía Retorno</div>
                              <div className={`text-sm font-mono font-bold ${client.guia_numero_retorno ? 'text-purple-700' : 'text-gray-400'}`}>
@@ -320,7 +398,7 @@ export const EnviosPage: React.FC = () => {
                        </div>
                     </div>
 
-                    {/* === DERECHA: ESTADO & ACCIONES (30%) === */}
+                    {/* === DERECHA === */}
                     <div className={`w-full lg:w-[30%] border-t lg:border-t-0 lg:border-l border-gray-100 p-5 flex flex-col justify-between gap-4
                        ${isWarning ? 'bg-orange-50/30' : 'bg-gray-50/50'}
                     `}>
@@ -343,8 +421,6 @@ export const EnviosPage: React.FC = () => {
                           ) : (
                              <div className="text-xs text-gray-400 font-medium">No asegurado</div>
                           )}
-                          
-                          {/* Diagnostic Price or Notes */}
                           {client.precio_diagnostico_informado && (
                              <span className="text-xs text-gray-500">
                                Diag: {client.precio_diagnostico_informado}
@@ -352,8 +428,23 @@ export const EnviosPage: React.FC = () => {
                           )}
                        </div>
 
-                       {/* Actions Footer */}
+                       {/* Footer: WhatsApp y Bot */}
                        <div className="mt-auto pt-3 border-t border-gray-200/50 flex justify-end gap-2">
+                          {/* BOTON BOT */}
+                          <button
+                             onClick={(e) => handleToggleBot(client, e)}
+                             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors border active:scale-95
+                               ${botActive 
+                                 ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
+                                 : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}
+                             `}
+                             title={botActive ? "Bot Activo (Click para apagar)" : "Bot Inactivo (Click para encender)"}
+                          >
+                             {botActive ? <Bot className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                             {botActive ? 'ON' : 'OFF'}
+                          </button>
+
+                          {/* BOTON WHATSAPP */}
                           <button 
                              onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
                              className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-xs font-bold transition-colors"

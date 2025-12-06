@@ -1,9 +1,9 @@
-// components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
-  Copy, MessageCircle, ShieldCheck, PackageSearch, ClipboardList, Building2, ClipboardCheck,
-  Truck, Edit2, Save, Bot, CheckCircle, AlertCircle
+  Copy, MessageCircle, ShieldCheck, ClipboardList, Building2, ClipboardCheck,
+  Truck, Edit2, Save, Bot, CheckCircle, AlertCircle, Fingerprint, Clock, Mail, Percent,
+  ShoppingBag, MessageSquare
 } from 'lucide-react';
 import { Client } from '../types/client';
 import {
@@ -31,21 +31,28 @@ type FieldDef<K extends keyof Client = keyof Client> = {
 };
 
 // ========= Utils & Helpers =========
+
+/** Formatea fechas ISO o Timestamps para el input type="datetime-local" */
+const toInputDate = (val: any): string => {
+  if (!val) return '';
+  try {
+    const date = new Date(val);
+    if (isNaN(date.getTime())) return '';
+    // Ajuste simple para que el input datetime-local lo lea (YYYY-MM-DDTHH:mm)
+    // Nota: Esto toma la hora local del navegador.
+    const offset = date.getTimezoneOffset() * 60000;
+    const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
+    return localISOTime;
+  } catch {
+    return '';
+  }
+};
+
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
   const t1 = Date.parse(s);
   if (!Number.isNaN(t1)) return new Date(t1);
-  if (s.includes(' ') && !s.includes('T')) {
-    const iso = s.length === 16 ? s.replace(' ', 'T') + ':00' : s.replace(' ', 'T');
-    const t2 = Date.parse(iso);
-    if (!Number.isNaN(t2)) return new Date(t2);
-  }
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (m) {
-    const [, y, mo, d] = m;
-    return new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0);
-  }
   return null;
 };
 
@@ -73,7 +80,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     setActiveTab('ficha');
     setIsEditing(false);
     setEditData(c);
-  }, [shouldRender]); // eslint-disable-line
+  }, [shouldRender, c]); 
 
   // Close / Esc logic
   useEffect(() => {
@@ -101,7 +108,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   const onOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) {
       if (isEditing) {
-         // Confirmar salir si edita? Por ahora simple:
          setIsEditing(false);
          setEditData(c || {});
       } else {
@@ -110,16 +116,13 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     }
   };
 
-  // Data accessors
   const getVal = <K extends keyof Client>(key: K): any => (editData[key] ?? c[key]) as any;
   const setVal = <K extends keyof Client>(key: K, value: any) => setEditData(prev => ({ ...prev, [key]: value }));
 
-  // Actions
   const handleCopy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch {} };
   
   const notifyGlobalUpdate = (payload: Partial<Client>) => {
     try { window.dispatchEvent(new CustomEvent<Partial<Client>>('client:updated', { detail: payload })); } catch {}
-    try { localStorage.setItem('crm:client-updated', JSON.stringify({ row_number: payload.row_number, at: Date.now() })); } catch {}
   };
 
   const handleSave = async () => {
@@ -188,20 +191,28 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     return (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
   }, [c?.nombre]);
 
-  // Sections Config
+  // =========================================================
+  // CONFIGURACIÓN DE CAMPOS (Aquí agregamos los faltantes)
+  // =========================================================
   const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
     { title: 'Información Personal', icon: User, iconColor: 'text-blue-600 bg-blue-50', fields: [
       { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
       { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text' },
       { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
+      { label: 'Subscriber ID', key: 'subscriber_id', icon: Fingerprint, type: 'text' }, // Nuevo
     ]},
-    { title: 'Estado y Seguimiento', icon: Calendar, iconColor: 'text-purple-600 bg-purple-50', fields: [
+    { title: 'Estado y Tiempos', icon: Clock, iconColor: 'text-purple-600 bg-purple-50', fields: [
       { label: 'Source (origen)', key: 'source', icon: Settings, type: 'text' },
       { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
       { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
-      { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
       { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
-      { label: 'Sede/Ciudad', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
+      { label: 'Creado', key: 'created', icon: Clock, type: 'datetime' }, // Nuevo
+      { label: 'Último Mensaje', key: 'last_msg', icon: MessageCircle, type: 'datetime' }, // Nuevo
+    ]},
+    { title: 'Agenda', icon: Calendar, iconColor: 'text-teal-600 bg-teal-50', fields: [
+       { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
+       { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
+       { label: 'Asistió', key: 'asistio_agenda', icon: CheckCircle, type: 'boolean' }, // Nuevo (editable)
     ]},
     { title: 'Dispositivo', icon: Smartphone, iconColor: 'text-indigo-600 bg-indigo-50', fields: [
       { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
@@ -209,7 +220,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       { label: 'Detalles', key: 'detalles', icon: FileText, type: 'textarea' },
       { label: 'Recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
     ]},
-    { title: 'Diagnóstico y Costos', icon: DollarSign, iconColor: 'text-green-600 bg-green-50', fields: [
+    { title: 'Diagnóstico y Comercial', icon: DollarSign, iconColor: 'text-green-600 bg-green-50', fields: [
       { label: 'Diagnóstico req.', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
       { label: 'Equipo manipulado', key: 'equipo_manipulado', icon: ClipboardList, type: 'text' },
       { label: 'Precio diag.', key: 'precio_diagnostico_informado', icon: DollarSign, type: 'text' },
@@ -217,8 +228,11 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       { label: 'Precio máximo', key: 'precio_maximo_informado', icon: DollarSign, type: 'text' },
       { label: 'Búsqueda precios', key: 'buscar_precios_status', icon: DollarSign, type: 'text' },
       { label: 'Servicios extra', key: 'servicios_adicionales', icon: Settings, type: 'text' },
+      { label: 'Interés accesorios', key: 'interes_accesorios', icon: ShoppingBag, type: 'text' }, // Nuevo
+      { label: 'Desc. Multi-rep', key: 'descuento_multi_reparacion', icon: Percent, type: 'text' }, // Nuevo
     ]},
     { title: 'Notas', icon: FileText, iconColor: 'text-amber-600 bg-amber-50', fields: [
+      { label: 'Último Input', key: 'last_input_text', icon: MessageSquare, type: 'textarea' }, // Nuevo
       { label: 'Notas cliente', key: 'notas_cliente', icon: FileText, type: 'textarea' },
       { label: 'Notas internas', key: 'notas', icon: FileText, type: 'textarea' },
       { label: 'Obs. técnicas', key: 'observaciones_tecnicas', icon: FileText, type: 'textarea' },
@@ -226,11 +240,15 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     { title: 'Logística y Envío', icon: Truck, iconColor: 'text-orange-600 bg-orange-50', fields: [
       { label: 'Nombre Guía', key: 'guia_nombre_completo', icon: User, type: 'text' },
       { label: 'Cédula / ID', key: 'guia_cedula_id', icon: ClipboardList, type: 'text' },
+      { label: 'Teléfono Guía', key: 'guia_telefono', icon: Phone, type: 'text' }, // Nuevo (estaba faltando)
       { label: 'Dirección', key: 'guia_direccion', icon: MapPin, type: 'text' },
       { label: 'Ciudad Guía', key: 'guia_ciudad', icon: MapPin, type: 'text' },
+      { label: 'Dpto/Estado', key: 'guia_departamento_estado', icon: MapPin, type: 'text' }, // Nuevo
+      { label: 'Email Guía', key: 'guia_email', icon: Mail, type: 'email' }, // Nuevo
       { label: 'Guía Ida', key: 'guia_numero_ida', icon: Truck, type: 'text' },
       { label: 'Guía Retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
       { label: 'Asegurado', key: 'asegurado', icon: ShieldCheck, type: 'boolean' },
+      { label: 'Valor Seguro', key: 'valor_seguro', icon: DollarSign, type: 'text' }, // Nuevo
       { label: 'Estado envío', key: 'estado_envio', icon: Truck, type: 'text' },
     ]},
   ];
@@ -244,7 +262,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       className="fixed inset-0 z-[120] bg-gray-900/60 backdrop-blur-sm flex justify-end sm:justify-center sm:items-center transition-opacity duration-300"
       role="dialog"
     >
-      {/* Modal Window */}
       <div
         onMouseDown={(e) => e.stopPropagation()}
         className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300"
@@ -253,15 +270,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
         {/* === HEADER === */}
         <div className="relative shrink-0 bg-white border-b border-gray-100 z-20">
           
-          {/* Top Bar: Title & Controls */}
+          {/* Top Bar */}
           <div className="px-4 sm:px-8 py-5 flex flex-col md:flex-row gap-4 md:items-center justify-between bg-gradient-to-r from-white via-white to-gray-50/50">
             <div className="flex items-center gap-4">
-              {/* Avatar */}
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-blue-200">
                 {initials}
               </div>
-              
-              {/* Info Principal */}
               <div>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
                   {safeStr(c?.nombre) || 'Cliente Nuevo'}
@@ -273,9 +287,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               </div>
             </div>
 
-            {/* Actions Group */}
             <div className="flex flex-wrap items-center gap-3">
-               {/* Tabs Switcher */}
                <div className="bg-gray-100 p-1 rounded-xl flex items-center font-medium text-sm">
                   <button
                     onClick={() => setActiveTab('ficha')}
@@ -293,7 +305,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
 
                <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block" />
 
-               {/* Edit/Save Controls */}
                {isEditing ? (
                  <>
                    <button
@@ -322,19 +333,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                  </button>
                )}
 
-               <button
-                 onClick={onClose}
-                 className="p-2 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition"
-                 aria-label="Cerrar"
-               >
+               <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition">
                  <X className="w-6 h-6" />
                </button>
             </div>
           </div>
 
-          {/* Quick Info Bar (Badges & Links) */}
+          {/* Quick Info Bar */}
           <div className="px-4 sm:px-8 pb-4 flex flex-col xl:flex-row gap-4 xl:items-center justify-between">
-            {/* Badges */}
             <div className="flex flex-wrap items-center gap-2">
                {c?.estado_etapa && (
                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getEtapaColor(c.estado_etapa as any)}`}>
@@ -346,14 +352,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                    {String(c.categoria_contacto).replace(/_/g, ' ')}
                  </span>
                )}
-               {deriveEnvioUI(c).label !== 'No aplica' && (
-                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${deriveEnvioUI(c).classes}`}>
-                   <Truck className="w-3 h-3" />
-                   {deriveEnvioUI(c).label}
-                 </span>
-               )}
                
-               {/* Bot Status Badge */}
                <button 
                  onClick={handleBotToggle}
                  disabled={saving}
@@ -366,7 +365,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                  {isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'Bot Activo' : 'Bot Inactivo'}
                </button>
 
-               {/* Asistencia Status */}
                {canShowAsistio && (
                  <button
                    onClick={toggleAsistio}
@@ -379,7 +377,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                )}
             </div>
 
-            {/* Action Links */}
             <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1 xl:pb-0">
                <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition border border-green-100 whitespace-nowrap">
                  <MessageCircle className="w-4 h-4" /> {formatWhatsApp(c.whatsapp)}
@@ -402,11 +399,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             <div className="flex-1 overflow-y-auto p-4 sm:p-8">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto">
                 {sections.map((section, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden"
-                  >
-                    {/* Section Header */}
+                  <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
                     <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${section.iconColor}`}>
                         <section.icon className="w-5 h-5" />
@@ -414,7 +407,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                       <h3 className="font-semibold text-gray-900 text-lg">{section.title}</h3>
                     </div>
 
-                    {/* Fields Grid */}
                     <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
                       {section.fields.map((field, j) => {
                         const value = getVal(field.key);
@@ -428,7 +420,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                             </label>
 
                             {isEditing ? (
-                                /* === Edit Mode Inputs === */
+                                /* === Edit Mode === */
                                 field.key === 'estado_envio' ? (
                                   <select
                                     value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
@@ -455,16 +447,23 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                     <option value="true">Sí</option>
                                     <option value="false">No</option>
                                   </select>
+                                ) : field.type === 'datetime' ? (
+                                  <input
+                                    type="datetime-local"
+                                    value={toInputDate(value)} // Usamos helper para formato correcto
+                                    onChange={(e) => setVal(field.key, e.target.value)}
+                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
+                                  />
                                 ) : (
                                   <input
-                                    type={field.type === 'datetime' ? 'datetime-local' : field.type === 'number' ? 'number' : 'text'}
+                                    type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
                                     value={value ?? ''}
                                     onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                     className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
                                   />
                                 )
                             ) : (
-                                /* === View Mode Values === */
+                                /* === View Mode === */
                                 <div className="min-h-[24px] flex items-center">
                                   {field.key === 'estado_envio' && value ? (
                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${deriveEnvioUI({ ...c, ...editData }).classes}`}>
@@ -474,10 +473,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                      <span className="text-gray-300 text-sm italic select-none">-</span>
                                   ) : field.key === 'whatsapp' ? (
                                      <span className="text-sm font-medium text-gray-900 font-mono bg-gray-50 px-2 py-0.5 rounded">{formatWhatsApp(String(value))}</span>
-                                  ) : field.key === 'fecha_agenda' ? (
+                                  ) : (field.type === 'datetime' || field.key === 'fecha_agenda') ? (
                                      <span className="text-sm font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded flex items-center gap-2">
                                         <Calendar className="w-3.5 h-3.5"/> {formatDate(String(value))}
                                      </span>
+                                  ) : field.type === 'boolean' ? (
+                                      <span className={`text-sm font-bold ${value ? 'text-green-600' : 'text-gray-500'}`}>{value ? 'Sí' : 'No'}</span>
                                   ) : (
                                      <span className="text-sm font-medium text-gray-900 break-words leading-relaxed">
                                         {String(value)}
@@ -492,7 +493,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   </div>
                 ))}
               </div>
-              <div className="h-12"></div> {/* Spacer bottom */}
+              <div className="h-12"></div>
             </div>
           ) : (
             <ChatPanel
@@ -501,7 +502,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             />
           )}
         </div>
-
       </div>
     </div>
   );
