@@ -9,9 +9,19 @@ import { EnviosPage } from "./pages/EnviosPage";
 import { Resultados } from "./pages/Resultados";
 import { WppPage } from "./pages/WppPage";
 import { AgentePage } from "./pages/AgentePage";
-import ConversacionesPage from "./pages/ConversacionesPage"; 
+import ConversacionesPage from "./pages/ConversacionesPage";
+import { AsistenciaPage } from "./pages/AsistenciaPage"; // <--- Importado
 
-type PageKey = "precios" | "wpp" | "crm" | "agenda" | "envios" | "resultados" | "agente"| "conversaciones";
+type PageKey = 
+  | "precios" 
+  | "wpp" 
+  | "crm" 
+  | "agenda" 
+  | "envios" 
+  | "resultados" 
+  | "agente" 
+  | "conversaciones"
+  | "asistencia"; // <--- Tipo agregado
 
 function App() {
   const { loading, isAuthenticated } = useAuth();
@@ -27,6 +37,7 @@ function App() {
       "/resultados": "resultados",
       "/agente": "agente",
       "/conversaciones": "conversaciones",
+      "/asistencia": "asistencia", // <--- Ruta agregada
     }),
     []
   );
@@ -41,6 +52,7 @@ function App() {
       resultados: "/resultados",
       agente: "/agente",
       conversaciones: "/conversaciones",
+      asistencia: "/asistencia", // <--- Path agregado
     }),
     []
   );
@@ -135,6 +147,8 @@ function App() {
         return <AgentePage />;
       case "conversaciones":
         return <ConversacionesPage />;
+      case "asistencia":
+        return <AsistenciaPage />; // <--- Renderizado agregado
       default:
         return <PreciosPage />;
     }

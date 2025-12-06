@@ -13,8 +13,8 @@ import {
   BarChart3,
   LucideIcon,
   BrainCircuit,
-  ChevronLeft,  // Icono para colapsar
-  ChevronRight, // Icono para expandir
+  ChevronLeft,
+  LifeBuoy, // <--- Icono agregado
 } from "lucide-react";
 
 interface NavItem {
@@ -29,12 +29,14 @@ interface LayoutProps {
   onPageChange: (page: string) => void;
 }
 
+// Configuración de items del menú
 const navigationItems: NavItem[] = [
   { id: "precios", name: "Precios", icon: DollarSign },
   // { id: "wpp", name: "WhatsApp", icon: Bot },
   { id: "crm", name: "CRM", icon: Users },
   { id: "conversaciones", name: "Conversaciones", icon: MessageSquare },
   { id: "agenda", name: "Agenda", icon: Calendar },
+  { id: "asistencia", name: "Asistencia", icon: LifeBuoy }, // <--- Item agregado
   { id: "envios", name: "Envíos", icon: Truck },
   { id: "resultados", name: "Resultados", icon: BarChart3 },
   // { id: "agente", name: "Agente IA", icon: BrainCircuit },
@@ -49,12 +51,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   // Controla si el sidebar está minimizado en escritorio
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const pageTitle = useMemo(() => {
-    const activeItem = navigationItems.find((item) => item.id === currentPage);
-    if (activeItem) return activeItem.name;
-    return currentPage.charAt(0).toUpperCase() + currentPage.slice(1);
-  }, [currentPage]);
-
+  // Calcula la inicial del usuario para el avatar
   const userInitial = useMemo(() => {
     return (user?.email?.[0] ?? "U").toUpperCase();
   }, [user?.email]);
@@ -89,7 +86,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
               <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shrink-0">
                 <Bot className="w-6 h-6 text-white" />
               </div>
-              {/* Ocultamos el texto si está colapsado con overflow hidden y width transition */}
+              
+              {/* Texto Logo (oculto si colapsado) */}
               <span 
                 className={`text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent whitespace-nowrap overflow-hidden transition-all duration-300
                 ${isCollapsed ? "w-0 opacity-0" : "w-auto opacity-100"}`}
@@ -117,7 +115,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
           </div>
 
           {/* -- Navigation Items -- */}
-          <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden">
+          <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden custom-scrollbar">
             {navigationItems.map((item) => {
               const isActive = currentPage === item.id;
               return (
@@ -127,7 +125,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                     onPageChange(item.id);
                     setSidebarOpen(false);
                   }}
-                  // "group" permite controlar el hover de los hijos (tooltip)
                   className={`
                     group relative flex items-center w-full rounded-xl transition-all duration-200
                     ${isCollapsed ? "justify-center px-2 py-3" : "justify-start px-4 py-3 space-x-3"}
@@ -142,18 +139,17 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                     }`}
                   />
                   
-                  {/* Texto normal (visible si expandido) */}
+                  {/* Texto normal */}
                   {!isCollapsed && (
                     <span className="font-medium whitespace-nowrap animate-fadeIn">
                       {item.name}
                     </span>
                   )}
 
-                  {/* TOOLTIP (visible solo en hover cuando está colapsado) */}
+                  {/* Tooltip Hover (Colapsado) */}
                   {isCollapsed && (
                     <div className="absolute left-full ml-4 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap z-50">
                       {item.name}
-                      {/* Flechita del tooltip */}
                       <div className="absolute top-1/2 -left-1 -mt-1 border-4 border-transparent border-r-gray-800" />
                     </div>
                   )}
@@ -177,7 +173,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                     <span className="text-sm font-semibold text-gray-700 truncate block max-w-[100px]">
                       {user?.email || "Usuario"}
                     </span>
-                    <span className="text-xs text-gray-500 truncate">
+                    <span className="text-xs text-green-500 font-medium truncate">
                       Conectado
                     </span>
                   </div>
@@ -195,7 +191,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
               )}
             </div>
             
-            {/* Botón logout para modo colapsado (opcional, o usar el avatar para un menú dropdown, aquí lo simplifico) */}
+            {/* Botón Logout (Colapsado) */}
             {isCollapsed && (
               <button
                 onClick={logout}
@@ -210,22 +206,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
       </aside>
 
       {/* === Main Content Wrapper === */}
-      {/* Ajustamos el margen izquierdo según el estado isCollapsed */}
       <div className={`transition-all duration-300 ${isCollapsed ? "md:ml-20" : "md:ml-64"}`}>
         
         {/* Top bar */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50">
-          <div className="flex items-center justify-between px-6 py-4">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Menu className="w-6 h-6" />
-              </button>
-            </div>
+        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 h-16 flex items-center px-6 justify-between md:justify-end">
+          {/* Botón Menu Móvil */}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
 
-          </div>
+          {/* Espacio para breadcrumbs o título dinámico si quisieras agregarlo aquí */}
         </header>
 
         {/* Content */}
