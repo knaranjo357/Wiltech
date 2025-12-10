@@ -31,7 +31,7 @@ const N8nChatWidget = memo(() => {
       createChat({
         webhookUrl: 'https://n8n.alliasoft.com/webhook/b4d44bd0-9b8c-46da-97a1-108d15203166/chat',
         mode: 'window', 
-        showWelcomeScreen: true,
+        showWelcomeScreen: false,
         defaultLanguage: 'es',
         initialMessages: [
             '¡Hola! Bienvenid@.',
@@ -115,8 +115,8 @@ const N8nChatWidget = memo(() => {
           --chat--toggle--icon-color: var(--white);
           
           /* Dimensiones y Capas */
-          --chat--window--width: 400px;
-          --chat--window--height: 600px;
+          --chat--window--width: 100%;
+          --chat--window--height: 100%;
           --chat--border-radius: 16px;
           --chat--z-index: 9999; 
       }
