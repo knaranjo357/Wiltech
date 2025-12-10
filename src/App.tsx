@@ -10,7 +10,8 @@ import { Resultados } from "./pages/Resultados";
 import { WppPage } from "./pages/WppPage";
 import { AgentePage } from "./pages/AgentePage";
 import ConversacionesPage from "./pages/ConversacionesPage";
-import { AsistenciaPage } from "./pages/AsistenciaPage"; // <--- Importado
+import Web1ConversacionesPage from "./pages/Web1ConversacionesPage"; // <--- Importado
+import { AsistenciaPage } from "./pages/AsistenciaPage";
 
 type PageKey = 
   | "precios" 
@@ -21,7 +22,8 @@ type PageKey =
   | "resultados" 
   | "agente" 
   | "conversaciones"
-  | "asistencia"; // <--- Tipo agregado
+  | "web1" // <--- Agregado
+  | "asistencia";
 
 function App() {
   const { loading, isAuthenticated } = useAuth();
@@ -37,7 +39,8 @@ function App() {
       "/resultados": "resultados",
       "/agente": "agente",
       "/conversaciones": "conversaciones",
-      "/asistencia": "asistencia", // <--- Ruta agregada
+      "/web1": "web1", // <--- Ruta mapeada
+      "/asistencia": "asistencia",
     }),
     []
   );
@@ -52,14 +55,15 @@ function App() {
       resultados: "/resultados",
       agente: "/agente",
       conversaciones: "/conversaciones",
-      asistencia: "/asistencia", // <--- Path agregado
+      web1: "/web1", // <--- Path mapeado
+      asistencia: "/asistencia",
     }),
     []
   );
 
   const DEFAULT_PAGE: PageKey = "precios";
 
-  // Página inicial según URL (si es /login o desconocida, usa DEFAULT_PAGE)
+  // Página inicial según URL
   const initialPage: PageKey = useMemo(() => {
     const path = window.location.pathname;
     if (path in pathToPage) return pathToPage[path];
@@ -68,15 +72,11 @@ function App() {
 
   const [currentPage, setCurrentPage] = useState<PageKey>(initialPage);
 
-  // Manejar navegación con botón atrás/adelante del navegador
+  // Manejar navegación con botón atrás/adelante
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
-      if (path === "/login") {
-        // Si el usuario navega manualmente a /login, no cambiamos currentPage.
-        // La UI de abajo decide si muestra Login o Layout según autenticación.
-        return;
-      }
+      if (path === "/login") return;
       const page = pathToPage[path] ?? DEFAULT_PAGE;
       setCurrentPage(page);
     };
@@ -84,13 +84,11 @@ function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [pathToPage]);
 
-  // Efecto de guard: decide a qué ruta empujar según estado de auth (sin side effects en render)
+  // Guard de autenticación
   useEffect(() => {
     if (loading) return;
-
     const path = window.location.pathname;
 
-    // No autenticado => asegúrate de estar en /login
     if (!isAuthenticated) {
       if (path !== "/login") {
         window.history.pushState(null, "", "/login");
@@ -98,14 +96,12 @@ function App() {
       return;
     }
 
-    // Autenticado y estás en /login => manda a la ruta de la página actual
     if (isAuthenticated && path === "/login") {
       const target = pageToPath[currentPage] ?? pageToPath[DEFAULT_PAGE];
       window.history.pushState(null, "", target);
     }
   }, [loading, isAuthenticated, currentPage, pageToPath]);
 
-  // Cambio de página disparado desde el Layout (barra lateral, etc.)
   const handlePageChange = (page: string) => {
     const p = (page as PageKey) ?? DEFAULT_PAGE;
     setCurrentPage(p);
@@ -124,7 +120,6 @@ function App() {
     );
   }
 
-  // NO hagas pushState aquí; solo renderiza la pantalla de login.
   if (!isAuthenticated) {
     return <LoginForm />;
   }
@@ -147,8 +142,10 @@ function App() {
         return <AgentePage />;
       case "conversaciones":
         return <ConversacionesPage />;
+      case "web1":
+        return <Web1ConversacionesPage />; // <--- Renderizado Web 1
       case "asistencia":
-        return <AsistenciaPage />; // <--- Renderizado agregado
+        return <AsistenciaPage />;
       default:
         return <PreciosPage />;
     }

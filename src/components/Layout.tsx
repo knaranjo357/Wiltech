@@ -14,7 +14,8 @@ import {
   LucideIcon,
   BrainCircuit,
   ChevronLeft,
-  LifeBuoy, // <--- Icono agregado
+  LifeBuoy,
+  Globe, // <--- Icono para Web 1
 } from "lucide-react";
 
 interface NavItem {
@@ -35,11 +36,12 @@ const navigationItems: NavItem[] = [
   // { id: "wpp", name: "WhatsApp", icon: Bot },
   { id: "crm", name: "CRM", icon: Users },
   { id: "conversaciones", name: "Conversaciones", icon: MessageSquare },
+  { id: "web1", name: "Web 1", icon: Globe }, // <--- Nuevo item Web 1
   { id: "agenda", name: "Agenda", icon: Calendar },
-  { id: "asistencia", name: "Asistencia", icon: LifeBuoy }, // <--- Item agregado
+  { id: "asistencia", name: "Asistencia", icon: LifeBuoy },
   { id: "envios", name: "Envíos", icon: Truck },
   { id: "resultados", name: "Resultados", icon: BarChart3 },
-  // { id: "agente", name: "Agente IA", icon: BrainCircuit },
+  { id: "agente", name: "Agente IA", icon: BrainCircuit }, // <--- Descomentado
 ];
 
 export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageChange }) => {
@@ -217,8 +219,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
           >
             <Menu className="w-6 h-6" />
           </button>
-
-          {/* Espacio para breadcrumbs o título dinámico si quisieras agregarlo aquí */}
         </header>
 
         {/* Content */}
