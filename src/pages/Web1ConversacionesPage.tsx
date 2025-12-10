@@ -115,8 +115,8 @@ const N8nChatWidget = memo(() => {
           --chat--toggle--icon-color: var(--white);
           
           /* Dimensiones y Capas */
-          --chat--window--width: 100%;
-          --chat--window--height: 100%;
+          --chat--window--width: 10000px;
+          --chat--window--height: 10000px;
           --chat--border-radius: 16px;
           --chat--z-index: 9999; 
       }
