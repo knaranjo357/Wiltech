@@ -32,8 +32,8 @@ interface LayoutProps {
 
 // Configuración de items del menú
 const navigationItems: NavItem[] = [
+  { id: "wpp", name: "WhatsApp", icon: Bot },
   { id: "precios", name: "Precios", icon: DollarSign },
-  // { id: "wpp", name: "WhatsApp", icon: Bot },
   { id: "crm", name: "CRM", icon: Users },
   { id: "conversaciones", name: "Conversaciones", icon: MessageSquare },
   { id: "web1", name: "Web 1", icon: Globe }, // <--- Nuevo item Web 1

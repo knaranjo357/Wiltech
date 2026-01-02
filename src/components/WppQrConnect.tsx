@@ -1,43 +1,33 @@
 import React, { useEffect, useState } from "react";
 import { MapPin, RefreshCcw, CheckCircle2, QrCode } from "lucide-react";
 
-type Source = "Wiltech" | "WiltechBga";
+// Definimos los IDs de las 8 conexiones
+type WppSourceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 type WppQrConnectProps = {
-  /** Endpoint Bogotá (Wiltech) */
-  endpointWiltech?: string;
-  /** Endpoint Bucaramanga (WiltechBga) */
-  endpointWiltechBga?: string;
-  /** Sede por defecto al abrir el componente */
-  defaultSource?: Source;
+  /** Permite personalizar el nombre de cada número si se desea */
+  labels?: Record<WppSourceId, string>;
   /** Números a mostrar cuando el endpoint falle (conectado OK) */
-  connectedNumbers?: Partial<Record<Source, string>>;
+  connectedNumbers?: Partial<Record<WppSourceId, string>>;
+  /** Sede por defecto al abrir el componente */
+  defaultSource?: WppSourceId;
 };
 
 type ParsedStatus = { connected?: boolean; number?: string | null };
 
-const DEFAULT_ENDPOINTS: Record<Source, string> = {
-  Wiltech: "https://n8n.alliasoft.com/webhook/wiltech/wpp",
-  WiltechBga: "https://n8n.alliasoft.com/webhook/wiltech/wppBga",
-};
-
-const SOURCE_LABEL: Record<Source, string> = {
-  Wiltech: "Bogotá",
-  WiltechBga: "Bucaramanga",
-};
-
 export const WppQrConnect: React.FC<WppQrConnectProps> = ({
-  endpointWiltech = DEFAULT_ENDPOINTS.Wiltech,
-  endpointWiltechBga = DEFAULT_ENDPOINTS.WiltechBga,
-  defaultSource,
+  labels,
   connectedNumbers,
+  defaultSource = 1,
 }) => {
-  const [source, setSource] = useState<Source>(() => {
+  // Estado para la pestaña activa (1 al 8)
+  const [activeTab, setActiveTab] = useState<WppSourceId>(() => {
     try {
-      const saved = localStorage.getItem("wppqr:selectedSource") as Source | null;
-      if (saved === "Wiltech" || saved === "WiltechBga") return saved;
+      const saved = localStorage.getItem("wppqr:selectedSource");
+      const num = parseInt(saved || "");
+      if (num >= 1 && num <= 8) return num as WppSourceId;
     } catch {}
-    return defaultSource ?? "Wiltech";
+    return defaultSource;
   });
 
   const [imgSrc, setImgSrc] = useState<string | null>(null);
@@ -46,7 +36,8 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
   const [connectedNumber, setConnectedNumber] = useState<string | null>(null);
   const [errText, setErrText] = useState<string | null>(null);
 
-  const currentEndpoint = source === "Wiltech" ? endpointWiltech : endpointWiltechBga;
+  // Generar el endpoint dinámicamente basado en la pestaña activa
+  const currentEndpoint = `https://n8n.alliasoft.com/webhook/wiltech/wppconnect${activeTab}`;
 
   const parseBase64 = (payload: any): string | null => {
     const obj = Array.isArray(payload) ? payload[0] : payload;
@@ -61,26 +52,20 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
     const obj = Array.isArray(payload) ? payload[0] : payload;
     if (!obj || typeof obj !== "object") return null;
 
-    const connected =
+    const isConnected =
       obj.connected === true ||
       obj.status === "connected" ||
       obj.state === "connected";
 
     const numberCandidate =
-      obj.number ??
-      obj.phone ??
-      obj.whatsapp ??
-      obj.msisdn ??
-      obj.client ??
-      obj.session ??
-      null;
+      obj.number ?? obj.phone ?? obj.whatsapp ?? obj.msisdn ?? obj.client ?? obj.session ?? null;
 
     const number =
       typeof numberCandidate === "string" && numberCandidate.trim().length > 0
         ? String(numberCandidate)
         : null;
 
-    if (connected || number) return { connected, number };
+    if (isConnected || number) return { connected: isConnected, number };
     return null;
   };
 
@@ -93,175 +78,143 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
       setConnectedNumber(null);
 
       const url = new URL(currentEndpoint);
-      url.searchParams.set("_", String(Date.now())); // evitar caché
+      url.searchParams.set("_", String(Date.now()));
 
       const res = await fetch(url.toString(), { method: "GET", cache: "no-store" });
 
-      // Si el endpoint falla, tratamos como conectado OK
       if (!res.ok) {
-        const fallbackNumber =
-          (connectedNumbers && connectedNumbers[source]) || null;
-        setConnected(true);
-        setConnectedNumber(fallbackNumber);
-        setErrText(null);
+        handleFallback();
         return;
       }
 
-      // Intentamos JSON
       let data: any = null;
       try {
         data = await res.json();
       } catch {
-        // Si no es JSON válido, tratamos como conectado OK
-        const fallbackNumber =
-          (connectedNumbers && connectedNumbers[source]) || null;
-        setConnected(true);
-        setConnectedNumber(fallbackNumber);
-        setErrText(null);
+        handleFallback();
         return;
       }
 
-      // 1) ¿Trae imagen? => No está conectado (hay que escanear)
+      // 1) ¿Trae imagen?
       const src = parseBase64(data);
       if (src) {
         setImgSrc(src);
         setConnected(false);
-        setConnectedNumber(null);
         return;
       }
 
-      // 2) ¿Trae estado conectado/number?
+      // 2) ¿Trae estado?
       const status = parseStatus(data);
       if (status?.connected || status?.number) {
         setConnected(true);
-        setConnectedNumber(
-          status?.number ||
-            (connectedNumbers && connectedNumbers[source]) ||
-            null
-        );
+        setConnectedNumber(status?.number || (connectedNumbers && connectedNumbers[activeTab]) || null);
         return;
       }
 
-      // 3) Si no hay nada claro, asumimos conectado OK
-      setConnected(true);
-      setConnectedNumber(
-        (connectedNumbers && connectedNumbers[source]) || null
-      );
-    } catch (e: any) {
-      // Error de red/parseo => conectado OK con número de fallback (si lo hay)
-      const fallbackNumber =
-        (connectedNumbers && connectedNumbers[source]) || null;
-      setConnected(true);
-      setConnectedNumber(fallbackNumber);
-      setErrText(null);
+      handleFallback();
+    } catch (e) {
+      handleFallback();
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFallback = () => {
+    const fallbackNumber = (connectedNumbers && connectedNumbers[activeTab]) || null;
+    setConnected(true);
+    setConnectedNumber(fallbackNumber);
+    setErrText(null);
+  };
+
   useEffect(() => {
-    try {
-      localStorage.setItem("wppqr:selectedSource", source);
-    } catch {}
-    // cada vez que cambie la sede, recargamos
+    localStorage.setItem("wppqr:selectedSource", String(activeTab));
     fetchQR();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, currentEndpoint]);
+  }, [activeTab]);
+
+  const sourceName = labels?.[activeTab] || `WhatsApp ${activeTab}`;
 
   return (
-    <div className="bg-white/90 border border-gray-200 rounded-2xl shadow-xl p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <QrCode className="w-5 h-5 text-indigo-600" />
-          Conecta WhatsApp
-        </h2>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-sm">
-            <MapPin className="w-4 h-4" />
-            <span className="font-medium">Sede:</span>
-            <span className="font-semibold">{SOURCE_LABEL[source]}</span>
-          </span>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setSource("Wiltech")}
-              className={`px-3 py-1.5 rounded-lg text-sm border transition
-                ${
-                  source === "Wiltech"
-                    ? "bg-white border-blue-500 ring-2 ring-blue-200"
-                    : "bg-white border-gray-200 hover:bg-gray-50"
-                }`}
-            >
-              Bogotá
-            </button>
-            <button
-              onClick={() => setSource("WiltechBga")}
-              className={`px-3 py-1.5 rounded-lg text-sm border transition
-                ${
-                  source === "WiltechBga"
-                    ? "bg-white border-blue-500 ring-2 ring-blue-200"
-                    : "bg-white border-gray-200 hover:bg-gray-50"
-                }`}
-            >
-              Bucaramanga
-            </button>
-          </div>
-
+    <div className="bg-white border border-gray-200 rounded-2xl shadow-xl p-6 max-w-4xl mx-auto">
+      <div className="flex flex-col gap-5 mb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
+            <QrCode className="w-6 h-6 text-indigo-600" />
+            Central de Conexiones
+          </h2>
           <button
             onClick={fetchQR}
             disabled={loading}
-            className="px-3 py-2 rounded-lg text-sm border border-gray-200 bg-white hover:bg-gray-50 inline-flex items-center gap-2"
+            className="p-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
+            title="Refrescar estado"
           >
-            <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-            {loading ? "Actualizando…" : "Actualizar"}
+            <RefreshCcw className={`w-5 h-5 text-gray-600 ${loading ? "animate-spin" : ""}`} />
           </button>
+        </div>
+
+        {/* Tabs de los 8 números */}
+        <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
+          {([1, 2, 3, 4, 5, 6, 7, 8] as WppSourceId[]).map((id) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id)}
+              className={`flex-1 min-w-[100px] py-2 px-3 rounded-lg text-sm font-medium transition-all
+                ${
+                  activeTab === id
+                    ? "bg-white text-indigo-600 shadow-sm ring-1 ring-black/5"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
+                }`}
+            >
+              {labels?.[id] || `Línea ${id}`}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Estados */}
-      {errText && (
-        <div className="p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {errText}
+      <div className="bg-gray-50 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[400px] border border-dashed border-gray-200">
+        <div className="mb-4 flex items-center gap-2 px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold">
+          <MapPin className="w-4 h-4" />
+          {sourceName}
         </div>
-      )}
 
-      <div className="flex items-center justify-center py-4">
-        {/* 1) Si hay imagen => NO conectado (mostrar QR) */}
         {imgSrc ? (
-          <div className="flex flex-col items-center gap-3">
-            <img
-              src={imgSrc}
-              alt="QR de conexión WhatsApp"
-              className="w-[280px] h-[280px] md:w-[340px] md:h-[340px] object-contain rounded-xl border border-gray-100 shadow-md"
-            />
-            <p className="text-sm text-gray-600">
-              Escanea el QR para conectar <b>{SOURCE_LABEL[source]}</b>.
-            </p>
+          <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-300">
+            <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100">
+              <img
+                src={imgSrc}
+                alt="QR Code"
+                className="w-[280px] h-[280px] md:w-[320px] md:h-[320px] object-contain"
+              />
+            </div>
+            <div className="text-center">
+              <p className="text-gray-700 font-medium">Escanea para conectar esta línea</p>
+              <p className="text-xs text-gray-400 mt-1">El código se actualiza automáticamente</p>
+            </div>
           </div>
         ) : connected ? (
-          // 2) Conectado satisfactoriamente (por error del endpoint o respuesta de estado)
-          <div className="w-full max-w-lg p-4 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-800">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 mt-0.5" />
+          <div className="w-full max-w-md p-6 rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-900 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex flex-col items-center text-center gap-3">
+              <div className="bg-emerald-100 p-3 rounded-full">
+                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+              </div>
               <div>
-                <p className="font-semibold">
-                  {SOURCE_LABEL[source]} está conectado satisfactoriamente.
+                <h3 className="text-lg font-bold">Línea Conectada</h3>
+                <p className="text-emerald-700/80 text-sm mt-1">
+                  La conexión con <b>{sourceName}</b> está activa y funcionando.
                 </p>
-                <p className="text-sm mt-1">
-                  {connectedNumber
-                    ? <>Número: <span className="font-mono">{connectedNumber}</span></>
-                    : "La sesión está activa."}
-                </p>
+                {connectedNumber && (
+                  <div className="mt-4 px-3 py-1 bg-white/50 rounded-lg inline-block border border-emerald-200">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 mr-2">Número:</span>
+                    <span className="font-mono font-bold">{connectedNumber}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         ) : (
-          // 3) Cargando o sin QR disponible
-          <div className="flex items-center space-x-3 py-10">
-            <div className="w-8 h-8 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
-            <span className="text-gray-600 text-sm">
-              {loading ? "Cargando QR…" : "Sin QR disponible."}
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+            <span className="text-gray-500 font-medium">
+              {loading ? "Verificando conexión..." : "Esperando respuesta..."}
             </span>
           </div>
         )}
