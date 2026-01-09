@@ -3,11 +3,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, 
   ChevronRight, Search, CalendarDays, History, ArrowRightCircle,
-  Smartphone, MessageSquare, FileText, Clock, AlertCircle, User, Check
+  Smartphone, MessageSquare, FileText, Globe, AlertCircle, Check, User
 } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { Client } from '../types/client';
-import { getEtapaColor, getCategoriaColor, formatWhatsApp } from '../utils/clientHelpers';
+import { getEtapaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 
 /** ================== Configuración y Utils ================== */
@@ -16,7 +16,7 @@ const SOURCE_TO_SEDE: Record<string, string> = {
   WiltechBga: 'Bucaramanga',
 };
 
-// Esta función evita que valores nulos rompan el código
+// --- PREVENCIÓN DE CRASHES (Null Safety) ---
 const safeText = (v: unknown): string => {
   if (v === null || v === undefined) return '';
   const s = String(v).trim();
@@ -30,6 +30,7 @@ const parseAgendaDate = (raw?: string | null): Date | null => {
   const s = raw.trim();
   const iso = Date.parse(s);
   if (!Number.isNaN(iso)) return new Date(iso);
+  // Intentar parsear formato manual YYYY-MM-DD HH:mm:ss
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (m) {
     const [, y, mo, d, hh, mm, ss] = m;
@@ -58,10 +59,8 @@ const isFutureLocal = (d: Date | null) => {
 const getDisplayTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const getDisplayFullDate = (d: Date) => d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
 
-// Formato para fecha de mensajes (created)
 const formatMsgTime = (val?: string | number) => {
   if (!val) return '';
-  // Si es timestamp unix (número)
   const d = new Date(typeof val === 'number' && val < 10000000000 ? val * 1000 : val);
   if (Number.isNaN(d.getTime())) return '';
   
@@ -147,12 +146,12 @@ export const AgendaPage: React.FC = () => {
   // Filtros
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [customDate, setCustomDate] = useState('');
-  const [searchTerm, setSearchTerm] = useState(''); // Busca nombre, cel, modelo
+  const [searchTerm, setSearchTerm] = useState(''); 
   const [selectedSede, setSelectedSede] = useState<string | 'Todas' | ''>('');
   
   // Estado UI
   const [viewClient, setViewClient] = useState<Client | null>(null);
-  const [savingRow, setSavingRow] = useState<number | null>(null); // Para loading local
+  const [savingRow, setSavingRow] = useState<number | null>(null);
   const [showSedeModal, setShowSedeModal] = useState<boolean>(false);
   const initRef = useRef(false);
 
@@ -202,14 +201,13 @@ export const AgendaPage: React.FC = () => {
     initRef.current = true;
   }, [sedes, clients, loading]);
 
-  /** --- Actualización (API + Optimista) --- */
+  /** --- Actualización --- */
   const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
     if (!payload.row_number) return false;
     setSavingRow(payload.row_number);
     const prevClients = clients;
     const prevView = viewClient;
 
-    // Optimista UI
     setClients(prev => prev.map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c));
     if (viewClient && viewClient.row_number === payload.row_number) {
       setViewClient(v => ({ ...v, ...payload } as Client));
@@ -219,21 +217,18 @@ export const AgendaPage: React.FC = () => {
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        // Fallback si el servicio es diferente
         await fetch('/api/clients/update', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify(payload) 
         });
       }
-      // Disparar evento para sincronizar otros componentes
       window.dispatchEvent(new CustomEvent('client:updated', { detail: payload }));
       return true;
     } catch (e) {
-      // Rollback
       setClients(prevClients);
       setViewClient(prevView);
-      alert('Error al guardar cambios. Reintentando...');
+      alert('Error al guardar cambios.');
       fetchClients();
       return false;
     } finally {
@@ -241,7 +236,6 @@ export const AgendaPage: React.FC = () => {
     }
   };
 
-  // Handler para el botón de Asistencia en la tarjeta
   const handleToggleAsistencia = async (client: Client, e: React.MouseEvent) => {
     e.stopPropagation();
     const current = (client as any).asistio_agenda === true;
@@ -252,13 +246,13 @@ export const AgendaPage: React.FC = () => {
   const filteredClients = useMemo(() => {
     let filtered = [...clients];
 
-    // 1. Sede
+    // Sede
     if (selectedSede && selectedSede !== 'Todas') {
       const target = normalize(String(selectedSede));
       filtered = filtered.filter((c) => normalize(getClientSede(c)) === target);
     }
 
-    // 2. Fecha
+    // Fecha
     switch (dateFilter) {
       case 'today': filtered = filtered.filter(c => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))); break;
       case 'tomorrow': filtered = filtered.filter(c => isTomorrowLocal(parseAgendaDate((c as any).fecha_agenda))); break;
@@ -276,23 +270,20 @@ export const AgendaPage: React.FC = () => {
         break;
     }
 
-    // 3. Búsqueda (Nombre, Whatsapp, Modelo)
+    // Búsqueda
     const q = normalize(searchTerm);
     if (q) {
       filtered = filtered.filter(c => 
         normalize(safeText(c.nombre)).includes(q) || 
         normalize(safeText(c.whatsapp)).includes(q) || 
+        normalize(safeText((c as any).asignado_a)).includes(q) || 
         normalize(safeText(c.modelo)).includes(q)
       );
     }
 
-    // Ordenar por fecha ASC
     filtered.sort((a, b) => (parseAgendaDate((a as any).fecha_agenda)?.getTime() ?? 0) - (parseAgendaDate((b as any).fecha_agenda)?.getTime() ?? 0));
     
-    // Si es Historial, orden DESC (más reciente primero)
-    if (dateFilter === 'history') {
-      filtered.reverse();
-    }
+    if (dateFilter === 'history') filtered.reverse();
 
     return filtered;
   }, [clients, selectedSede, dateFilter, customDate, searchTerm]);
@@ -305,7 +296,32 @@ export const AgendaPage: React.FC = () => {
     future: clients.filter((c) => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))).length,
   }), [clients]);
 
-  /** --- UI Helpers --- */
+  // --- Manejo de Apertura de Cliente (WEB 1 FIX) ---
+  const handleOpenClient = (client: Client) => {
+    // Si es Web1, el campo whatsapp puede venir nulo.
+    // Usamos 'asignado_a' como el identificador para que el chat cargue.
+    const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
+    
+    if (isWeb1) {
+      const webId = safeText((client as any).asignado_a) || safeText(client.whatsapp) || `row_${client.row_number}`;
+      setViewClient({
+        ...client,
+        whatsapp: webId // REEMPLAZO CRÍTICO: Evita que sea null al abrir la modal
+      });
+    } else {
+      setViewClient(client);
+    }
+  };
+
+  const handleWhatsAppClick = (val: string, e: React.MouseEvent, isWeb1: boolean) => {
+    e.stopPropagation();
+    if (isWeb1) {
+        alert("Este es un cliente Web 1 (Chat interno). Usa la tarjeta para ver la conversación.");
+        return;
+    }
+    window.open(`https://wa.me/${safeText(val).replace('@s.whatsapp.net', '')}`, '_blank');
+  };
+
   const FilterTab = ({ id, label, count, icon: Icon }: any) => (
     <button
       onClick={() => setDateFilter(id)}
@@ -322,11 +338,6 @@ export const AgendaPage: React.FC = () => {
     </button>
   );
 
-  const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    window.open(`https://wa.me/${safeText(whatsapp).replace('@s.whatsapp.net', '')}`, '_blank');
-  };
-
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 sm:p-6 space-y-6 w-full">
       <SedeModal
@@ -336,13 +347,11 @@ export const AgendaPage: React.FC = () => {
         onSelect={(s) => { setSelectedSede(s); setShowSedeModal(false); }}
       />
 
-      {/* === HEADER STICKY === */}
+      {/* HEADER */}
       <div className="sticky top-2 z-30 w-full">
         <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200/80 p-3 md:p-4">
-          {/* Fila Superior: Sede - Búsqueda - Recargar */}
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
             
-            {/* Selector Sede */}
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowSedeModal(true)}
@@ -359,7 +368,6 @@ export const AgendaPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Barra de Búsqueda (Ancha) */}
             <div className="flex-1 max-w-2xl mx-auto w-full">
               <div className="relative group w-full">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -379,7 +387,6 @@ export const AgendaPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Botón Recargar */}
             <button
               onClick={fetchClients}
               disabled={loading}
@@ -390,7 +397,6 @@ export const AgendaPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Fila Inferior: Filtros Fecha */}
           <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-gray-100 pt-3">
             <div className="flex overflow-x-auto pb-1 w-full sm:w-auto gap-2 no-scrollbar">
               <div className="flex bg-gray-100/60 p-1 rounded-xl gap-1">
@@ -414,7 +420,7 @@ export const AgendaPage: React.FC = () => {
         </div>
       </div>
 
-      {/* === CONTENT (FULL WIDTH CARDS) === */}
+      {/* CONTENT */}
       <div className="w-full space-y-4 pb-10">
         {loading ? (
           <div className="space-y-4 animate-pulse max-w-6xl mx-auto">
@@ -428,12 +434,20 @@ export const AgendaPage: React.FC = () => {
             const attended = (client as any).asistio_agenda === true;
             const isSaving = savingRow === client.row_number;
             const lastMsg = (client as any).last_msg;
-            const lastMsgDate = (client as any).created; // timestamp o string
+            const lastMsgDate = (client as any).created; 
+
+            // Detectar Web1
+            const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
+            const web1Id = isWeb1 ? (safeText((client as any).asignado_a) || 'Visitante') : '';
+
+            // Valor a mostrar en botón de contacto
+            const contactDisplay = isWeb1 ? web1Id : formatWhatsApp(safeText(client.whatsapp));
+            const contactValue = isWeb1 ? web1Id : safeText(client.whatsapp);
 
             return (
               <div
                 key={client.row_number}
-                onClick={() => setViewClient(client)}
+                onClick={() => handleOpenClient(client)}
                 className={`group w-full bg-white rounded-2xl border transition-all duration-200 hover:shadow-lg overflow-hidden cursor-pointer relative
                   ${attended 
                     ? 'border-emerald-200/80 ring-1 ring-emerald-100' 
@@ -441,13 +455,12 @@ export const AgendaPage: React.FC = () => {
                   }
                 `}
               >
-                {/* Diseño Split: Izquierda (Info) - Derecha (Contexto) */}
                 <div className="flex flex-col lg:flex-row items-stretch h-full">
                   
-                  {/* === SECCIÓN IZQUIERDA (Operativa - 70%) === */}
+                  {/* LEFT */}
                   <div className="flex-1 p-5 flex flex-col sm:flex-row gap-5 items-start sm:items-center">
                     
-                    {/* Columna Hora + Estado */}
+                    {/* Time Column */}
                     <div className="flex flex-row sm:flex-col items-center sm:items-start gap-4 sm:gap-1 min-w-[100px]">
                       <div className={`text-center sm:text-left p-3 sm:p-0 rounded-xl sm:rounded-none sm:bg-transparent ${attended ? 'bg-emerald-50' : 'bg-gray-50'}`}>
                         <span className={`block text-3xl sm:text-4xl font-bold tracking-tight leading-none ${attended ? 'text-emerald-600' : 'text-gray-900'}`}>
@@ -458,7 +471,6 @@ export const AgendaPage: React.FC = () => {
                         </span>
                       </div>
                       
-                      {/* Botón Asistencia (Móvil: al lado de la hora, Desktop: abajo) */}
                       <div className="sm:mt-3">
                          <button
                            onClick={(e) => handleToggleAsistencia(client, e)}
@@ -475,7 +487,7 @@ export const AgendaPage: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Info Cliente Principal */}
+                    {/* Client Info */}
                     <div className="flex-1 min-w-0 border-l border-gray-100 pl-0 sm:pl-5 w-full">
                       <div className="flex items-start justify-between">
                         <div>
@@ -491,6 +503,11 @@ export const AgendaPage: React.FC = () => {
                                <MapPin className="w-3.5 h-3.5 text-gray-400" />
                                {getClientSede(client)}
                              </span>
+                             {isWeb1 && (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100">
+                                  <Globe className="w-3 h-3" /> WEB 1
+                                </span>
+                             )}
                            </div>
                         </div>
                         <div className="hidden sm:block">
@@ -502,12 +519,10 @@ export const AgendaPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* === SECCIÓN DERECHA (Contexto/Mensajes - 30%) === */}
+                  {/* RIGHT (Messages) */}
                   <div className={`w-full lg:w-[35%] border-t lg:border-t-0 lg:border-l border-gray-100 p-4 flex flex-col justify-between text-sm transition-colors ${attended ? 'bg-emerald-50/30' : 'bg-gray-50/50'}`}>
                     
-                    {/* Mensaje / Notas */}
                     <div className="space-y-3">
-                      {/* Último mensaje */}
                       {lastMsg && (
                         <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm relative">
                            <div className="flex items-center justify-between mb-1">
@@ -522,7 +537,6 @@ export const AgendaPage: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Notas (si no hay mensaje, o si hay notas importantes) */}
                       {(safeText(client.intencion) || safeText(client.notas)) && (
                         <div className="flex items-start gap-2 text-gray-500 px-1">
                            <FileText className="w-4 h-4 shrink-0 mt-0.5 text-gray-400" />
@@ -532,7 +546,6 @@ export const AgendaPage: React.FC = () => {
                         </div>
                       )}
                       
-                      {/* Fallback vacío */}
                       {!lastMsg && !safeText(client.intencion) && !safeText(client.notas) && (
                         <div className="h-full flex items-center justify-center text-gray-400 text-xs italic py-4">
                           Sin mensajes recientes ni notas
@@ -540,15 +553,17 @@ export const AgendaPage: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Footer Derecha: WhatsApp Button */}
                     <div className="mt-3 flex justify-end pt-3 border-t border-gray-200/50">
                       <button
-                        onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp as any), e)}
-                        className="inline-flex items-center gap-2 text-xs font-bold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-lg transition-colors border border-green-100"
+                        onClick={(e) => handleWhatsAppClick(contactValue, e, isWeb1)}
+                        className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-2 rounded-lg transition-colors border ${
+                            isWeb1 
+                            ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100 cursor-default'
+                            : 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100 hover:text-green-700'
+                        }`}
                       >
-                        <Phone className="w-3.5 h-3.5" />
-                        {/* AQUI ESTABA EL ERROR: Se añadió safeText() */}
-                        {formatWhatsApp(safeText(client.whatsapp as any))}
+                        {isWeb1 ? <Globe className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+                        {contactDisplay}
                       </button>
                     </div>
                   </div>
@@ -558,7 +573,6 @@ export const AgendaPage: React.FC = () => {
             );
           })
         ) : (
-          /* EMPTY STATE */
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200 text-center max-w-4xl mx-auto mt-8">
             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 shadow-inner">
               <Calendar className="w-10 h-10 text-gray-300" />

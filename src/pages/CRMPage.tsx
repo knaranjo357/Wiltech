@@ -1,8 +1,9 @@
+// src/pages/CRMPage.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { 
   ArrowUpDown, Phone, Calendar, Edit2, Save, X, Bot, Eye, 
   Search, Filter, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, 
-  CheckCircle2, Users, AlertCircle
+  CheckCircle2, Users, AlertCircle, Globe, Smartphone
 } from 'lucide-react';
 
 // Importaciones de servicios, tipos y componentes externos
@@ -14,18 +15,26 @@ import { ClientModal } from '../components/ClientModal';
 import { NuevoCliente } from '../components/NuevoCliente';
 
 // ============================================================================
-// HELPERS & UTILS (Lógica de ListView)
+// HELPERS & UTILS (Lógica de ListView Blindada)
 // ============================================================================
 
-const labelize = (v?: string) => (v ?? '').replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
-const asText = (v: unknown) => String(v ?? '').toLowerCase();
-const asStr  = (v: unknown) => String(v ?? '');
-const normalize = (s: string) => s.toLowerCase().replace(/[_\-\s]+/g, ' ').trim();
+// Transforma null/undefined en string vacío seguro
+const safeText = (v: unknown): string => {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  return (s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') ? '' : s;
+};
 
-const sourceLabel = (s?: string) =>
-  s === 'Wiltech' ? 'Bogotá' :
-  s === 'WiltechBga' ? 'Bucaramanga' :
-  labelize(s || '');
+const labelize = (v?: string) => safeText(v).replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+const normalize = (s: string) => safeText(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_\-\s]+/g, ' ').trim();
+
+const sourceLabel = (s?: string) => {
+  const safe = safeText(s);
+  if (safe === 'Wiltech') return 'Bogotá';
+  if (safe === 'WiltechBga') return 'Bucaramanga';
+  if (safe.toLowerCase() === 'web1') return 'Web 1';
+  return labelize(safe);
+};
 
 const getEtapaColorSafe = (v: string) => getEtapaColor(v as EstadoEtapa) || 'bg-gray-100 text-gray-700 border border-gray-200';
 const getCategoriaColorSafe = (v: string) => getCategoriaColor(v as CategoriaContacto) || 'bg-gray-100 text-gray-700 border border-gray-200';
@@ -33,9 +42,8 @@ const getCategoriaColorSafe = (v: string) => getCategoriaColor(v as CategoriaCon
 function collectUnique<T extends keyof Client>(rows: Client[], key: T): string[] {
   const s = new Set<string>();
   for (const c of rows) {
-    // @ts-ignore
-    const raw = (c as any)[key];
-    const str = raw === null || raw === undefined ? '' : String(raw).trim();
+    const val = (c as any)[key];
+    const str = safeText(val); // Usamos safeText para evitar nulos
     if (str) s.add(str);
   }
   return Array.from(s).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
@@ -68,12 +76,7 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const [page, setPage] = useState<number>(1);
   const pageSizeOptions = [10, 25, 50, 100, 200];
 
-  const goToPage = (n: number) => {
-    // Calcular totalPages basado en el filtrado actual (resultsCount)
-    // Nota: resultsCount se define más abajo, pero React state update es asíncrono.
-    // Usamos el callback setPage para asegurar límites en el render.
-    setPage(n);
-  };
+  const goToPage = (n: number) => setPage(n);
 
   // Column visibility
   const allColumns = clients.length > 0 ? Object.keys(clients[0]).filter(k => k !== 'row_number') : [];
@@ -84,7 +87,7 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
 
   useEffect(() => {
     if (allColumns.length > 0 && visibleColumns.length === 0) {
-      const defaults = allColumns.slice(0, 8);
+      const defaults = allColumns.slice(0, 8); // Mostrar las primeras 8 por defecto
       setVisibleColumns(defaults);
       localStorage.setItem('crm-visible-columns', JSON.stringify(defaults));
     }
@@ -116,7 +119,7 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
 
   useEffect(() => {
-    const id = setTimeout(() => setSearchTerm(searchInput.trim()), 220);
+    const id = setTimeout(() => setSearchTerm(normalize(searchInput)), 220);
     return () => clearTimeout(id);
   }, [searchInput]);
 
@@ -130,22 +133,27 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
     setSelectedEtapas([]); setSelectedCategorias([]); setSelectedCiudades([]); setSelectedSources([]);
   };
 
-  /** ===== Logic: Filter & Sort ===== */
+  /** ===== Logic: Filter & Sort (BLINDADO) ===== */
   const filteredAndSorted = useMemo(() => {
     let data = [...clients];
 
+    // 1. Busqueda General
     if (searchTerm) {
-      const q = searchTerm.toLowerCase();
       data = data.filter((c) => {
-        const nombre   = asText(c.nombre);
-        const modelo   = asText((c as any).modelo);
-        const whatsapp = asStr(c.whatsapp);
-        const ciudad   = asText(c.ciudad);
-        const notas    = asText((c as any).notas);
-        return nombre.includes(q) || modelo.includes(q) || whatsapp.includes(searchTerm) || ciudad.includes(q) || notas.includes(q);
+        // Concatenamos todo en un string seguro para buscar
+        const fullText = normalize(
+          safeText(c.nombre) + ' ' + 
+          safeText(c.modelo) + ' ' + 
+          safeText(c.whatsapp) + ' ' + 
+          safeText(c.ciudad) + ' ' + 
+          safeText((c as any).notas) + ' ' +
+          safeText((c as any).asignado_a) // Importante para web1
+        );
+        return fullText.includes(searchTerm);
       });
     }
 
+    // 2. Filtros Específicos
     if (selectedEtapas.length > 0) {
       const setN = new Set(selectedEtapas.map(normalize));
       data = data.filter(c => setN.has(normalize(String((c as any).estado_etapa ?? ''))));
@@ -163,25 +171,30 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
       data = data.filter(c => setN.has(normalize(String((c as any).source ?? ''))));
     }
 
+    // 3. Ordenamiento Seguro
     data.sort((a, b) => {
       // @ts-ignore
-      let aValue: any = (a as any)[sortField];
+      const rawA = (a as any)[sortField];
       // @ts-ignore
-      let bValue: any = (b as any)[sortField];
+      const rawB = (b as any)[sortField];
 
-      if (sortField === 'fecha_agenda') {
-        const aTime = a.fecha_agenda ? new Date(a.fecha_agenda as any).getTime() : 0;
-        const bTime = b.fecha_agenda ? new Date(b.fecha_agenda as any).getTime() : 0;
-        return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
+      // Ordenar fechas
+      if (sortField === 'fecha_agenda' || sortField === 'created' || sortField === 'last_msg') {
+        const timeA = rawA ? new Date(rawA).getTime() : 0;
+        const timeB = rawB ? new Date(rawB).getTime() : 0;
+        // Fechas nulas al final si es descendente, al principio si es ascendente
+        if (!timeA && !timeB) return 0;
+        if (!timeA) return sortOrder === 'asc' ? -1 : 1;
+        if (!timeB) return sortOrder === 'asc' ? 1 : -1;
+        return sortOrder === 'asc' ? timeA - timeB : timeB - timeA;
       }
 
-      if (aValue === null || aValue === undefined) aValue = '';
-      if (bValue === null || bValue === undefined) bValue = '';
-      if (typeof aValue === 'string') aValue = aValue.toLowerCase();
-      if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+      // Ordenar textos (evita crash por null.toLowerCase)
+      const strA = safeText(rawA).toLowerCase();
+      const strB = safeText(rawB).toLowerCase();
 
-      if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
-      if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
+      if (strA > strB) return sortOrder === 'asc' ? 1 : -1;
+      if (strA < strB) return sortOrder === 'asc' ? -1 : 1;
       return 0;
     });
 
@@ -191,10 +204,8 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
   const resultsCount = filteredAndSorted.length;
   const totalPages = Math.max(1, Math.ceil(resultsCount / pageSize));
 
-  // Reset page when filters change
   useEffect(() => setPage(1), [searchTerm, selectedEtapas, selectedCategorias, selectedCiudades, selectedSources, sortField, sortOrder, clients.length]);
 
-  // Ensure page is valid
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [resultsCount, pageSize, page, totalPages]);
@@ -242,16 +253,27 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
     setEditData({});
   };
 
-  const handleWhatsAppClick = (whatsapp: string, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const phoneNumber = asStr(whatsapp).replace('@s.whatsapp.net', '');
-    const whatsappUrl = `https://wa.me/${phoneNumber}`;
-    window.open(whatsappUrl, '_blank');
-  };
-
   const handleRowClick = (client: Client) => {
     if (editingId === client.row_number) return;
-    setViewClient(client);
+    // Fix para Web1 en Modal
+    const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
+    if (isWeb1) {
+       setViewClient({
+         ...client,
+         whatsapp: safeText((client as any).asignado_a) || safeText(client.whatsapp) || `invitado_${client.row_number}`
+       });
+    } else {
+       setViewClient(client);
+    }
+  };
+
+  const handleWhatsAppClick = (val: string, e: React.MouseEvent, isWeb1: boolean) => {
+    e.stopPropagation();
+    if (isWeb1) {
+        alert("Cliente Web 1 (Chat). Abre la tarjeta para ver la conversación.");
+        return;
+    }
+    window.open(`https://wa.me/${safeText(val).replace('@s.whatsapp.net', '')}`, '_blank');
   };
 
   const handleBotToggle = async (client: Client, e?: React.MouseEvent) => {
@@ -417,7 +439,7 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-gray-50/80 backdrop-blur sticky top-0 z-20">
               <tr>
-                <th className="w-12 px-3 py-3"></th> {/* Actions Group */}
+                <th className="w-12 px-3 py-3 bg-gray-50/80"></th> {/* Actions Group */}
                 {visibleColumns.map((field) => (
                   <th
                     key={field}
@@ -445,17 +467,20 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
                   const isEditing = editingId === client.row_number;
                   const currentClient = isEditing ? { ...client, ...editData } : client;
                   const botActive = currentClient.consentimiento_contacto === true || currentClient.consentimiento_contacto === '' || currentClient.consentimiento_contacto === null;
+                  
+                  // Detectar Web1
+                  const isWeb1 = safeText((currentClient as any).source).toLowerCase() === 'web1';
 
                   return (
                     <tr
                       key={client.row_number}
                       onClick={() => handleRowClick(client)}
-                      className={`group transition-colors duration-150
+                      className={`group transition-colors duration-150 cursor-pointer
                         ${isEditing ? 'bg-blue-50/40' : 'hover:bg-blue-50/30'}
                       `}
                     >
                       {/* Action Buttons (Compact) */}
-                      <td className="px-3 py-3 whitespace-nowrap sticky left-0 bg-inherit z-10">
+                      <td className="px-3 py-3 whitespace-nowrap sticky left-0 z-10 bg-white group-hover:bg-blue-50/30 transition-colors">
                         <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                           {isEditing ? (
                             <>
@@ -465,7 +490,7 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
                           ) : (
                             <div className="flex items-center gap-1">
                               <button onClick={(e) => handleEdit(client, e)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition" title="Editar"><Edit2 size={14}/></button>
-                              <button onClick={(e) => {e.stopPropagation(); setViewClient(client)}} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition" title="Ver"><Eye size={14}/></button>
+                              <button onClick={(e) => {e.stopPropagation(); handleRowClick(client); }} className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-md transition" title="Ver"><Eye size={14}/></button>
                               <button 
                                 onClick={(e) => handleBotToggle(client, e)} 
                                 className={`p-1.5 rounded-md transition ${botActive ? 'text-green-600 hover:bg-green-50' : 'text-gray-300 hover:bg-gray-100'}`}
@@ -539,15 +564,24 @@ const ListView: React.FC<ListViewProps> = ({ clients, onUpdate }) => {
                                   {formatDate((currentClient as any)[field] as string)}
                                 </div>
                               ) : field === 'whatsapp' ? (
-                                <button onClick={(e) => handleWhatsAppClick((currentClient as any)[field] as string, e)} className="flex items-center text-gray-700 hover:text-green-600 transition-colors">
-                                  <Phone size={13} className="mr-1.5 text-gray-400" />
-                                  {formatWhatsApp((currentClient as any)[field] as string)}
+                                <button 
+                                    onClick={(e) => handleWhatsAppClick(safeText((currentClient as any)[field]), e, isWeb1)} 
+                                    className={`flex items-center transition-colors ${isWeb1 ? 'text-blue-600 hover:text-blue-800' : 'text-gray-700 hover:text-green-600'}`}
+                                >
+                                  {isWeb1 ? <Globe size={13} className="mr-1.5" /> : <Phone size={13} className="mr-1.5 text-gray-400" />}
+                                  {isWeb1 
+                                    ? ((currentClient as any).asignado_a || 'Chat Web') 
+                                    : formatWhatsApp(safeText((currentClient as any)[field]))
+                                  }
                                 </button>
                               ) : field === 'source' ? (
-                                <span>{sourceLabel((currentClient as any)[field]) || '-'}</span>
+                                <span className="flex items-center gap-1.5">
+                                    {isWeb1 && <Globe size={12} className="text-blue-500"/>}
+                                    {sourceLabel((currentClient as any)[field]) || '-'}
+                                </span>
                               ) : (
-                                <span title={(currentClient as any)[field]?.toString()}>
-                                  {(currentClient as any)[field]?.toString() || <span className="text-gray-300">-</span>}
+                                <span title={safeText((currentClient as any)[field])}>
+                                  {safeText((currentClient as any)[field]) || <span className="text-gray-300">-</span>}
                                 </span>
                               )}
                             </div>
