@@ -16,6 +16,7 @@ const SOURCE_TO_SEDE: Record<string, string> = {
   WiltechBga: 'Bucaramanga',
 };
 
+// Esta función evita que valores nulos rompan el código
 const safeText = (v: unknown): string => {
   if (v === null || v === undefined) return '';
   const s = String(v).trim();
@@ -542,11 +543,12 @@ export const AgendaPage: React.FC = () => {
                     {/* Footer Derecha: WhatsApp Button */}
                     <div className="mt-3 flex justify-end pt-3 border-t border-gray-200/50">
                       <button
-                        onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}
+                        onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp as any), e)}
                         className="inline-flex items-center gap-2 text-xs font-bold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-lg transition-colors border border-green-100"
                       >
                         <Phone className="w-3.5 h-3.5" />
-                        {formatWhatsApp(client.whatsapp as any)}
+                        {/* AQUI ESTABA EL ERROR: Se añadió safeText() */}
+                        {formatWhatsApp(safeText(client.whatsapp as any))}
                       </button>
                     </div>
                   </div>
