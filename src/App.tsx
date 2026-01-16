@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
 import { Layout } from "./components/Layout";
+
+// Importación de Páginas
 import { PreciosPage } from "./pages/PreciosPage";
 import { CRMPage } from "./pages/CRMPage";
 import { AgendaPage } from "./pages/AgendaPage";
@@ -10,144 +12,189 @@ import { Resultados } from "./pages/Resultados";
 import { WppPage } from "./pages/WppPage";
 import { AgentePage } from "./pages/AgentePage";
 import ConversacionesPage from "./pages/ConversacionesPage";
-import Web1ConversacionesPage from "./pages/Web1ConversacionesPage"; // <--- Importado
+import Web1ConversacionesPage from "./pages/Web1ConversacionesPage";
 import { AsistenciaPage } from "./pages/AsistenciaPage";
+import { UsuariosPage } from "./pages/UsuariosPage";
 
+// 1. DEFINICIÓN DE CLAVES (Deben coincidir con los roles del Backend)
 type PageKey = 
   | "precios" 
-  | "wpp" 
+  | "whatsapp" // IMPORTANTE: Coincide con el rol del backend
   | "crm" 
   | "agenda" 
   | "envios" 
   | "resultados" 
   | "agente" 
   | "conversaciones"
-  | "web1" // <--- Agregado
-  | "asistencia";
+  | "web1" 
+  | "asistencia"
+  | "usuarios";
 
 function App() {
-  const { loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated } = useAuth();
 
-  // Mapeos ruta <-> página
+  // 2. MAPEO RUTA -> CLAVE INTERNA
   const pathToPage = useMemo<Record<string, PageKey>>(
     () => ({
       "/precios": "precios",
-      "/wpp": "wpp",
+      "/wpp": "whatsapp", // URL /wpp carga el módulo 'whatsapp'
       "/crm": "crm",
       "/agenda": "agenda",
       "/envios": "envios",
       "/resultados": "resultados",
       "/agente": "agente",
       "/conversaciones": "conversaciones",
-      "/web1": "web1", // <--- Ruta mapeada
+      "/web1": "web1",
       "/asistencia": "asistencia",
+      "/usuarios": "usuarios",
     }),
     []
   );
 
+  // 3. MAPEO CLAVE INTERNA -> RUTA
   const pageToPath = useMemo<Record<PageKey, string>>(
     () => ({
       precios: "/precios",
-      wpp: "/wpp",
+      whatsapp: "/wpp",
       crm: "/crm",
       agenda: "/agenda",
       envios: "/envios",
       resultados: "/resultados",
       agente: "/agente",
       conversaciones: "/conversaciones",
-      web1: "/web1", // <--- Path mapeado
+      web1: "/web1",
       asistencia: "/asistencia",
+      usuarios: "/usuarios",
     }),
     []
   );
 
-  const DEFAULT_PAGE: PageKey = "precios";
+  // 4. LÓGICA DE PÁGINA INICIAL SEGÚN ROLES
+  const getFirstAllowedPage = (): PageKey => {
+    if (!user || !user.role) return "precios"; // Fallback genérico si no hay user
+    
+    const roles = user.role.split(',').map(r => r.trim().toLowerCase());
+    
+    // Si es admin, su default puede ser Agenda (o lo que prefieras)
+    if (roles.includes('admin')) return "agenda";
 
-  // Página inicial según URL
-  const initialPage: PageKey = useMemo(() => {
+    // Si no es admin, buscamos el primer rol que coincida con una página válida
+    const validRole = roles.find(r => r in pageToPath) as PageKey | undefined;
+    
+    // Retornamos el primer rol válido encontrado, o 'precios' como último recurso
+    return validRole || "precios";
+  };
+
+  // Inicialización del estado
+  const [currentPage, setCurrentPage] = useState<PageKey>(() => {
     const path = window.location.pathname;
+    // Si la URL es válida, intentamos usarla, si no, calculamos dinámicamente
     if (path in pathToPage) return pathToPage[path];
-    return DEFAULT_PAGE;
-  }, [pathToPage]);
+    return "agenda"; // Valor temporal, el useEffect lo corregirá inmediatamente
+  });
 
-  const [currentPage, setCurrentPage] = useState<PageKey>(initialPage);
-
-  // Manejar navegación con botón atrás/adelante
+  // Manejar navegación del navegador (atrás/adelante)
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname;
       if (path === "/login") return;
-      const page = pathToPage[path] ?? DEFAULT_PAGE;
-      setCurrentPage(page);
+      if (path in pathToPage) {
+        setCurrentPage(pathToPage[path]);
+      }
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [pathToPage]);
 
-  // Guard de autenticación
+  // === GUARD DE SEGURIDAD Y REDIRECCIÓN ===
   useEffect(() => {
     if (loading) return;
+
     const path = window.location.pathname;
 
+    // A. NO AUTENTICADO
     if (!isAuthenticated) {
       if (path !== "/login") {
-        window.history.pushState(null, "", "/login");
+        window.history.replaceState(null, "", "/login");
       }
       return;
     }
 
-    if (isAuthenticated && path === "/login") {
-      const target = pageToPath[currentPage] ?? pageToPath[DEFAULT_PAGE];
-      window.history.pushState(null, "", target);
+    // B. AUTENTICADO
+    if (isAuthenticated) {
+      // 1. Si está en login, sacarlo de ahí
+      if (path === "/login") {
+        const targetPage = getFirstAllowedPage();
+        setCurrentPage(targetPage);
+        window.history.replaceState(null, "", pageToPath[targetPage]);
+        return;
+      }
+
+      // 2. Verificar Permisos
+      if (user?.role) {
+        const userRoles = user.role.split(',').map(r => r.trim().toLowerCase());
+        const pageKeyToCheck = pathToPage[path] || currentPage;
+
+        const isAdmin = userRoles.includes('admin');
+        const hasSpecificRole = userRoles.includes(pageKeyToCheck);
+
+        if (!isAdmin && !hasSpecificRole) {
+          console.warn(`Acceso denegado a: ${pageKeyToCheck}. Redirigiendo...`);
+          
+          // Encontrar ruta segura
+          const safePage = getFirstAllowedPage();
+          
+          setCurrentPage(safePage);
+          window.history.replaceState(null, "", pageToPath[safePage]);
+        } 
+        // Caso especial: Si la URL no coincide con el estado actual (sincronización inicial)
+        else if (path in pathToPage && pathToPage[path] !== currentPage) {
+             setCurrentPage(pathToPage[path]);
+        }
+      }
     }
-  }, [loading, isAuthenticated, currentPage, pageToPath]);
+  }, [loading, isAuthenticated, user, pathToPage, pageToPath, currentPage]);
 
   const handlePageChange = (page: string) => {
-    const p = (page as PageKey) ?? DEFAULT_PAGE;
-    setCurrentPage(p);
-    const target = pageToPath[p] ?? pageToPath[DEFAULT_PAGE];
-    window.history.pushState(null, "", target);
+    const p = page as PageKey;
+    if (pageToPath[p]) {
+      setCurrentPage(p);
+      window.history.pushState(null, "", pageToPath[p]);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
-          <span className="text-gray-600">Cargando...</span>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex h-screen items-center justify-center">Cargando...</div>;
+  if (!isAuthenticated) return <LoginForm />;
 
-  if (!isAuthenticated) {
-    return <LoginForm />;
-  }
-
+  // 5. RENDERIZADO SEGURO
   const renderPage = () => {
+    // Verificación extra antes de renderizar (Doble check de seguridad)
+    if (user?.role) {
+      const userRoles = user.role.split(',').map(r => r.trim().toLowerCase());
+      const isAdmin = userRoles.includes('admin');
+      
+      // Si no es admin y no tiene el rol de la página actual, NO renderizar nada (o un error)
+      // Esto evita que se vea la Agenda por milisegundos
+      if (!isAdmin && !userRoles.includes(currentPage)) {
+        return <div className="flex h-full items-center justify-center">Verificando permisos...</div>;
+      }
+    }
+
     switch (currentPage) {
-      case "precios":
-        return <PreciosPage />;
-      case "wpp":
-        return <WppPage />;
-      case "crm":
-        return <CRMPage />;
-      case "agenda":
-        return <AgendaPage />;
-      case "envios":
-        return <EnviosPage />;
-      case "resultados":
-        return <Resultados />;
-      case "agente":
-        return <AgentePage />;
-      case "conversaciones":
-        return <ConversacionesPage />;
-      case "web1":
-        return <Web1ConversacionesPage />; // <--- Renderizado Web 1
-      case "asistencia":
-        return <AsistenciaPage />;
-      default:
-        return <PreciosPage />;
+      case "precios": return <PreciosPage />;
+      case "whatsapp": return <WppPage />; // Clave 'whatsapp'
+      case "crm": return <CRMPage />;
+      case "agenda": return <AgendaPage />;
+      case "envios": return <EnviosPage />;
+      case "resultados": return <Resultados />;
+      case "agente": return <AgentePage />;
+      case "conversaciones": return <ConversacionesPage />;
+      case "web1": return <Web1ConversacionesPage />;
+      case "asistencia": return <AsistenciaPage />;
+      case "usuarios": return <UsuariosPage />;
+      default: 
+        // En lugar de Agenda, retornamos null o redirección visual si algo falla
+        return null;
     }
   };
 

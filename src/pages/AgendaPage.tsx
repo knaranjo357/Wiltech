@@ -1,4 +1,3 @@
-// src/pages/AgendaPage.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, 
@@ -71,6 +70,7 @@ const formatMsgTime = (val?: string | number) => {
   return d.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
+// Normalizar texto: quita tildes, minúsculas y espacios extra
 const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim();
 
 type DateFilter = 'today' | 'tomorrow' | 'history' | 'custom' | 'future';
@@ -93,7 +93,14 @@ const SedeModal: React.FC<{
   const [sel, setSel] = useState<string>('Todas');
 
   useEffect(() => {
-    setSel((defaultSede && (defaultSede === 'Todas' || options.includes(defaultSede))) ? defaultSede : 'Todas');
+    // Verificar si la sede guardada sigue existiendo en las opciones (normalizando para comparar)
+    if (defaultSede && defaultSede !== 'Todas') {
+      const normDefault = normalize(defaultSede);
+      const exists = options.some(opt => normalize(opt) === normDefault);
+      setSel(exists ? defaultSede : 'Todas');
+    } else {
+      setSel('Todas');
+    }
   }, [options, defaultSede, isOpen]);
 
   if (!isOpen) return null;
@@ -173,14 +180,26 @@ export const AgendaPage: React.FC = () => {
 
   useEffect(() => { fetchClients(); }, []);
 
-  // Sedes dinámicas
+  // --- 1. UNIFICACIÓN DE SEDES (SOLUCIÓN PEDIDA) ---
   const sedes = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
+    
     for (const c of clients) {
-      const s = safeText(getClientSede(c));
-      if (s && !['N/A', '-', '—'].includes(s)) set.add(s);
+      const rawSede = getClientSede(c);
+      const normalizedKey = normalize(safeText(rawSede));
+      
+      // Ignorar valores vacíos o inválidos
+      if (!normalizedKey || ['n/a', '-', '—'].includes(normalizedKey)) continue;
+
+      // Si no existe, agregamos la primera versión que encontremos (formateada bonita)
+      if (!map.has(normalizedKey)) {
+        // Capitalizar: bogota -> Bogota
+        const display = rawSede.charAt(0).toUpperCase() + rawSede.slice(1).toLowerCase();
+        map.set(normalizedKey, display);
+      }
     }
-    return Array.from(set).sort();
+    
+    return Array.from(map.values()).sort();
   }, [clients]);
 
   // Inicialización de Sede
@@ -192,8 +211,15 @@ export const AgendaPage: React.FC = () => {
       return;
     }
     const saved = localStorage.getItem('agenda:selectedSede') || '';
-    if (saved && (saved === 'Todas' || sedes.includes(saved))) {
-      setSelectedSede(saved);
+    
+    // Validamos si la sede guardada existe (usando normalización para comparar)
+    const savedNorm = normalize(saved);
+    const isValid = saved === 'Todas' || sedes.some(s => normalize(s) === savedNorm);
+
+    if (saved && isValid) {
+      // Si existe, usamos el nombre visual actual de la lista de sedes
+      const visualName = sedes.find(s => normalize(s) === savedNorm) || saved;
+      setSelectedSede(visualName);
     } else {
       setSelectedSede(sedes.length <= 1 ? (sedes[0] ?? 'Todas') : 'Todas');
       if (sedes.length > 1) setShowSedeModal(true);
@@ -242,17 +268,45 @@ export const AgendaPage: React.FC = () => {
     await onUpdate({ row_number: client.row_number, asistio_agenda: !current });
   };
 
-  /** --- Filtrado --- */
-  const filteredClients = useMemo(() => {
+  /** --- Filtrado por Pasos (Para contadores dinámicos) --- */
+
+  // PASO 1: Filtrar solo por SEDE y BUSQUEDA (Contexto base)
+  const filteredClientsBase = useMemo(() => {
     let filtered = [...clients];
 
-    // Sede
+    // Filtro Sede Unificado
     if (selectedSede && selectedSede !== 'Todas') {
-      const target = normalize(String(selectedSede));
-      filtered = filtered.filter((c) => normalize(getClientSede(c)) === target);
+      const targetNorm = normalize(String(selectedSede));
+      filtered = filtered.filter((c) => normalize(getClientSede(c)) === targetNorm);
     }
 
-    // Fecha
+    // Filtro Búsqueda
+    const q = normalize(searchTerm);
+    if (q) {
+      filtered = filtered.filter(c => 
+        normalize(safeText(c.nombre)).includes(q) || 
+        normalize(safeText(c.whatsapp)).includes(q) || 
+        normalize(safeText((c as any).asignado_a)).includes(q) || 
+        normalize(safeText(c.modelo)).includes(q)
+      );
+    }
+    
+    return filtered;
+  }, [clients, selectedSede, searchTerm]);
+
+  // PASO 2: Calcular estadísticas basadas en el filtro base (SOLUCIÓN PEDIDA)
+  // Ahora los números cambiarán si cambias de sede o buscas algo
+  const stats = useMemo(() => ({
+    today: filteredClientsBase.filter((c) => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))).length,
+    tomorrow: filteredClientsBase.filter((c) => isTomorrowLocal(parseAgendaDate((c as any).fecha_agenda))).length,
+    history: filteredClientsBase.filter((c) => isPastLocal(parseAgendaDate((c as any).fecha_agenda))).length,
+    future: filteredClientsBase.filter((c) => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))).length,
+  }), [filteredClientsBase]);
+
+  // PASO 3: Aplicar filtro de FECHA para mostrar en pantalla
+  const finalDisplayClients = useMemo(() => {
+    let filtered = [...filteredClientsBase];
+
     switch (dateFilter) {
       case 'today': filtered = filtered.filter(c => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))); break;
       case 'tomorrow': filtered = filtered.filter(c => isTomorrowLocal(parseAgendaDate((c as any).fecha_agenda))); break;
@@ -270,43 +324,23 @@ export const AgendaPage: React.FC = () => {
         break;
     }
 
-    // Búsqueda
-    const q = normalize(searchTerm);
-    if (q) {
-      filtered = filtered.filter(c => 
-        normalize(safeText(c.nombre)).includes(q) || 
-        normalize(safeText(c.whatsapp)).includes(q) || 
-        normalize(safeText((c as any).asignado_a)).includes(q) || 
-        normalize(safeText(c.modelo)).includes(q)
-      );
-    }
-
+    // Ordenamiento
     filtered.sort((a, b) => (parseAgendaDate((a as any).fecha_agenda)?.getTime() ?? 0) - (parseAgendaDate((b as any).fecha_agenda)?.getTime() ?? 0));
     
     if (dateFilter === 'history') filtered.reverse();
 
     return filtered;
-  }, [clients, selectedSede, dateFilter, customDate, searchTerm]);
+  }, [filteredClientsBase, dateFilter, customDate]);
 
-  // Contadores
-  const stats = useMemo(() => ({
-    today: clients.filter((c) => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-    tomorrow: clients.filter((c) => isTomorrowLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-    history: clients.filter((c) => isPastLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-    future: clients.filter((c) => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-  }), [clients]);
-
-  // --- Manejo de Apertura de Cliente (WEB 1 FIX) ---
+  // --- Manejo de Apertura de Cliente ---
   const handleOpenClient = (client: Client) => {
-    // Si es Web1, el campo whatsapp puede venir nulo.
-    // Usamos 'asignado_a' como el identificador para que el chat cargue.
     const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
     
     if (isWeb1) {
       const webId = safeText((client as any).asignado_a) || safeText(client.whatsapp) || `row_${client.row_number}`;
       setViewClient({
         ...client,
-        whatsapp: webId // REEMPLAZO CRÍTICO: Evita que sea null al abrir la modal
+        whatsapp: webId 
       });
     } else {
       setViewClient(client);
@@ -428,19 +462,17 @@ export const AgendaPage: React.FC = () => {
                <div key={i} className="bg-white rounded-2xl h-40 w-full border border-gray-100" />
              ))}
           </div>
-        ) : filteredClients.length > 0 ? (
-          filteredClients.map((client) => {
+        ) : finalDisplayClients.length > 0 ? (
+          finalDisplayClients.map((client) => {
             const dateObj = parseAgendaDate((client as any).fecha_agenda);
             const attended = (client as any).asistio_agenda === true;
             const isSaving = savingRow === client.row_number;
             const lastMsg = (client as any).last_msg;
             const lastMsgDate = (client as any).created; 
 
-            // Detectar Web1
             const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
             const web1Id = isWeb1 ? (safeText((client as any).asignado_a) || 'Visitante') : '';
 
-            // Valor a mostrar en botón de contacto
             const contactDisplay = isWeb1 ? web1Id : formatWhatsApp(safeText(client.whatsapp));
             const contactValue = isWeb1 ? web1Id : safeText(client.whatsapp);
 
