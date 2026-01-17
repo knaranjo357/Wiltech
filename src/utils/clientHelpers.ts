@@ -1,4 +1,4 @@
-// utils/clientHelpers.ts
+// src/utils/clientHelpers.ts
 import { Client, EstadoEtapa, CategoriaContacto } from '../types/client';
 
 /* ======================= Colores de etapa y categoría ======================= */
@@ -38,6 +38,7 @@ export const getCategoriaColor = (categoria: CategoriaContacto): string => {
 export const formatDate = (dateString: string): string => {
   if (!dateString) return '';
   let date: Date;
+  // Manejo básico de formato fecha hora
   if (dateString.includes(' ')) {
     const [datePart, timePart] = dateString.split(' ');
     date = new Date(`${datePart}T${timePart}:00`);
@@ -55,8 +56,17 @@ export const formatDate = (dateString: string): string => {
   });
 };
 
-export const formatWhatsApp = (whatsapp: string): string => {
-  return whatsapp.replace('@s.whatsapp.net', '').replace('57', '+57 ');
+/**
+ * Formatea el número de WhatsApp para visualización.
+ * BLINDADO: Acepta null/undefined/number sin crashear.
+ */
+export const formatWhatsApp = (whatsapp: string | number | null | undefined): string => {
+  if (!whatsapp) return '—';
+  
+  // Convertimos a string explícitamente y limpiamos
+  return String(whatsapp)
+    .replace('@s.whatsapp.net', '')
+    .replace('57', '+57 ');
 };
 
 export const isToday = (dateString: string): boolean => {
@@ -86,15 +96,17 @@ export const isYesterday = (dateString: string): boolean => {
 
 const EMPTY_MARKERS = new Set(['', '-', '—', 'null', 'undefined', 'n/a', 'na']);
 
+// Normaliza valores para verificar si están vacíos
 const norm = (v: unknown): string => {
   if (v === null || v === undefined) return '';
   const s = String(v).trim();
   return EMPTY_MARKERS.has(s.toLowerCase()) ? '' : s;
 };
 
+// Verifica si un valor ha sido provisto
 const provided = (v: unknown) => norm(v) !== '';
 
-/* ======================= Estado de envío (canónico) ======================= */
+/* ======================= Estado de envío (Logística) ======================= */
 
 // Campos requeridos para poder crear la guía
 export const REQUIRED_GUIA_FIELDS: Array<keyof Client> = [
@@ -144,10 +156,15 @@ export const deriveEnvioUI = (c: Partial<Client>): {
   classes: string;
   isGreen: boolean;
 } => {
-  const estado = norm((c as any).estado_envio).toLowerCase();
-  const flagGestionado = estado === 'envio_gestionado';
-  const flagNoAplica = estado === 'no_aplica';
-
+  const estado = norm((c as any).estado_etapa).toLowerCase(); // Usamos estado_etapa o estado_envio según tu DB
+  
+  // Prioridad 1: Gestionado explícito
+  if (estado === 'envio_gestionado') {
+    return { key: 'envio_gestionado', label: ENVIO_LABELS.envio_gestionado, classes: ENVIO_CLASSES.envio_gestionado, isGreen: true };
+  }
+  
+  const flagNoAplica = norm((c as any).estado_envio).toLowerCase() === 'no_aplica';
+  
   const ida = provided(c.guia_numero_ida);
   const ret = provided(c.guia_numero_retorno);
 
@@ -160,9 +177,7 @@ export const deriveEnvioUI = (c: Partial<Client>): {
   if (ret) {
     return { key: 'retorno', label: ENVIO_LABELS.retorno, classes: ENVIO_CLASSES.retorno, isGreen: true };
   }
-  if (flagGestionado) {
-    return { key: 'envio_gestionado', label: ENVIO_LABELS.envio_gestionado, classes: ENVIO_CLASSES.envio_gestionado, isGreen: true };
-  }
+  
   if (flagNoAplica) {
     return { key: 'no_aplica', label: ENVIO_LABELS.no_aplica, classes: ENVIO_CLASSES.no_aplica, isGreen: false };
   }
@@ -179,7 +194,7 @@ export const getEnvioStatus = (
   estado_envio?: string | null,
   guia_ida?: unknown,
   guia_retorno?: unknown
-) => deriveEnvioUI({ estado_envio, guia_numero_ida: guia_ida as any, guia_numero_retorno: guia_retorno as any });
+) => deriveEnvioUI({ estado_envio: estado_envio as any, guia_numero_ida: guia_ida as any, guia_numero_retorno: guia_retorno as any });
 
 export const shouldGreenRow = (c: Client): boolean => GREEN_STATES.includes(deriveEnvioUI(c).key);
 
@@ -199,7 +214,7 @@ export const filterClients = (
     etapa: EstadoEtapa | '';
     dateFrom: string;
     dateTo: string;
-    envio?: '' | EnvioUIKey; // opcional para no romper llamadas existentes
+    envio?: '' | EnvioUIKey;
   }
 ): Client[] => {
   return clients.filter((client) => {

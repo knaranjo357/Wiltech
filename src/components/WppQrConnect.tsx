@@ -153,7 +153,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
 
         {/* Tabs de los 8 números */}
         <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
-          {([1, 2, 3, 4, 5, 6, 7, 8] as WppSourceId[]).map((id) => (
+          {([1, 2, 3, 4, 5, 6, 7, 8,9,10,11,12,13,14,15] as WppSourceId[]).map((id) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
