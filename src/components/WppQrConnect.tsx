@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { MapPin, RefreshCcw, CheckCircle2, QrCode } from "lucide-react";
 
 // Definimos los IDs de las 8 conexiones
-type WppSourceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type WppSourceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
 
 type WppQrConnectProps = {
   /** Permite personalizar el nombre de cada número si se desea */
@@ -20,12 +20,12 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
   connectedNumbers,
   defaultSource = 1,
 }) => {
-  // Estado para la pestaña activa (1 al 8)
+  // Estado para la pestaña activa (1 al 15)
   const [activeTab, setActiveTab] = useState<WppSourceId>(() => {
     try {
       const saved = localStorage.getItem("wppqr:selectedSource");
       const num = parseInt(saved || "");
-      if (num >= 1 && num <= 8) return num as WppSourceId;
+      if (num >= 1 && num <= 15) return num as WppSourceId;
     } catch {}
     return defaultSource;
   });
@@ -153,7 +153,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
 
         {/* Tabs de los 8 números */}
         <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
-          {([1, 2, 3, 4, 5, 6, 7, 8,9,10,11,12,13,14,15] as WppSourceId[]).map((id) => (
+          {([1, 2, 3, 4, 5, 6, 7, 8 , 9, 10, 11, 12, 13, 14, 15] as WppSourceId[]).map((id) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
