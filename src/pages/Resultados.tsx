@@ -43,19 +43,39 @@ const getColor = (str: string) => {
   return SOURCE_PALETTE[Math.abs(hash) % SOURCE_PALETTE.length];
 };
 
+// Normalización básica
 const normalize = (v: any) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
-const safeText = (v: any) => String(v || '').trim();
 const SOURCE_EMPTY = 'Directo';
 
-// Lógica de Envío (Replicada de EnviosPage)
+/**
+ * UTILS DE SEGURIDAD (Igualados a EnviosPage para consistencia)
+ */
+const safeText = (v: any) => {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  const lower = s.toLowerCase();
+  // Filtramos valores que son textualmente "null" o "undefined"
+  if (lower === 'null' || lower === 'undefined' || lower === 'no aplica' || lower === 'no') return '';
+  return s;
+};
+
+/**
+ * LÓGICA DE DETECCIÓN DE ENVÍO (PERMISIVA)
+ * Actualizada para coincidir con la pestaña "TODOS" de EnviosPage.
+ * Si tiene AL MENOS UN dato logístico, cuenta como envío.
+ */
 const hasLogisticsData = (c: any): boolean => {
-  const v1 = safeText(c.agenda_ciudad_sede);
-  const v2 = safeText(c.guia_ciudad);
-  const v3 = safeText(c.guia_direccion);
-  const valid = v1 && v2 && v3 && v1 !== 'null' && v2 !== 'null' && v3 !== 'null';
-  // También consideramos envío si tiene estado_envio explícito
-  const explicit = c.estado_envio === 'envio_gestionado';
-  return !!(valid || explicit);
+  return !!(
+    safeText(c.guia_direccion) || 
+    safeText(c.guia_ciudad) || 
+    safeText(c.guia_numero_ida) || 
+    safeText(c.guia_nombre_completo) ||
+    safeText(c.guia_cedula_id) ||
+    safeText(c.guia_numero_retorno) ||
+    // Compatibilidad con estados explícitos
+    c.estado_etapa === 'ENVIO_GESTIONADO' ||
+    c.estado_envio === 'envio_gestionado'
+  );
 };
 
 const parseToTimestamp = (raw: any, offsetHours = 0): number => {
@@ -98,7 +118,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   const total = payload.reduce((sum: number, entry: any) => sum + (Number(entry.value) || 0), 0);
 
   return (
-    <div className="bg-white p-3 border border-gray-100 shadow-xl rounded-xl min-w-[180px]">
+    <div className="bg-white p-3 border border-gray-100 shadow-xl rounded-xl min-w-[180px] z-50">
       <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1">{label}</p>
       <div className="flex justify-between items-center mb-2">
         <span className="font-bold text-gray-900">Total</span>
@@ -120,44 +140,65 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 // 2. Componente de Gráfica
-const HeavyChart = memo(({ data, keys, onBarClick, colorMap, title, subTitle }: any) => {
+const HeavyChart = memo(({ data, keys, onBarClick, colorMap, title, subTitle, icon: Icon }: any) => {
   if (!data || data.length === 0) return (
-    <div className="h-full flex flex-col items-center justify-center text-gray-300 border rounded-3xl">
-      <AlertCircle className="mb-2" />
-      <span>Sin datos</span>
+    <div className="h-full flex flex-col items-center justify-center text-gray-300 border rounded-3xl bg-white p-6">
+      <AlertCircle className="mb-2 w-8 h-8 opacity-20" />
+      <span className="text-sm font-medium">Sin datos para mostrar</span>
     </div>
   );
 
   return (
-    <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 h-[380px] flex flex-col">
-       <div className="flex justify-between items-center mb-2">
-          <h3 className="font-bold text-gray-800 text-sm md:text-base">{title}</h3>
-          {subTitle && <span className="text-[10px] bg-gray-50 text-gray-500 px-2 py-1 rounded-md font-medium uppercase">{subTitle}</span>}
+    <div className="bg-white rounded-3xl p-5 shadow-sm border border-gray-100 h-[400px] flex flex-col transition-all hover:shadow-md">
+       <div className="flex justify-between items-start mb-4">
+          <div className="flex items-center gap-3">
+             {Icon && <div className="p-2 bg-gray-50 rounded-lg text-gray-500"><Icon size={18} /></div>}
+             <div>
+               <h3 className="font-bold text-gray-800 text-base leading-tight">{title}</h3>
+               {subTitle && <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{subTitle}</span>}
+             </div>
+          </div>
+          <div className="text-right">
+             <span className="text-2xl font-bold text-gray-900">{data.reduce((acc: number, curr: any) => acc + curr.total, 0)}</span>
+          </div>
        </div>
        <div className="flex-1 min-h-0 w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748B' }} tickLine={false} axisLine={false} dy={10} minTickGap={20} />
-            <YAxis tick={{ fontSize: 10, fill: '#64748B' }} tickLine={false} axisLine={false} />
+          <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+            <XAxis 
+              dataKey="label" 
+              tick={{ fontSize: 10, fill: '#94A3B8' }} 
+              tickLine={false} 
+              axisLine={false} 
+              dy={10} 
+              minTickGap={10} 
+            />
+            <YAxis 
+              tick={{ fontSize: 10, fill: '#94A3B8' }} 
+              tickLine={false} 
+              axisLine={false} 
+            />
             
-            {/* Usamos el Tooltip Personalizado */}
             <Tooltip content={<CustomTooltip />} cursor={{ fill: '#F8FAFC' }} />
             
-            <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '10px' }} />
+            <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', paddingTop: '15px', color: '#64748B' }} />
+            
             {keys.map((k: string) => (
               <Bar
                 key={k}
                 dataKey={k}
-                name={k === SOURCE_EMPTY ? 'Sin origen' : k}
+                name={k === SOURCE_EMPTY ? 'Directo' : k}
                 stackId="a"
                 fill={colorMap[k] || '#CBD5E1'}
-                radius={[0, 0, 0, 0]}
+                // Bordes redondeados solo en la barra superior de la pila
+                radius={[2, 2, 0, 0]}
                 onClick={(p) => onBarClick && onBarClick(p)}
-                isAnimationActive={false} 
+                isAnimationActive={true}
+                animationDuration={800}
               />
             ))}
-            <Brush dataKey="label" height={15} stroke="#CBD5E1" fill="#F8FAFC" tickFormatter={() => ''} />
+            <Brush dataKey="label" height={12} stroke="#CBD5E1" fill="#F8FAFC" tickFormatter={() => ''} />
           </BarChart>
         </ResponsiveContainer>
        </div>
@@ -166,17 +207,19 @@ const HeavyChart = memo(({ data, keys, onBarClick, colorMap, title, subTitle }: 
 }, (prev, next) => prev.data === next.data && prev.keys.length === next.keys.length);
 
 // 3. Tarjeta KPI
-const KPICard = memo(({ title, value, sub, icon: Icon, color }: any) => (
-  <div className={`bg-white rounded-2xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group`}>
-    <div className={`absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
-       <Icon size={40} />
-    </div>
-    <div className="relative z-10">
-      <div className="flex justify-between items-start mb-2">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{title}</p>
+const KPICard = memo(({ title, value, sub, icon: Icon, color, bgClass }: any) => (
+  <div className={`bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group`}>
+    <div className={`absolute -right-6 -top-6 p-6 opacity-5 rounded-full ${bgClass} transition-transform group-hover:scale-110`}></div>
+    
+    <div className="flex justify-between items-start relative z-10">
+      <div>
+         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{title}</p>
+         <p className="text-3xl font-bold text-gray-900 tracking-tight">{value}</p>
+         <p className="text-[11px] text-gray-400 mt-1 font-medium">{sub}</p>
       </div>
-      <p className="text-2xl font-bold text-gray-900 tracking-tight">{value}</p>
-      <p className="text-[10px] text-gray-400 mt-1 font-medium">{sub}</p>
+      <div className={`p-3 rounded-xl ${bgClass} ${color} bg-opacity-10`}>
+         <Icon size={24} />
+      </div>
     </div>
   </div>
 ));
@@ -213,8 +256,8 @@ export const Resultados: React.FC = () => {
         const optimized: OptimizedClient[] = list.map((c: any) => ({
           ...c,
           _tsAgenda: parseToTimestamp(c.fecha_agenda),
-          _tsCreated: parseToTimestamp(c.created, 5),
-          _isEnvio: hasLogisticsData(c), // Calculamos si es un envío aquí
+          _tsCreated: parseToTimestamp(c.created, 5), // Ajuste horario si aplica
+          _isEnvio: hasLogisticsData(c), // <--- AQUI SE APLICA LA NUEVA LOGICA
           _normSearch: normalize(`${c.nombre} ${c.modelo} ${c.ciudad} ${c.whatsapp} ${c.agenda_ciudad_sede}`),
           _normSede: normalize(c.agenda_ciudad_sede),
           _normSource: (c.source || '').trim() || SOURCE_EMPTY,
@@ -321,6 +364,13 @@ export const Resultados: React.FC = () => {
     return map;
   }, [agendas.keys, creados.keys, envios.keys]);
 
+  // Evento Click Barras
+  const handleBarClick = (data: any, type: 'agendas' | 'created' | 'envios') => {
+    if (data && data.label) {
+      setDetailView({ type, key: data.label });
+    }
+  };
+
   // --- 5. Lógica de Efectividad Mensual ---
   const effectivenessData = useMemo(() => {
     const buckets = new Map<string, Map<string, { leads: number, agendas: number, envios: number }>>();
@@ -351,8 +401,8 @@ export const Resultados: React.FC = () => {
           .map(([name, data]) => ({ 
             name, 
             ...data, 
-            effAgenda: (data.agendas / data.leads) * 100,
-            effEnvio: (data.envios / data.leads) * 100
+            effAgenda: data.leads > 0 ? (data.agendas / data.leads) * 100 : 0,
+            effEnvio: data.leads > 0 ? (data.envios / data.leads) * 100 : 0
           }))
           .sort((a, b) => b.leads - a.leads) // Canales con más leads primero
       }));
@@ -428,11 +478,12 @@ export const Resultados: React.FC = () => {
             {/* 1. KPIs */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <KPICard 
-                title="Leads (Creados)" 
+                title="Leads Nuevos" 
                 value={creados.chartData.reduce((a, b) => a + b.total, 0)} 
                 sub={`${creados.chartData.reduce((a, b) => a + b.uniqueCount, 0)} únicos`}
                 icon={PieChart}
                 color="text-blue-500"
+                bgClass="bg-blue-500"
               />
               <KPICard 
                 title="Citas Agendadas" 
@@ -440,6 +491,7 @@ export const Resultados: React.FC = () => {
                 sub={`${agendas.chartData.reduce((a, b) => a + b.uniqueCount, 0)} únicos`}
                 icon={Calendar} 
                 color="text-purple-500"
+                bgClass="bg-purple-500"
               />
               <KPICard 
                 title="Envíos Generados" 
@@ -447,6 +499,7 @@ export const Resultados: React.FC = () => {
                 sub={`${envios.chartData.reduce((a, b) => a + b.uniqueCount, 0)} únicos`}
                 icon={Truck} 
                 color="text-orange-500"
+                bgClass="bg-orange-500"
               />
               {/* Filtro Rápido Source */}
               <div className="col-span-1 bg-white rounded-2xl border border-gray-100 p-4 flex flex-col justify-center">
@@ -464,9 +517,33 @@ export const Resultados: React.FC = () => {
 
             {/* 2. GRÁFICAS TEMPORALES */}
             <div className="grid lg:grid-cols-3 gap-6">
-              <HeavyChart title="Leads Nuevos" subTitle="Fecha Creación" data={creados.chartData} keys={creados.keys} colorMap={colorMap} onBarClick={(d: any) => handleBarClick(d, 'created')} />
-              <HeavyChart title="Agendamientos" subTitle="Fecha Cita" data={agendas.chartData} keys={agendas.keys} colorMap={colorMap} onBarClick={(d: any) => handleBarClick(d, 'agendas')} />
-              <HeavyChart title="Logística / Envíos" subTitle="Fecha Solicitud" data={envios.chartData} keys={envios.keys} colorMap={colorMap} onBarClick={(d: any) => handleBarClick(d, 'envios')} />
+              <HeavyChart 
+                title="Leads Nuevos" 
+                subTitle="Fecha Creación" 
+                data={creados.chartData} 
+                keys={creados.keys} 
+                colorMap={colorMap} 
+                onBarClick={(d: any) => handleBarClick(d, 'created')} 
+                icon={PieChart}
+              />
+              <HeavyChart 
+                title="Agendamientos" 
+                subTitle="Fecha Cita" 
+                data={agendas.chartData} 
+                keys={agendas.keys} 
+                colorMap={colorMap} 
+                onBarClick={(d: any) => handleBarClick(d, 'agendas')} 
+                icon={Calendar}
+              />
+              <HeavyChart 
+                title="Logística / Envíos" 
+                subTitle="Fecha Solicitud" 
+                data={envios.chartData} 
+                keys={envios.keys} 
+                colorMap={colorMap} 
+                onBarClick={(d: any) => handleBarClick(d, 'envios')} 
+                icon={Truck}
+              />
             </div>
 
             {/* 3. MATRIZ DE EFECTIVIDAD (CHANNEL EFFECTIVENESS) */}
