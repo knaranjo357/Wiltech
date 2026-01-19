@@ -8,67 +8,85 @@ import {
   Shield, 
   ArrowLeft, 
   Search, 
-  Tag 
+  Tag,
+  Filter,
+  ChevronRight,
+  Database
 } from 'lucide-react';
 import { PreciosService } from '../services/preciosService';
 import { PrecioItem } from '../types/precios';
 import { PrecioModal } from '../components/PrecioModal';
 
-// Definición de categorías
+// --- CONFIGURACIÓN VISUAL ---
 const categories = [
   { 
     name: 'IPHONE', 
     icon: Smartphone, 
-    gradient: 'from-blue-500 to-indigo-600', 
+    color: 'bg-blue-600',
+    gradient: 'from-slate-900 via-blue-900 to-slate-900', 
     image: 'https://images.pexels.com/photos/788946/pexels-photo-788946.jpeg?auto=compress&cs=tinysrgb&w=600' 
   },
   { 
     name: 'WATCH', 
     icon: Watch, 
-    gradient: 'from-emerald-500 to-teal-600', 
+    color: 'bg-emerald-600',
+    gradient: 'from-slate-900 via-emerald-900 to-slate-900', 
     image: 'https://images.pexels.com/photos/437037/pexels-photo-437037.jpeg?auto=compress&cs=tinysrgb&w=600' 
   },
   { 
     name: 'PC', 
     icon: Monitor, 
-    gradient: 'from-violet-500 to-fuchsia-600', 
+    color: 'bg-violet-600',
+    gradient: 'from-slate-900 via-violet-900 to-slate-900', 
     image: 'https://images.pexels.com/photos/2148217/pexels-photo-2148217.jpeg?auto=compress&cs=tinysrgb&w=600' 
   },
   { 
     name: 'IPAD', 
     icon: Tablet, 
-    gradient: 'from-orange-500 to-rose-600', 
+    color: 'bg-orange-600',
+    gradient: 'from-slate-900 via-orange-900 to-slate-900', 
     image: 'https://images.pexels.com/photos/1334597/pexels-photo-1334597.jpeg?auto=compress&cs=tinysrgb&w=600' 
   },
   { 
     name: 'UGREEN', 
     icon: Zap, 
-    gradient: 'from-amber-400 to-orange-500', 
+    color: 'bg-amber-500',
+    gradient: 'from-slate-900 via-amber-900 to-slate-900', 
     image: 'https://images.pexels.com/photos/163100/circuit-circuit-board-resistor-computer-163100.jpeg?auto=compress&cs=tinysrgb&w=600' 
   },
   { 
-    name: 'PELICULAS DE SEGURIDAD', 
+    name: 'PELICULAS', 
     icon: Shield, 
-    gradient: 'from-cyan-500 to-blue-600', 
+    color: 'bg-cyan-600',
+    gradient: 'from-slate-900 via-cyan-900 to-slate-900', 
     image: 'https://images.pexels.com/photos/1476321/pexels-photo-1476321.jpeg?auto=compress&cs=tinysrgb&w=600' 
   },
 ];
 
-/** Helper para formatear moneda si la columna parece ser un precio */
+/** Helper para formatear moneda y texto */
 const formatCell = (key: string, value: any) => {
-  if (value === null || value === undefined || value === '') return '-';
+  if (value === null || value === undefined || value === '') return <span className="text-gray-300">-</span>;
   
   const keyLower = key.toLowerCase();
+  
   // Detectar columnas de dinero
   if ((keyLower.includes('precio') || keyLower.includes('valor') || keyLower.includes('costo')) && !isNaN(Number(value))) {
-    return new Intl.NumberFormat('es-CO', { 
+    const formatted = new Intl.NumberFormat('es-CO', { 
       style: 'currency', 
       currency: 'COP', 
       maximumFractionDigits: 0 
     }).format(Number(value));
+
+    // Renderizar con fuente tabular para mejor alineación numérica
+    return <span className="font-mono font-medium tracking-tight text-slate-700">{formatted}</span>;
   }
   
-  return String(value);
+  // Si es un estado (ejemplo simple)
+  if (String(value).toLowerCase() === 'disponible') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Disponible</span>
+  }
+
+  return <span className="text-slate-600">{String(value)}</span>;
 };
 
 export const PreciosPage: React.FC = () => {
@@ -78,7 +96,6 @@ export const PreciosPage: React.FC = () => {
   const [modalItem, setModalItem] = useState<PrecioItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Cargar datos
   const fetchPrecios = async (category: string) => {
     setLoading(true);
     setPrecios([]); 
@@ -98,30 +115,25 @@ export const PreciosPage: React.FC = () => {
     fetchPrecios(categoryName);
   };
 
-  // Obtener columnas dinámicas
   const columns = useMemo(() => {
     if (precios.length === 0) return [];
     const allKeys = new Set<string>();
     precios.forEach(item => {
       Object.keys(item).forEach(key => {
-        if (key !== 'row_number') {
-          allKeys.add(key);
-        }
+        if (key !== 'row_number') allKeys.add(key);
       });
     });
-    // Ordenar para que 'MODELO' o 'REFERENCIA' salgan primero si existen
     return Array.from(allKeys).sort((a, b) => {
-      const priority = ['MODELO', 'REFERENCIA', 'PRODUCTO'];
+      const priority = ['MODELO', 'REFERENCIA', 'PRODUCTO', 'PRECIO'];
       const aP = priority.indexOf(a.toUpperCase());
       const bP = priority.indexOf(b.toUpperCase());
-      if (aP !== -1 && bP !== -1) return aP - bP;
-      if (aP !== -1) return -1;
-      if (bP !== -1) return 1;
+      if (aP !== -1 && bP !== -1) return aP - bP; // Ambos tienen prioridad
+      if (aP !== -1) return -1; // A tiene prioridad
+      if (bP !== -1) return 1; // B tiene prioridad
       return a.localeCompare(b);
     });
   }, [precios]);
 
-  // Filtrar datos en tiempo real
   const filteredPrecios = useMemo(() => {
     if (!searchTerm) return precios;
     const lowerQ = searchTerm.toLowerCase();
@@ -132,169 +144,226 @@ export const PreciosPage: React.FC = () => {
     );
   }, [precios, searchTerm]);
 
-  // ------------------- VISTA DE CATEGORÍAS -------------------
+  // --- VISTA: SELECCIÓN DE CATEGORÍA ---
   if (!selectedCategory) {
     return (
-      <div className="space-y-8 animate-fadeIn pb-10">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Lista de Precios
-          </h1>
-          <p className="text-gray-500 text-lg max-w-2xl mx-auto">
-            Selecciona una categoría para consultar repuestos, servicios y diagnósticos actualizados.
-          </p>
-        </div>
+      <div className="min-h-full w-full p-6 animate-in fade-in duration-500">
+        <div className="max-w-7xl mx-auto space-y-10">
+          
+          {/* Hero Header */}
+          <div className="text-center space-y-4 py-8">
+            <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight">
+              Catálogo de <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600">Servicios y Repuestos</span>
+            </h1>
+            <p className="text-slate-500 text-lg max-w-2xl mx-auto font-light leading-relaxed">
+              Selecciona una categoría para acceder a la base de datos actualizada de precios, diagnósticos y disponibilidad.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 px-2">
-          {categories.map((category) => {
-            const IconComponent = category.icon;
-            return (
-              <div
-                key={category.name}
-                onClick={() => handleCategorySelect(category.name)}
-                className="group relative cursor-pointer h-64 rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 transform hover:-translate-y-1"
-              >
-                <div className="absolute inset-0">
-                  <img
-                    src={category.image}
-                    alt={category.name}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-                  <div className={`absolute inset-0 bg-gradient-to-t ${category.gradient} opacity-80 group-hover:opacity-90 transition-opacity duration-300`} />
-                </div>
-                
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-white p-6 z-10">
-                  <div className="bg-white/20 backdrop-blur-md p-4 rounded-2xl mb-4 group-hover:scale-110 transition-transform duration-300 shadow-inner border border-white/30">
-                    <IconComponent className="w-8 h-8 text-white" />
+          {/* Grid de Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {categories.map((category) => {
+              const IconComponent = category.icon;
+              return (
+                <button
+                  key={category.name}
+                  onClick={() => handleCategorySelect(category.name)}
+                  className="group relative h-60 w-full rounded-3xl overflow-hidden shadow-md hover:shadow-2xl hover:shadow-slate-200 transition-all duration-300 transform hover:-translate-y-1 text-left"
+                >
+                  {/* Background Image & Overlay */}
+                  <div className="absolute inset-0">
+                    <img
+                      src={category.image}
+                      alt={category.name}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    <div className={`absolute inset-0 bg-gradient-to-t ${category.gradient} opacity-80 group-hover:opacity-90 transition-opacity duration-300`} />
                   </div>
-                  <h3 className="text-xl font-bold text-center tracking-wide">
-                    {category.name.replace(/_/g, ' ')}
-                  </h3>
-                  <div className="mt-2 opacity-0 group-hover:opacity-100 transform translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-                    <span className="inline-flex items-center gap-1 text-xs font-medium bg-white/20 px-3 py-1 rounded-full backdrop-blur-sm">
-                      Ver precios <Tag className="w-3 h-3" />
-                    </span>
+                  
+                  {/* Content */}
+                  <div className="absolute inset-0 p-6 flex flex-col justify-between z-10">
+                    <div className="flex justify-between items-start">
+                      <div className={`p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg group-hover:bg-white/20 transition-colors`}>
+                        <IconComponent className="w-6 h-6 text-white" />
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/20 p-2 rounded-full backdrop-blur-sm">
+                        <ChevronRight className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h3 className="text-2xl font-bold text-white tracking-wide">
+                        {category.name.replace(/_/g, ' ')}
+                      </h3>
+                      <div className="h-0 group-hover:h-6 overflow-hidden transition-all duration-300">
+                        <span className="text-slate-200 text-sm font-medium mt-2 flex items-center gap-2">
+                          Ver inventario <ArrowLeft className="w-3 h-3 rotate-180" />
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
   }
 
-  // ------------------- VISTA DE TABLA -------------------
+  // --- VISTA: TABLA DE DATOS ---
   return (
-    <div className="space-y-6 animate-fadeIn h-[calc(100vh-140px)] flex flex-col">
-      {/* Header de la Tabla */}
-      <div className="bg-white/90 backdrop-blur-md rounded-2xl shadow-sm border border-gray-200/50 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+    <div className="h-[calc(100vh-100px)] flex flex-col p-4 md:p-6 animate-in slide-in-from-right-4 duration-500">
+      
+      {/* Header flotante */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0 z-20">
+        
         <div className="flex items-center gap-4">
           <button
             onClick={() => setSelectedCategory(null)}
-            className="p-2 rounded-xl hover:bg-gray-100 text-gray-600 hover:text-blue-600 transition-colors group border border-transparent hover:border-gray-200"
-            title="Volver a categorías"
+            className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-all"
+            title="Volver"
           >
-            <ArrowLeft className="w-6 h-6 group-hover:-translate-x-1 transition-transform" />
+            <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
           </button>
+          
           <div>
-            <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
+                Categoría
+              </span>
+            </div>
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
               {selectedCategory.replace(/_/g, ' ')}
             </h2>
-            <p className="text-sm text-gray-500">
-              {loading ? 'Cargando datos...' : `${filteredPrecios.length} resultados encontrados`}
-            </p>
           </div>
         </div>
 
-        {/* Buscador */}
-        <div className="relative w-full md:w-96 group">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <Search className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+        {/* Barra de búsqueda mejorada */}
+        <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="relative w-full md:w-80 group">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Search className="h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+            </div>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm
+                         placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              placeholder="Buscar por modelo, ref, precio..."
+              autoFocus
+            />
+            {searchTerm && (
+               <div className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-slate-400">
+                 {filteredPrecios.length} res.
+               </div>
+            )}
           </div>
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl leading-5 bg-gray-50 placeholder-gray-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-200"
-            placeholder="Buscar modelo, referencia..."
-            autoFocus
-          />
+          
+          <button 
+            className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+            title="Filtros avanzados (Proximamente)"
+          >
+            <Filter className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Contenido / Tabla */}
-      <div className="flex-1 relative bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 overflow-hidden flex flex-col">
+      {/* Contenedor de la Tabla (Card Principal) */}
+      <div className="flex-1 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden relative flex flex-col">
+        
         {loading ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/60 backdrop-blur-sm z-20">
-            <div className="w-12 h-12 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-            <span className="text-gray-500 font-medium animate-pulse">Sincronizando precios...</span>
+          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center">
+            <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
+            <p className="text-slate-500 font-medium animate-pulse">Obteniendo datos en tiempo real...</p>
           </div>
         ) : (
-          <div className="overflow-auto flex-1">
+          <div className="overflow-auto flex-1 custom-scrollbar">
             {filteredPrecios.length > 0 ? (
-              <table className="min-w-full divide-y divide-gray-100 border-separate border-spacing-0">
-                <thead className="bg-gray-50/95 backdrop-blur sticky top-0 z-30">
+              <table className="min-w-full divide-y divide-slate-100 border-separate border-spacing-0">
+                <thead className="bg-slate-50 sticky top-0 z-30">
                   <tr>
                     {columns.map((column, colIndex) => (
                       <th
                         key={column}
                         scope="col"
                         className={`
-                          px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap
-                          border-b border-gray-200
+                          px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200
                           ${colIndex === 0 
-                            ? 'sticky left-0 z-40 bg-gray-50 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.05)]' // Sticky primer col Header
+                            ? 'sticky left-0 z-40 bg-slate-50 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.1)]' // Sticky Col Header
                             : ''}
                         `}
                       >
-                        {column.replace(/[_\n]/g, ' ').trim()}
+                        <div className="flex items-center gap-1">
+                          {column.replace(/[_\n]/g, ' ')}
+                          {/* Pequeño indicador visual si es precio */}
+                          {column.toLowerCase().includes('precio') && <Tag className="w-3 h-3 text-emerald-500 ml-1" />}
+                        </div>
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-50">
+                <tbody className="bg-white divide-y divide-slate-50">
                   {filteredPrecios.map((item, index) => (
                     <tr
                       key={item.row_number || index}
                       onClick={() => setModalItem(item)}
-                      className="hover:bg-blue-50/50 transition-colors duration-150 cursor-pointer group"
+                      className="group hover:bg-blue-50/40 transition-colors duration-150 cursor-pointer"
                     >
-                      {columns.map((column, colIndex) => (
-                        <td 
-                          key={column} 
-                          className={`
-                            px-6 py-4 whitespace-nowrap
-                            ${colIndex === 0 
-                              ? 'sticky left-0 z-20 bg-white group-hover:bg-blue-50/50 shadow-[4px_0_8px_-2px_rgba(0,0,0,0.05)] font-semibold text-gray-900' // Sticky primer col Body
-                              : ''}
-                          `}
-                        >
-                          <div className={`text-sm ${
-                             // Resaltar si es precio (y no es la primera columna, para no sobrecargar)
-                             colIndex !== 0 && column.toLowerCase().includes('precio') 
-                               ? 'text-emerald-600 font-bold bg-emerald-50 inline-block px-2 py-0.5 rounded' 
-                               : 'text-gray-700 group-hover:text-gray-900'
-                           }`}>
-                            {formatCell(column, item[column as keyof PrecioItem])}
-                          </div>
-                        </td>
-                      ))}
+                      {columns.map((column, colIndex) => {
+                        const isPrice = column.toLowerCase().includes('precio') || column.toLowerCase().includes('valor');
+                        return (
+                          <td 
+                            key={column} 
+                            className={`
+                              px-6 py-3.5 whitespace-nowrap text-sm
+                              ${colIndex === 0 
+                                ? 'sticky left-0 z-20 bg-white group-hover:bg-blue-50/60 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.05)] font-semibold text-slate-800' 
+                                : ''}
+                              ${isPrice ? 'bg-slate-50/30' : ''}
+                            `}
+                          >
+                            {/* Aquí inyectamos el resaltado visual si es precio */}
+                            {isPrice ? (
+                              <div className="px-2.5 py-1 rounded-md bg-emerald-50/80 border border-emerald-100/50 inline-block">
+                                {formatCell(column, item[column as keyof PrecioItem])}
+                              </div>
+                            ) : (
+                              formatCell(column, item[column as keyof PrecioItem])
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-center p-10">
-                <div className="bg-gray-50 p-4 rounded-full mb-4">
-                  <Search className="w-8 h-8 text-gray-300" />
+              <div className="flex flex-col items-center justify-center h-full p-12 text-center">
+                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                  <Database className="w-10 h-10 text-slate-300" />
                 </div>
-                <h3 className="text-lg font-medium text-gray-900">No se encontraron resultados</h3>
-                <p className="text-gray-500">Intenta con otro término de búsqueda.</p>
+                <h3 className="text-lg font-bold text-slate-900">Sin resultados</h3>
+                <p className="text-slate-500 max-w-xs mx-auto">
+                  No encontramos "{searchTerm}" en la categoría {selectedCategory}.
+                </p>
+                <button 
+                  onClick={() => setSearchTerm('')}
+                  className="mt-6 text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
+                >
+                  Limpiar búsqueda
+                </button>
               </div>
             )}
           </div>
         )}
+        
+        {/* Footer pequeño de la tabla */}
+        <div className="bg-slate-50 border-t border-slate-200 px-6 py-2 text-xs text-slate-400 flex justify-between items-center">
+          <span>Mostrando {filteredPrecios.length} registros</span>
+          <span>Actualizado recientemente</span>
+        </div>
       </div>
 
       {/* Modal Detalle */}
@@ -304,6 +373,24 @@ export const PreciosPage: React.FC = () => {
         item={modalItem}
         categoryName={selectedCategory || ''}
       />
+      
+      <style>{`
+        /* Personalización de scrollbar fina */
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1;
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: #94a3b8;
+        }
+      `}</style>
     </div>
   );
 };

@@ -16,7 +16,7 @@ import {
   ChevronLeft,
   LifeBuoy,
   Globe,
-  UserCog, // Icono para usuarios
+  UserCog,
 } from "lucide-react";
 
 interface NavItem {
@@ -32,10 +32,8 @@ interface LayoutProps {
 }
 
 // 1. DEFINICIÓN DE ITEMS
-// IMPORTANTE: Los 'id' coinciden exactamente con los strings que vienen en el JSON del backend.
-// El backend envía: "admin,whatsapp,precios,crm,conversaciones,web1,agenda,asistencia,envios,resultados,agente"
 const navigationItems: NavItem[] = [
-  { id: "whatsapp", name: "WhatsApp", icon: Bot }, // Antes era 'wpp', cambiado a 'whatsapp' para coincidir
+  { id: "whatsapp", name: "WhatsApp", icon: Bot },
   { id: "precios", name: "Precios", icon: DollarSign },
   { id: "crm", name: "CRM", icon: Users },
   { id: "conversaciones", name: "Conversaciones", icon: MessageSquare },
@@ -45,7 +43,6 @@ const navigationItems: NavItem[] = [
   { id: "envios", name: "Envíos", icon: Truck },
   { id: "resultados", name: "Resultados", icon: BarChart3 },
   { id: "agente", name: "Agente IA", icon: BrainCircuit },
-  // Este item no viene en la lista estándar, pero se mostrará si el usuario es 'admin'
   { id: "usuarios", name: "Usuarios", icon: UserCog }, 
 ];
 
@@ -63,21 +60,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
 
   // 2. LÓGICA DE FILTRADO DE PERMISOS
   const filteredNavItems = useMemo(() => {
-    // Si no ha cargado el usuario o no tiene rol, retornamos array vacío
     if (!user || !user.role) return [];
-
-    // Convertimos el string "admin,whatsapp,precios..." en un array limpio:
-    // ["admin", "whatsapp", "precios", ...]
     const userRoles = user.role.split(',').map(r => r.trim().toLowerCase());
 
-    // CASO A: Si es ADMIN, tiene permiso para ver absolutamente todo
     if (userRoles.includes('admin')) {
       return navigationItems;
     }
 
-    // CASO B: Si NO es admin, filtramos uno por uno
     return navigationItems.filter(item => {
-      // El item se muestra SOLO si su 'id' está dentro de los roles del usuario
       return userRoles.includes(item.id);
     });
   }, [user?.role]);
@@ -85,7 +75,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       
-      {/* === Mobile Overlay (Fondo oscuro en móvil) === */}
+      {/* === Mobile Overlay === */}
       <div
         className={`fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300 ${
           sidebarOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -138,7 +128,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
             </button>
           </div>
 
-          {/* -- Lista de Navegación Filtrada -- */}
+          {/* -- Lista de Navegación -- */}
           <nav className="flex-1 p-3 space-y-2 overflow-y-auto overflow-x-hidden custom-scrollbar">
             {filteredNavItems.length > 0 ? (
               filteredNavItems.map((item) => {
@@ -170,7 +160,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                       </span>
                     )}
 
-                    {/* Tooltip para modo colapsado */}
                     {isCollapsed && (
                       <div className="absolute left-full ml-4 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 whitespace-nowrap z-50">
                         {item.name}
@@ -181,7 +170,6 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                 );
               })
             ) : (
-              // Mensaje si no tiene roles asignados
               <div className="p-4 text-center text-gray-400 text-sm italic">
                 {!isCollapsed && "No tienes permisos disponibles."}
               </div>
@@ -237,11 +225,11 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
       {/* === Contenido Principal === */}
       <div className={`transition-all duration-300 ${isCollapsed ? "md:ml-20" : "md:ml-64"}`}>
         
-        {/* Header superior */}
-        <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 h-16 flex items-center px-6 justify-between md:justify-end">
+        {/* Header superior: Oculto en escritorio (md:hidden), visible solo en móvil para el botón del menú */}
+        <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/50 h-16 flex items-center px-6 justify-between">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="md:hidden p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="p-2 -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <Menu className="w-6 h-6" />
           </button>

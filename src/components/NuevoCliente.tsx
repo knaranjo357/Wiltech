@@ -1,26 +1,10 @@
-// components/NuevoCliente.tsx
+// src/components/NuevoCliente.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Plus,
-  X,
-  Save,
-  Phone,
-  MapPin,
-  User,
-  Smartphone,
-  FileText,
-  Settings,
-  DollarSign,
-  UserCheck,
-  Calendar,
-  ShieldCheck,
-  PackageSearch,
-  ClipboardList,
-  ClipboardCheck,
-  Truck,
-  Mail,
-  Bot,
-  MessageCircle,
+  Plus, X, Save, Phone, MapPin, User, Smartphone, FileText, Settings, 
+  DollarSign, UserCheck, Calendar, ShieldCheck, ClipboardList, ClipboardCheck, 
+  Truck, Mail, Bot, MessageCircle, Percent, ChevronRight, Fingerprint,
+  LayoutDashboard, ShoppingBag
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
@@ -28,30 +12,22 @@ import { ClientService } from '../services/clientService';
 /** ===================== Helpers ===================== **/
 
 /**
- * Normaliza un número ingresado a JID de WhatsApp: 573150000000@s.whatsapp.net
- * Reglas:
- *  - Si viene en 10 dígitos (p.ej. 3150000000) => antepone 57
- *  - Si viene con +57 o 57, lo respeta
- *  - El móvil colombiano debe empezar por 3 y tener 10 dígitos (sin contar el 57)
- * Devuelve { jid, e164 } o null si no es válido.
+ * Normaliza un número para guardar en BD: 573001234567@s.whatsapp.net
  */
 function toWaJid(raw: string): { jid: string; e164: string } | null {
   if (!raw) return null;
-  const digits = (raw || '').replace(/\D+/g, '');
+  const digits = raw.replace(/\D+/g, '');
 
   let e164 = '';
+  
   if (digits.startsWith('57') && digits.length === 12) {
-    // 57 + 10 dígitos
     e164 = digits;
   } else if (digits.length === 10 && digits.startsWith('3')) {
-    // móvil colombiano sin indicativo
     e164 = '57' + digits;
   } else if (digits.length === 11 && digits.startsWith('03')) {
-    // casos donde escriben 0 delante del móvil
     e164 = '57' + digits.slice(1);
-  } else if (digits.length > 12 && /57\d{10}$/.test(digits)) {
-    // por si pegan con prefijos internacionales tipo 0057 / 01157
-    e164 = digits.slice(-12);
+  } else if (digits.length > 10) {
+    e164 = digits;
   } else {
     return null;
   }
@@ -59,26 +35,20 @@ function toWaJid(raw: string): { jid: string; e164: string } | null {
   return { jid: `${e164}@s.whatsapp.net`, e164 };
 }
 
-function safe(v?: string | number | null) {
-  return v !== undefined && v !== null && String(v).trim() ? String(v) : '';
-}
-
-/** Estructura de campos para inputs declarativos */
+/** Tipos de campo idénticos a ClientModal */
 type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean';
+
 type FieldDef<K extends keyof Client = keyof Client> = {
   label: string;
   key: K;
   icon: React.ComponentType<any>;
   type?: FieldType;
   required?: boolean;
+  placeholder?: string;
 };
 
-/** ===================== Component ===================== **/
-
 type NuevoClienteProps = {
-  /** Llamado al crear con éxito, útil para recargar listas */
   onCreated?: (created: Partial<Client>) => void;
-  /** Si lo quieres no-flotante en algún lugar particular */
   floating?: boolean;
 };
 
@@ -86,11 +56,10 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
-  // Estado del formulario (Partial<Client> para que sea flexible)
-  const [form, setForm] = useState<Partial<Client>>({
+  // Estado inicial del formulario (Bot activo por defecto: true)
+  const initialForm: Partial<Client> = {
     nombre: '',
     whatsapp: '',
     ciudad: '',
@@ -98,7 +67,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     intencion: '',
     detalles: '',
     modo_recepcion: '',
-    estado_etapa: '',
+    estado_etapa: 'nuevo', 
     categoria_contacto: '',
     fecha_agenda: '',
     asignado_a: '',
@@ -126,146 +95,169 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     guia_numero_retorno: '',
     asegurado: false as any,
     valor_seguro: '' as any,
-    consentimiento_contacto: true as any,
-  });
-
-  const waParsed = useMemo(() => toWaJid(String(form.whatsapp || '')), [form.whatsapp]);
-  const waPreviewLink = useMemo(() => (waParsed ? `https://wa.me/${waParsed.e164}` : ''), [waParsed]);
-
-  // Cerrar con click en overlay
-  const onOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) setOpen(false);
+    consentimiento_contacto: true as any, 
   };
 
-  // Cerrar con Esc + bloquear scroll body
+  const [form, setForm] = useState<Partial<Client>>(initialForm);
+
+  // Preview del WhatsApp
+  const waParsed = useMemo(() => toWaJid(String(form.whatsapp || '')), [form.whatsapp]);
+
+  // Manejadores de cierre
+  const handleClose = () => {
+    if ((form.nombre || form.whatsapp) && !window.confirm("¿Deseas cerrar? Se perderán los datos ingresados.")) {
+       return;
+    }
+    setOpen(false);
+    setForm(initialForm);
+    setError(null);
+  };
+
+  const onOverlayClick = (e: React.MouseEvent) => {
+    if (e.target === overlayRef.current) handleClose();
+  };
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') handleClose();
     };
     document.addEventListener('keydown', onKey);
-    const original = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = original;
+      document.body.style.overflow = '';
     };
-  }, [open]);
+  }, [open, form]);
 
   const setVal = <K extends keyof Client>(key: K, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
-  /** Secciones (misma estructura visual) */
-  const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef> }> = [
+  // ================= SECCIONES (Estilo Idéntico a ClientModal) =================
+  const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
     {
       title: 'Información Personal',
       icon: User,
+      iconColor: 'text-blue-600 bg-blue-50',
       fields: [
-        { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
-        { label: 'WhatsApp (obligatorio)', key: 'whatsapp', icon: Phone, type: 'text', required: true },
+        { label: 'Nombre', key: 'nombre', icon: User, type: 'text', required: true },
+        { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text', required: true, placeholder: 'Ej: 315 123 4567' },
         { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
+        { label: 'Subscriber ID', key: 'subscriber_id', icon: Fingerprint, type: 'text' },
       ],
     },
     {
-      title: 'Dispositivo y Servicio',
+      title: 'Dispositivo y Detalle',
       icon: Smartphone,
+      iconColor: 'text-indigo-600 bg-indigo-50',
       fields: [
         { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
         { label: 'Intención', key: 'intencion', icon: Settings, type: 'text' },
         { label: 'Detalles', key: 'detalles', icon: FileText, type: 'textarea' },
-        { label: 'Modo de recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
+        { label: 'Recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
       ],
     },
     {
-      title: 'Estado y Seguimiento',
+      title: 'Comercial y Agenda',
       icon: Calendar,
+      iconColor: 'text-teal-600 bg-teal-50',
       fields: [
         { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
         { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
         { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
+        { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: MapPin, type: 'text' },
         { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
-        { label: 'Sede/Ciudad agenda', key: 'agenda_ciudad_sede', icon: MapPin, type: 'text' },
       ],
     },
     {
       title: 'Diagnóstico y Precios',
-      icon: PackageSearch,
+      icon: DollarSign,
+      iconColor: 'text-green-600 bg-green-50',
       fields: [
-        { label: 'Diagnóstico requerido', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
-        { label: 'Equipo manipulado', key: 'equipo_manipulado', icon: ClipboardList, type: 'text' },
-        { label: 'Precio diagnóstico informado', key: 'precio_diagnostico_informado', icon: DollarSign, type: 'text' },
-        { label: 'Precio reparación estimado', key: 'precio_reparacion_estimado', icon: DollarSign, type: 'text' },
-        { label: 'Precio máximo informado', key: 'precio_maximo_informado', icon: DollarSign, type: 'text' },
-        { label: 'Estado búsqueda de precios', key: 'buscar_precios_status', icon: DollarSign, type: 'text' },
-        { label: 'Descuento multi-reparación', key: 'descuento_multi_reparacion', icon: DollarSign, type: 'text' },
-        { label: 'Servicios adicionales', key: 'servicios_adicionales', icon: Settings, type: 'text' },
+        { label: 'Diag. requerido', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
+        { label: 'Eq. manipulado', key: 'equipo_manipulado', icon: ClipboardList, type: 'text' },
+        { label: 'Precio Diag.', key: 'precio_diagnostico_informado', icon: DollarSign, type: 'text' },
+        { label: 'Precio Estimado', key: 'precio_reparacion_estimado', icon: DollarSign, type: 'text' },
+        { label: 'Buscar precios', key: 'buscar_precios_status', icon: DollarSign, type: 'text' },
+        { label: 'Descuento', key: 'descuento_multi_reparacion', icon: Percent, type: 'text' },
+        { label: 'Servicios extra', key: 'servicios_adicionales', icon: Settings, type: 'text' },
+        { label: 'Interés acc.', key: 'interes_accesorios', icon: ShoppingBag, type: 'text' },
       ],
     },
     {
-      title: 'Notas y Observaciones',
-      icon: FileText,
-      fields: [
-        { label: 'Notas del cliente', key: 'notas_cliente', icon: FileText, type: 'textarea' },
-        { label: 'Notas internas', key: 'notas', icon: FileText, type: 'textarea' },
-        { label: 'Observaciones técnicas', key: 'observaciones_tecnicas', icon: FileText, type: 'textarea' },
-        { label: 'Interés en accesorios', key: 'interes_accesorios', icon: Settings, type: 'text' },
-      ],
-    },
-    {
-      title: 'Guía / Envío',
+      title: 'Logística y Envío',
       icon: Truck,
+      iconColor: 'text-orange-600 bg-orange-50',
       fields: [
-        { label: 'Nombre completo', key: 'guia_nombre_completo', icon: User, type: 'text' },
+        { label: 'Nombre Guía', key: 'guia_nombre_completo', icon: User, type: 'text' },
         { label: 'Cédula / ID', key: 'guia_cedula_id', icon: ClipboardList, type: 'text' },
-        { label: 'Teléfono', key: 'guia_telefono', icon: Phone, type: 'text' },
+        { label: 'Teléfono Guía', key: 'guia_telefono', icon: Phone, type: 'text' },
         { label: 'Dirección', key: 'guia_direccion', icon: MapPin, type: 'text' },
-        { label: 'Ciudad', key: 'guia_ciudad', icon: MapPin, type: 'text' },
-        { label: 'Departamento/Estado', key: 'guia_departamento_estado', icon: MapPin, type: 'text' },
-        { label: 'Email', key: 'guia_email', icon: Mail, type: 'email' },
-        { label: 'Guía ida', key: 'guia_numero_ida', icon: Truck, type: 'text' },
-        { label: 'Guía retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
+        { label: 'Ciudad Guía', key: 'guia_ciudad', icon: MapPin, type: 'text' },
+        { label: 'Email Guía', key: 'guia_email', icon: Mail, type: 'email' },
+        { label: 'Guía Ida', key: 'guia_numero_ida', icon: Truck, type: 'text' },
+        { label: 'Guía Retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
         { label: 'Asegurado', key: 'asegurado', icon: ShieldCheck, type: 'boolean' },
-        { label: 'Valor seguro', key: 'valor_seguro', icon: DollarSign, type: 'number' },
+        { label: 'Valor Seguro', key: 'valor_seguro', icon: DollarSign, type: 'text' },
+      ],
+    },
+    {
+      title: 'Notas',
+      icon: FileText,
+      iconColor: 'text-amber-600 bg-amber-50',
+      fields: [
+        { label: 'Notas cliente', key: 'notas_cliente', icon: FileText, type: 'textarea' },
+        { label: 'Notas internas', key: 'notas', icon: FileText, type: 'textarea' },
+        { label: 'Obs. técnicas', key: 'observaciones_tecnicas', icon: FileText, type: 'textarea' },
       ],
     },
   ];
 
-  /** Submit usando ClientService (con token automático vía ApiService) */
+  // ================= SUBMIT =================
   const handleSubmit = async () => {
     setError(null);
 
-    // Validar WhatsApp
-    const parsed = toWaJid(String(form.whatsapp || ''));
-    if (!parsed) {
-      setError('Debes ingresar un número de WhatsApp válido. Ej: +57 315 447 9122');
+    // Validaciones
+    if (!form.nombre?.trim()) {
+      setError('El nombre es obligatorio.');
       return;
     }
 
-    // Payload: igual al form, pero whatsapp normalizado a JID
-    const payload: Partial<Client> & Record<string, any> = {
+    const parsed = toWaJid(String(form.whatsapp || ''));
+    if (!parsed) {
+      setError('Número de WhatsApp inválido. Formato requerido: 10 dígitos (Ej: 3001234567)');
+      return;
+    }
+
+    // Payload
+    const payload: Partial<Client> = {
       ...form,
       whatsapp: parsed.jid,
+      created: new Date().toISOString(),
+      last_msg: new Date().toISOString(),
+      // Bot activo (true) si no se especificó lo contrario
+      consentimiento_contacto: form.consentimiento_contacto === true,
     };
 
     try {
       setSaving(true);
-
-      // ⬇️ Aquí ya viaja Authorization: Bearer <token> gracias a ApiService
       await ClientService.createClient(payload);
 
-      // Notificar globalmente y callback opcional
+      // Eventos globales
       try {
         window.dispatchEvent(new CustomEvent<Partial<Client>>('client:created', { detail: payload }));
-        localStorage.setItem('crm:client-created', JSON.stringify({ at: Date.now() }));
+        // Forzar actualización en listas
+        window.dispatchEvent(new CustomEvent<Partial<Client>>('client:updated', { detail: { ...payload, row_number: 999999 } }));
       } catch {}
 
-      onCreated?.(payload);
-
-      // Reset & cerrar
-      setForm(prev => ({ ...prev, nombre: '', whatsapp: '', ciudad: '' }));
+      if (onCreated) onCreated(payload);
+      
+      setForm(initialForm);
       setOpen(false);
+
     } catch (e: any) {
-      setError(e?.message || 'No se pudo crear el cliente.');
+      console.error(e);
+      setError(e?.message || 'Error al crear el cliente.');
     } finally {
       setSaving(false);
     }
@@ -273,197 +265,178 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
 
   return (
     <>
-      {/* Botón flotante (esquina inferior derecha) */}
-      <div className={floating ? 'fixed bottom-6 right-6 z-[130]' : ''}>
-        <button
-          onClick={() => setOpen(true)}
-          className="btn-primary shadow-lg ring-1 ring-black/5 active:scale-[0.98] inline-flex items-center gap-2"
-          aria-label="Nuevo cliente"
-          title="Nuevo cliente"
-        >
-          <Plus className="w-5 h-5" />
-          Nuevo cliente
-        </button>
-      </div>
+      {/* Botón Flotante */}
+      {floating && (
+        <div className="fixed bottom-6 right-6 z-[110] animate-in slide-in-from-bottom-4 duration-500">
+          <button
+            onClick={() => setOpen(true)}
+            className="group flex items-center gap-2 bg-blue-600 text-white px-5 py-3.5 rounded-full shadow-lg shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/50 transition-all active:scale-95 border border-blue-500"
+            title="Crear Nuevo Cliente"
+          >
+            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+            <span className="font-bold text-sm tracking-wide">Nuevo Cliente</span>
+          </button>
+        </div>
+      )}
 
-      {/* Modal */}
+      {/* Modal Overlay */}
       {open && (
         <div
           ref={overlayRef}
           onMouseDown={onOverlayClick}
-          className="fixed inset-0 z-[140] flex items-center justify-center p-4 bg-neutral-950/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[130] bg-gray-900/70 backdrop-blur-sm flex justify-center items-center transition-all duration-300"
           role="dialog"
-          aria-modal="true"
-          aria-labelledby="nuevo-cliente-title"
         >
+          {/* Main Container - Estilo idéntico a ClientModal */}
           <div
             onMouseDown={(e) => e.stopPropagation()}
-            className="glass rounded-3xl shadow-elevated ring-1 ring-black/5 border border-white/10 max-w-5xl w-full max-h-[92vh] overflow-hidden fade-in"
+            className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300 border border-gray-200"
           >
+            
             {/* Header */}
-            <div className="relative px-6 py-5 text-white bg-gradient-to-r from-emerald-600 to-cyan-600">
-              <div className="relative flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="size-12 rounded-2xl bg-white/20 backdrop-blur-sm ring-1 ring-white/30 flex items-center justify-center">
-                    <Bot className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h2 id="nuevo-cliente-title" className="text-2xl md:text-3xl font-semibold tracking-tight">
-                      Nuevo cliente
-                    </h2>
-                    <p className="text-emerald-100/90">Crea un registro y habilita el bot si deseas.</p>
-                  </div>
+            <div className="relative shrink-0 bg-white z-20 shadow-sm px-4 sm:px-6 py-4 flex items-center justify-between border-b border-gray-100">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-200 border-2 border-white ring-1 ring-gray-100">
+                   <Plus className="w-6 h-6" />
                 </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={handleSubmit}
-                    disabled={saving}
-                    className="btn bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
-                  >
-                    <Save className="w-5 h-5" />
-                    Guardar
-                  </button>
-                  <button
-                    onClick={() => setOpen(false)}
-                    className="btn-ghost text-white"
-                    aria-label="Cerrar"
-                    title="Cerrar"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">Crear Nuevo Cliente</h2>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
+                       <Bot className="w-3 h-3" /> Bot: Activo
+                    </span>
+                    <span className="text-xs text-gray-400">Complete la información requerida</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Quick actions */}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <div className="inline-flex items-center gap-2 text-sm text-white/90">
-                  <ShieldCheck className="w-4 h-4 opacity-90" />
-                  Bot por defecto: <span className="font-semibold ml-1">activo</span>
-                </div>
-                {!!waParsed && (
-                  <a
-                    href={waPreviewLink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn bg-emerald-50 text-emerald-700 hover:bg-emerald-100 ring-emerald-600/10 border border-emerald-200"
-                    title="Abrir chat en WhatsApp"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    {waParsed.e164}
-                  </a>
-                )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleClose}
+                  className="px-4 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition font-medium text-sm border border-transparent hover:border-gray-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition shadow-md shadow-blue-200 disabled:opacity-70 active:scale-95 font-medium"
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                      <span>Guardando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      <span>Guardar Cliente</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
-            {/* Alerta de error */}
+            {/* Error Banner */}
             {error && (
-              <div className="px-6 py-3 bg-red-50 border-b border-red-200 text-red-700 text-sm">
-                {error}
+              <div className="px-6 py-3 bg-red-50 border-b border-red-100 flex items-center gap-3 text-red-700 text-sm animate-in slide-in-from-top-2">
+                <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                   <X className="w-4 h-4 text-red-600" />
+                </div>
+                <span className="font-medium">{error}</span>
               </div>
             )}
 
-            {/* Body */}
-            <div className="p-6 overflow-y-auto max-h-[calc(92vh-152px)] bg-neutral-50/60 dark:bg-neutral-950/60">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {sections.map((section) => (
-                  <section key={section.title} className="card card-hover">
-                    <div className="card-body">
-                      <div className="flex items-center mb-4">
-                        <div className="w-9 h-9 mr-3 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300 flex items-center justify-center">
-                          <section.icon className="w-5 h-5" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-neutral-800 dark:text-neutral-100">{section.title}</h3>
-                      </div>
-
-                      <div className="space-y-4">
-                        {section.fields.map((field) => {
-                          const value: any = (form as any)[field.key] ?? '';
-                          const common =
-                            'w-full text-sm px-3 py-2 rounded-lg border border-neutral-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/60 focus:border-emerald-500 dark:border-neutral-700 dark:bg-neutral-900';
-
-                          return (
-                            <div
-                              key={`${section.title}-${String(field.key)}`}
-                              className="group flex items-start gap-3 p-3 rounded-xl border border-neutral-200/70 dark:border-neutral-800 bg-white/70 dark:bg-neutral-900/60 hover:shadow-sm transition"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-neutral-100 dark:bg-neutral-800 text-neutral-500 dark:text-neutral-400 flex items-center justify-center mt-0.5">
-                                <field.icon className="w-4 h-4" />
-                              </div>
-
-                              <div className="flex-1 min-w-0">
-                                <p className="section-title !normal-case !tracking-normal !text-xs !text-neutral-500 dark:!text-neutral-400 mb-1">
-                                  {field.label}{field.required ? ' *' : ''}
-                                </p>
-
-                                {field.type === 'textarea' ? (
-                                  <textarea
-                                    value={value}
-                                    onChange={(e) => setVal(field.key, e.target.value)}
-                                    className={common}
-                                    rows={3}
-                                    required={field.required}
-                                  />
-                                ) : field.type === 'datetime' ? (
-                                  <input
-                                    type="datetime-local"
-                                    value={value}
-                                    onChange={(e) => setVal(field.key, e.target.value)}
-                                    className={common}
-                                  />
-                                ) : field.type === 'email' ? (
-                                  <input
-                                    type="email"
-                                    value={value}
-                                    onChange={(e) => setVal(field.key, e.target.value)}
-                                    className={common}
-                                  />
-                                ) : field.type === 'number' ? (
-                                  <input
-                                    type="number"
-                                    value={value}
-                                    onChange={(e) => setVal(field.key, e.target.value === '' ? '' : Number(e.target.value))}
-                                    className={common}
-                                  />
-                                ) : field.type === 'boolean' ? (
-                                  <select
-                                    value={value === true ? 'true' : value === false ? 'false' : 'true'}
-                                    onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                    className={common}
-                                  >
-                                    <option value="true">Sí</option>
-                                    <option value="false">No</option>
-                                  </select>
-                                ) : (
-                                  <input
-                                    type="text"
-                                    value={value}
-                                    onChange={(e) => setVal(field.key, e.target.value)}
-                                    className={common}
-                                    required={field.required}
-                                    onBlur={() => {
-                                      if (field.key === 'whatsapp' && form.whatsapp) {
-                                        const parsed = toWaJid(String(form.whatsapp));
-                                        // No sobrescribimos si es inválido; solo dejamos que el submit avise
-                                        if (parsed) setVal('whatsapp' as any, parsed.e164); // dejamos e164 visible
-                                      }
-                                    }}
-                                    placeholder={field.key === 'whatsapp' ? '+57 315 000 0000' : undefined}
-                                  />
-                                )}
-
-                                {field.key === 'whatsapp' && (
-                                  <p className="mt-1 text-xs text-neutral-500">
-                                    Se guardará como <code className="font-mono">{waParsed ? waParsed.jid : '57XXXXXXXXXX@s.whatsapp.net'}</code>
-                                  </p>
-                                )}
-                              </div>
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-8">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">
+                {sections.map((section, idx) => (
+                  <div key={idx} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-fit flex flex-col">
+                    
+                    {/* Section Header */}
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${section.iconColor}`}>
+                                <section.icon className="w-5 h-5" />
                             </div>
-                          );
-                        })}
-                      </div>
+                            <h3 className="font-bold text-gray-800 text-base tracking-tight">{section.title}</h3>
+                        </div>
                     </div>
-                  </section>
+
+                    {/* Fields */}
+                    <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                      {section.fields.map((field, j) => {
+                        const isFullWidth = field.type === 'textarea';
+                        const val = (form as any)[field.key];
+
+                        return (
+                          <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
+                             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider pl-0.5 mb-1 flex items-center justify-between">
+                                {field.label} {field.required && <span className="text-red-500">*</span>}
+                             </label>
+                             
+                             <div className="relative group">
+                               {field.type === 'textarea' ? (
+                                 <textarea
+                                   value={val ?? ''}
+                                   onChange={(e) => setVal(field.key, e.target.value)}
+                                   rows={3}
+                                   className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-gray-300"
+                                   placeholder="Escribe aquí..."
+                                 />
+                               ) : field.type === 'boolean' ? (
+                                 <div className="relative">
+                                    <select
+                                      value={val === true ? 'true' : 'false'}
+                                      onChange={(e) => setVal(field.key, e.target.value === 'true')}
+                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 appearance-none"
+                                    >
+                                      <option value="true">Sí</option>
+                                      <option value="false">No</option>
+                                    </select>
+                                    <ChevronRight className="absolute right-3 top-3 w-4 h-4 text-gray-400 rotate-90 pointer-events-none"/>
+                                 </div>
+                               ) : field.type === 'datetime' ? (
+                                 <input
+                                   type="datetime-local"
+                                   value={val ?? ''}
+                                   onChange={(e) => setVal(field.key, e.target.value)}
+                                   className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5"
+                                 />
+                               ) : (
+                                 <input
+                                   type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                                   value={val ?? ''}
+                                   onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
+                                   placeholder={field.placeholder || '-'}
+                                   className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 placeholder:text-gray-300"
+                                 />
+                               )}
+                               
+                               {/* WhatsApp Validation Visual Feedback */}
+                               {field.key === 'whatsapp' && form.whatsapp && (
+                                 <div className="absolute right-3 top-3">
+                                    {waParsed ? (
+                                      <MessageCircle className="w-4 h-4 text-green-500 animate-in zoom-in" />
+                                    ) : (
+                                      <span className="text-[10px] uppercase font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">Inválido</span>
+                                    )}
+                                 </div>
+                               )}
+                             </div>
+                             
+                             {/* WhatsApp JID Helper Text */}
+                             {field.key === 'whatsapp' && waParsed && (
+                                <span className="text-[10px] text-gray-400 font-mono pl-1 flex items-center gap-1">
+                                  <ShieldCheck className="w-3 h-3 text-gray-300" />
+                                  Se guardará como: {waParsed.jid}
+                                </span>
+                             )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

@@ -1,9 +1,10 @@
+// src/components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
   Copy, MessageCircle, ShieldCheck, ClipboardList, Building2, ClipboardCheck,
   Truck, Edit2, Save, Bot, CheckCircle, AlertCircle, Fingerprint, Clock, Mail, Percent,
-  ShoppingBag, MessageSquare
+  ShoppingBag, MessageSquare, LayoutDashboard, ExternalLink, ChevronRight
 } from 'lucide-react';
 import { Client } from '../types/client';
 import {
@@ -32,14 +33,11 @@ type FieldDef<K extends keyof Client = keyof Client> = {
 
 // ========= Utils & Helpers =========
 
-/** Formatea fechas ISO o Timestamps para el input type="datetime-local" */
 const toInputDate = (val: any): string => {
   if (!val) return '';
   try {
     const date = new Date(val);
     if (isNaN(date.getTime())) return '';
-    // Ajuste simple para que el input datetime-local lo lea (YYYY-MM-DDTHH:mm)
-    // Nota: Esto toma la hora local del navegador.
     const offset = date.getTimezoneOffset() * 60000;
     const localISOTime = (new Date(date.getTime() - offset)).toISOString().slice(0, 16);
     return localISOTime;
@@ -63,13 +61,24 @@ const safeStr = (v?: unknown) => {
   return l === 'null' || l === 'undefined' ? '' : s;
 };
 
+// ========= Definición de Tabs =========
+type TabID = 'general' | 'comercial' | 'logistica' | 'notas' | 'chat';
+
+const TABS: { id: TabID; label: string; icon: React.ComponentType<any> }[] = [
+  { id: 'general', label: 'General', icon: LayoutDashboard },
+  { id: 'comercial', label: 'Comercial', icon: DollarSign },
+  { id: 'logistica', label: 'Logística', icon: Truck },
+  { id: 'notas', label: 'Notas', icon: FileText },
+  { id: 'chat', label: 'Chat', icon: MessageCircle },
+];
+
 export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, client, onUpdate }) => {
   const shouldRender = Boolean(isOpen && client);
   const c = (client ?? {}) as Client;
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   // State
-  const [activeTab, setActiveTab] = useState<'ficha' | 'chat'>('ficha');
+  const [activeTab, setActiveTab] = useState<TabID>('general');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Client>>({});
   const [saving, setSaving] = useState(false);
@@ -77,7 +86,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   // Init logic
   useEffect(() => {
     if (!shouldRender) return;
-    setActiveTab('ficha');
+    setActiveTab('general');
     setIsEditing(false);
     setEditData(c);
   }, [shouldRender, c]); 
@@ -90,8 +99,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
         if (isEditing) {
           setIsEditing(false);
           setEditData(c || {});
-        } else if (activeTab === 'chat') {
-          setActiveTab('ficha');
         } else {
           onClose();
         }
@@ -103,13 +110,15 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [shouldRender, isEditing, activeTab, onClose, c]);
+  }, [shouldRender, isEditing, onClose, c]);
 
   const onOverlayClick = (e: React.MouseEvent) => {
     if (e.target === overlayRef.current) {
       if (isEditing) {
-         setIsEditing(false);
-         setEditData(c || {});
+         if(window.confirm("Tienes cambios sin guardar. ¿Deseas cerrar y perder los cambios?")) {
+            setIsEditing(false);
+            onClose();
+         }
       } else {
          onClose();
       }
@@ -137,10 +146,21 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     } finally { setSaving(false); }
   };
 
-  const isBotOn = (v: any) => v === true || v === '' || v === null;
+  // === LÓGICA DEL BOT CORREGIDA ===
+  // null, undefined, "", true, "true" = ON
+  // solo false o "false" = OFF
+  const isBotOn = (v: any) => {
+    if (v === false) return false;
+    if (typeof v === 'string' && v.toLowerCase() === 'false') return false;
+    return true;
+  };
+
   const handleBotToggle = async () => {
     const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto) as any;
     const currentlyOn = isBotOn(currentRaw);
+    
+    // Si estaba encendido (null o true), ahora se apaga (false).
+    // Si estaba apagado (false), ahora se enciende (true).
     const newValue = !currentlyOn;
 
     if (currentlyOn) {
@@ -192,35 +212,37 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   }, [c?.nombre]);
 
   // =========================================================
-  // CONFIGURACIÓN DE CAMPOS (Aquí agregamos los faltantes)
+  // CONFIGURACIÓN DE SECCIONES 
   // =========================================================
-  const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
-    { title: 'Información Personal', icon: User, iconColor: 'text-blue-600 bg-blue-50', fields: [
+  const allSections: Array<{ tab: TabID; title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
+    // --- TAB GENERAL ---
+    { tab: 'general', title: 'Información Personal', icon: User, iconColor: 'text-blue-600 bg-blue-50', fields: [
       { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
       { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text' },
       { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
-      { label: 'Subscriber ID', key: 'subscriber_id', icon: Fingerprint, type: 'text' }, // Nuevo
+      { label: 'Subscriber ID', key: 'subscriber_id', icon: Fingerprint, type: 'text' },
     ]},
-    { title: 'Estado y Tiempos', icon: Clock, iconColor: 'text-purple-600 bg-purple-50', fields: [
+    { tab: 'general', title: 'Estado y Tiempos', icon: Clock, iconColor: 'text-purple-600 bg-purple-50', fields: [
       { label: 'Source (origen)', key: 'source', icon: Settings, type: 'text' },
       { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
       { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
       { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
-      { label: 'Creado', key: 'created', icon: Clock, type: 'datetime' }, // Nuevo
-      { label: 'Último Mensaje', key: 'last_msg', icon: MessageCircle, type: 'datetime' }, // Nuevo
+      { label: 'Creado', key: 'created', icon: Clock, type: 'datetime' },
+      { label: 'Último Mensaje', key: 'last_msg', icon: MessageCircle, type: 'datetime' },
     ]},
-    { title: 'Agenda', icon: Calendar, iconColor: 'text-teal-600 bg-teal-50', fields: [
-       { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
-       { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
-       { label: 'Asistió', key: 'asistio_agenda', icon: CheckCircle, type: 'boolean' }, // Nuevo (editable)
-    ]},
-    { title: 'Dispositivo', icon: Smartphone, iconColor: 'text-indigo-600 bg-indigo-50', fields: [
+    { tab: 'general', title: 'Dispositivo', icon: Smartphone, iconColor: 'text-indigo-600 bg-indigo-50', fields: [
       { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
       { label: 'Intención', key: 'intencion', icon: Settings, type: 'text' },
       { label: 'Detalles', key: 'detalles', icon: FileText, type: 'textarea' },
       { label: 'Recepción', key: 'modo_recepcion', icon: MapPin, type: 'text' },
     ]},
-    { title: 'Diagnóstico y Comercial', icon: DollarSign, iconColor: 'text-green-600 bg-green-50', fields: [
+    // --- TAB COMERCIAL ---
+    { tab: 'comercial', title: 'Agenda', icon: Calendar, iconColor: 'text-teal-600 bg-teal-50', fields: [
+       { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
+       { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
+       { label: 'Asistió', key: 'asistio_agenda', icon: CheckCircle, type: 'boolean' },
+    ]},
+    { tab: 'comercial', title: 'Diagnóstico y Comercial', icon: DollarSign, iconColor: 'text-green-600 bg-green-50', fields: [
       { label: 'Diagnóstico req.', key: 'diagnostico_requerido', icon: ClipboardCheck, type: 'text' },
       { label: 'Equipo manipulado', key: 'equipo_manipulado', icon: ClipboardList, type: 'text' },
       { label: 'Precio diag.', key: 'precio_diagnostico_informado', icon: DollarSign, type: 'text' },
@@ -228,30 +250,55 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       { label: 'Precio máximo', key: 'precio_maximo_informado', icon: DollarSign, type: 'text' },
       { label: 'Búsqueda precios', key: 'buscar_precios_status', icon: DollarSign, type: 'text' },
       { label: 'Servicios extra', key: 'servicios_adicionales', icon: Settings, type: 'text' },
-      { label: 'Interés accesorios', key: 'interes_accesorios', icon: ShoppingBag, type: 'text' }, // Nuevo
-      { label: 'Desc. Multi-rep', key: 'descuento_multi_reparacion', icon: Percent, type: 'text' }, // Nuevo
+      { label: 'Interés accesorios', key: 'interes_accesorios', icon: ShoppingBag, type: 'text' },
+      { label: 'Desc. Multi-rep', key: 'descuento_multi_reparacion', icon: Percent, type: 'text' },
     ]},
-    { title: 'Notas', icon: FileText, iconColor: 'text-amber-600 bg-amber-50', fields: [
-      { label: 'Último Input', key: 'last_input_text', icon: MessageSquare, type: 'textarea' }, // Nuevo
+    // --- TAB NOTAS ---
+    { tab: 'notas', title: 'Notas', icon: FileText, iconColor: 'text-amber-600 bg-amber-50', fields: [
+      { label: 'Último Input', key: 'last_input_text', icon: MessageSquare, type: 'textarea' },
       { label: 'Notas cliente', key: 'notas_cliente', icon: FileText, type: 'textarea' },
       { label: 'Notas internas', key: 'notas', icon: FileText, type: 'textarea' },
       { label: 'Obs. técnicas', key: 'observaciones_tecnicas', icon: FileText, type: 'textarea' },
     ]},
-    { title: 'Logística y Envío', icon: Truck, iconColor: 'text-orange-600 bg-orange-50', fields: [
+    // --- TAB LOGISTICA ---
+    { tab: 'logistica', title: 'Logística y Envío', icon: Truck, iconColor: 'text-orange-600 bg-orange-50', fields: [
       { label: 'Nombre Guía', key: 'guia_nombre_completo', icon: User, type: 'text' },
       { label: 'Cédula / ID', key: 'guia_cedula_id', icon: ClipboardList, type: 'text' },
-      { label: 'Teléfono Guía', key: 'guia_telefono', icon: Phone, type: 'text' }, // Nuevo (estaba faltando)
+      { label: 'Teléfono Guía', key: 'guia_telefono', icon: Phone, type: 'text' },
       { label: 'Dirección', key: 'guia_direccion', icon: MapPin, type: 'text' },
       { label: 'Ciudad Guía', key: 'guia_ciudad', icon: MapPin, type: 'text' },
-      { label: 'Dpto/Estado', key: 'guia_departamento_estado', icon: MapPin, type: 'text' }, // Nuevo
-      { label: 'Email Guía', key: 'guia_email', icon: Mail, type: 'email' }, // Nuevo
+      { label: 'Dpto/Estado', key: 'guia_departamento_estado', icon: MapPin, type: 'text' },
+      { label: 'Email Guía', key: 'guia_email', icon: Mail, type: 'email' },
       { label: 'Guía Ida', key: 'guia_numero_ida', icon: Truck, type: 'text' },
       { label: 'Guía Retorno', key: 'guia_numero_retorno', icon: Truck, type: 'text' },
       { label: 'Asegurado', key: 'asegurado', icon: ShieldCheck, type: 'boolean' },
-      { label: 'Valor Seguro', key: 'valor_seguro', icon: DollarSign, type: 'text' }, // Nuevo
+      { label: 'Valor Seguro', key: 'valor_seguro', icon: DollarSign, type: 'text' },
       { label: 'Estado envío', key: 'estado_envio', icon: Truck, type: 'text' },
     ]},
   ];
+
+  // Helper para calcular campos llenos vs totales por Tab
+  const getTabCounts = (tabId: TabID) => {
+    if (tabId === 'chat') return null; // Chat no tiene campos
+    const relevantSections = allSections.filter(s => s.tab === tabId);
+    let total = 0;
+    let filled = 0;
+
+    relevantSections.forEach(section => {
+      section.fields.forEach(field => {
+        total++;
+        const val = getVal(field.key);
+        // Consideramos "lleno" si no es null, undefined o string vacío
+        if (val !== null && val !== undefined && val !== '') {
+          filled++;
+        }
+      });
+    });
+
+    return { filled, total };
+  };
+
+  const sectionsToRender = allSections.filter(s => s.tab === activeTab);
 
   if (!shouldRender) return null;
 
@@ -259,155 +306,203 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     <div
       ref={overlayRef}
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-[120] bg-gray-900/60 backdrop-blur-sm flex justify-end sm:justify-center sm:items-center transition-opacity duration-300"
+      className="fixed inset-0 z-[120] bg-gray-900/70 backdrop-blur-sm flex justify-end sm:justify-center sm:items-center transition-all duration-300"
       role="dialog"
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300"
+        className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300 border border-gray-200"
       >
         
-        {/* === HEADER === */}
-        <div className="relative shrink-0 bg-white border-b border-gray-100 z-20">
+        {/* === HEADER PRINCIPAL === */}
+        <div className="relative shrink-0 bg-white z-20 shadow-sm">
           
-          {/* Top Bar */}
-          <div className="px-4 sm:px-8 py-5 flex flex-col md:flex-row gap-4 md:items-center justify-between bg-gradient-to-r from-white via-white to-gray-50/50">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-blue-200">
-                {initials}
+          {/* Top Bar: Info Cliente & Acciones Globales */}
+          <div className="px-4 sm:px-6 py-4 flex flex-col md:flex-row gap-4 md:items-center justify-between bg-white border-b border-gray-100">
+            {/* Cliente Info */}
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="relative">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-blue-200 shrink-0 border-2 border-white ring-1 ring-gray-100">
+                  {initials}
+                </div>
+                {/* Indicador de activo si fuera real-time */}
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
               </div>
-              <div>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
-                  {safeStr(c?.nombre) || 'Cliente Nuevo'}
+              <div className="min-w-0">
+                <h2 className="text-2xl font-bold text-gray-900 tracking-tight truncate">
+                  {safeStr(c?.nombre) || 'Sin Nombre'}
                 </h2>
-                <div className="flex items-center gap-2 text-gray-500 text-sm mt-0.5">
-                  <Smartphone className="w-4 h-4" />
-                  <span>{safeStr(c?.modelo) || 'Sin modelo'}</span>
+                <div className="flex items-center gap-3 text-gray-500 text-sm mt-1">
+                  <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
+                     <Smartphone className="w-3.5 h-3.5 text-gray-400" />
+                     <span className="truncate font-medium">{safeStr(c?.modelo) || 'Modelo desconocido'}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-               <div className="bg-gray-100 p-1 rounded-xl flex items-center font-medium text-sm">
-                  <button
-                    onClick={() => setActiveTab('ficha')}
-                    className={`px-4 py-1.5 rounded-lg transition-all shadow-sm ${activeTab === 'ficha' ? 'bg-white text-gray-900' : 'bg-transparent text-gray-500 hover:text-gray-700 shadow-none'}`}
-                  >
-                    Ficha
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('chat')}
-                    className={`px-4 py-1.5 rounded-lg transition-all shadow-sm ${activeTab === 'chat' ? 'bg-white text-gray-900' : 'bg-transparent text-gray-500 hover:text-gray-700 shadow-none'}`}
-                  >
-                    Chat
-                  </button>
-               </div>
-
-               <div className="h-6 w-px bg-gray-200 mx-1 hidden md:block" />
-
+            {/* Acciones Principales */}
+            <div className="flex flex-wrap items-center gap-3 justify-end">
                {isEditing ? (
                  <>
                    <button
-                     onClick={handleSave}
+                     onClick={() => { 
+                        if(window.confirm('¿Descartar cambios?')) {
+                            setIsEditing(false); 
+                            setEditData(c); 
+                        }
+                     }}
                      disabled={saving}
-                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black transition shadow-md disabled:opacity-70"
+                     className="px-4 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition font-medium text-sm border border-transparent hover:border-gray-200"
                    >
-                     {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Save className="w-4 h-4" />}
-                     <span className="text-sm font-medium">Guardar</span>
+                     Cancelar
                    </button>
                    <button
-                     onClick={() => { setIsEditing(false); setEditData(c); }}
+                     onClick={handleSave}
                      disabled={saving}
-                     className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition"
+                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition shadow-md shadow-blue-200 disabled:opacity-70 active:scale-95 font-medium"
                    >
-                     <X className="w-4 h-4" />
+                     {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Save className="w-4 h-4" />}
+                     <span>Guardar Cambios</span>
                    </button>
                  </>
                ) : (
-                 <button
-                   onClick={() => { setActiveTab('ficha'); setIsEditing(true); setEditData(c); }}
-                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 transition shadow-sm"
-                 >
-                   <Edit2 className="w-4 h-4" />
-                   <span className="text-sm font-medium">Editar</span>
-                 </button>
+                 <>
+                   <button
+                     onClick={() => { setIsEditing(true); setEditData(c); }}
+                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm active:scale-95 font-medium"
+                   >
+                     <Edit2 className="w-4 h-4" />
+                     <span>Editar</span>
+                   </button>
+                   <button onClick={onClose} className="p-2.5 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition border border-transparent hover:border-red-100 ml-1">
+                     <X className="w-6 h-6" />
+                   </button>
+                 </>
                )}
-
-               <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition">
-                 <X className="w-6 h-6" />
-               </button>
             </div>
           </div>
 
-          {/* Quick Info Bar */}
-          <div className="px-4 sm:px-8 pb-4 flex flex-col xl:flex-row gap-4 xl:items-center justify-between">
-            <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Info Bar & Toggles */}
+          <div className="px-4 sm:px-6 py-3 flex flex-col xl:flex-row gap-4 xl:items-center justify-between bg-gray-50/80 backdrop-blur border-b border-gray-100">
+            {/* Etiquetas y Toggles */}
+            <div className="flex flex-wrap items-center gap-3">
                {c?.estado_etapa && (
-                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getEtapaColor(c.estado_etapa as any)}`}>
+                 <span className={`px-3 py-1 rounded-lg text-xs font-bold border uppercase tracking-wide shadow-sm ${getEtapaColor(c.estado_etapa as any)}`}>
                    {String(c.estado_etapa).replace(/_/g, ' ')}
                  </span>
                )}
-               {c?.categoria_contacto && (
-                 <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getCategoriaColor(c.categoria_contacto as any)}`}>
-                   {String(c.categoria_contacto).replace(/_/g, ' ')}
-                 </span>
-               )}
                
+               {/* Separador vertical */}
+               <div className="h-6 w-px bg-gray-300 mx-1 hidden sm:block"></div>
+
+               {/* Toggle Bot */}
                <button 
                  onClick={handleBotToggle}
                  disabled={saving}
-                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition active:scale-95
+                 className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all active:scale-95 shadow-sm
                    ${isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) 
-                     ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100' 
-                     : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'}`}
+                     ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' 
+                     : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 grayscale'}`}
                >
-                 {isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? <Bot className="w-3 h-3"/> : <AlertCircle className="w-3 h-3"/>}
-                 {isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'Bot Activo' : 'Bot Inactivo'}
+                 <div className={`w-2 h-2 rounded-full ${isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                 <Bot className="w-3.5 h-3.5"/>
+                 <span>{isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'Bot Activo' : 'Bot Apagado'}</span>
                </button>
 
+               {/* Toggle Asistencia */}
                {canShowAsistio && (
                  <button
                    onClick={toggleAsistio}
-                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition active:scale-95
-                     ${asistio ? 'bg-teal-50 text-teal-700 border-teal-200' : 'bg-orange-50 text-orange-700 border-orange-200'}`}
+                   className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all active:scale-95 shadow-sm
+                     ${asistio 
+                        ? 'bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-200' 
+                        : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'}`}
                  >
-                   {asistio ? <CheckCircle className="w-3 h-3" /> : <Calendar className="w-3 h-3" />}
-                   {asistio ? 'Asistió a Cita' : 'Pendiente Asistencia'}
+                   {asistio ? <CheckCircle className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
+                   <span>{asistio ? 'Asistió' : 'Pendiente Asistencia'}</span>
                  </button>
                )}
             </div>
 
-            <div className="flex items-center gap-2 text-sm overflow-x-auto pb-1 xl:pb-0">
-               <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition border border-green-100 whitespace-nowrap">
-                 <MessageCircle className="w-4 h-4" /> {formatWhatsApp(c.whatsapp)}
+            {/* Links de Contacto Rápido */}
+            <div className="flex items-center gap-2 text-sm overflow-x-auto no-scrollbar">
+               <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg hover:text-green-600 hover:border-green-200 hover:shadow-sm transition border border-gray-200 whitespace-nowrap font-medium text-xs group">
+                 <MessageCircle className="w-4 h-4 text-green-500 group-hover:scale-110 transition-transform" /> 
+                 <span className="opacity-90">{formatWhatsApp(c.whatsapp)}</span>
+                 <ExternalLink className="w-3 h-3 opacity-50 ml-1"/>
                </a>
-               <button onClick={() => handleCopy(phoneE164)} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition border border-transparent hover:border-gray-200" title="Copiar número">
+               <button onClick={() => handleCopy(phoneE164)} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition" title="Copiar número">
                  <Copy className="w-4 h-4" />
                </button>
                {safeStr(c?.ciudad) && (
-                 <a href={mapsLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition border border-blue-100 whitespace-nowrap">
-                   <MapPin className="w-4 h-4" /> {safeStr(c?.ciudad)}
+                 <a href={mapsLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg hover:text-blue-600 hover:border-blue-200 hover:shadow-sm transition border border-gray-200 whitespace-nowrap font-medium text-xs group">
+                   <MapPin className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" /> 
+                   <span className="opacity-90">{safeStr(c?.ciudad)}</span>
                  </a>
                )}
             </div>
           </div>
+
+          {/* === TABS NAVIGATION === */}
+          <div className="px-4 sm:px-6 flex overflow-x-auto gap-6 border-b border-gray-100 no-scrollbar bg-white">
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+              const counts = getTabCounts(tab.id);
+              
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`group relative flex items-center gap-2 py-4 text-sm font-medium border-b-2 transition-all whitespace-nowrap outline-none
+                    ${isActive 
+                      ? 'border-blue-600 text-blue-700' 
+                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-200'}`}
+                >
+                  <tab.icon className={`w-4 h-4 transition-colors ${isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                  <span>{tab.label}</span>
+                  
+                  {/* Badge de contador */}
+                  {counts && (
+                    <span className={`ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md transition-colors
+                      ${isActive 
+                        ? 'bg-blue-100 text-blue-700' 
+                        : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200'}`}>
+                      {counts.filled}/{counts.total}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        {/* === BODY === */}
-        <div className="flex-1 overflow-hidden flex flex-col bg-gray-50/50 relative">
-          {activeTab === 'ficha' ? (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8">
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto">
-                {sections.map((section, idx) => (
-                  <div key={idx} className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-50 flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${section.iconColor}`}>
-                        <section.icon className="w-5 h-5" />
-                      </div>
-                      <h3 className="font-semibold text-gray-900 text-lg">{section.title}</h3>
+        {/* === BODY CONTENT === */}
+        <div className="flex-1 overflow-hidden flex flex-col bg-gray-50 relative">
+          
+          {activeTab === 'chat' ? (
+            <ChatPanel
+              client={c}
+              source={(editData.source ?? c.source) as any}
+            />
+          ) : (
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8 animate-in fade-in duration-300">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">
+                
+                {sectionsToRender.map((section, idx) => (
+                  <div key={`${section.title}-${idx}`} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-fit flex flex-col">
+                    {/* Section Header */}
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+                        <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${section.iconColor}`}>
+                                <section.icon className="w-5 h-5" />
+                            </div>
+                            <h3 className="font-bold text-gray-800 text-base tracking-tight">{section.title}</h3>
+                        </div>
                     </div>
 
-                    <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                    {/* Section Body */}
+                    <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
                       {section.fields.map((field, j) => {
                         const value = getVal(field.key);
                         const isEmpty = !safeStr(value);
@@ -415,72 +510,92 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                         
                         return (
                           <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
-                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide pl-1 flex items-center gap-1.5">
+                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider pl-0.5 mb-1 flex items-center justify-between">
                                {field.label}
+                               {/* Pequeño indicador si hay dato en modo vista */}
+                               {!isEditing && !isEmpty && field.type !== 'boolean' && (
+                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400/50" />
+                               )}
                             </label>
 
                             {isEditing ? (
                                 /* === Edit Mode === */
-                                field.key === 'estado_envio' ? (
-                                  <select
-                                    value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
-                                    onChange={(e) => setVal('estado_envio', e.target.value as any)}
-                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
-                                  >
-                                    <option value="">(Seleccionar)</option>
-                                    <option value="envio_gestionado">Envío gestionado</option>
-                                    <option value="no_aplica">No aplica</option>
-                                  </select>
-                                ) : field.type === 'textarea' ? (
-                                  <textarea
-                                    value={value ?? ''}
-                                    onChange={(e) => setVal(field.key, e.target.value)}
-                                    rows={3}
-                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
-                                  />
-                                ) : field.type === 'boolean' ? (
-                                  <select
-                                    value={value === true ? 'true' : 'false'}
-                                    onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
-                                  >
-                                    <option value="true">Sí</option>
-                                    <option value="false">No</option>
-                                  </select>
-                                ) : field.type === 'datetime' ? (
-                                  <input
-                                    type="datetime-local"
-                                    value={toInputDate(value)} // Usamos helper para formato correcto
-                                    onChange={(e) => setVal(field.key, e.target.value)}
-                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
-                                  />
-                                ) : (
-                                  <input
-                                    type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
-                                    value={value ?? ''}
-                                    onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
-                                    className="w-full text-sm bg-gray-50 border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all px-3 py-2"
-                                  />
-                                )
+                                <div className="relative group">
+                                  {field.key === 'estado_envio' ? (
+                                    <div className="relative">
+                                        <select
+                                            value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
+                                            onChange={(e) => setVal('estado_envio', e.target.value as any)}
+                                            className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 appearance-none"
+                                        >
+                                            <option value="">(Seleccionar)</option>
+                                            <option value="envio_gestionado">Envío gestionado</option>
+                                            <option value="no_aplica">No aplica</option>
+                                        </select>
+                                        <ChevronRight className="absolute right-3 top-3 w-4 h-4 text-gray-400 rotate-90 pointer-events-none"/>
+                                    </div>
+                                  ) : field.type === 'textarea' ? (
+                                    <textarea
+                                      value={value ?? ''}
+                                      onChange={(e) => setVal(field.key, e.target.value)}
+                                      rows={3}
+                                      placeholder="Escribe aquí..."
+                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-gray-300"
+                                    />
+                                  ) : field.type === 'boolean' ? (
+                                    <div className="relative">
+                                        <select
+                                            value={value === true ? 'true' : 'false'}
+                                            onChange={(e) => setVal(field.key, e.target.value === 'true')}
+                                            className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 appearance-none"
+                                        >
+                                            <option value="true">Sí</option>
+                                            <option value="false">No</option>
+                                        </select>
+                                        <ChevronRight className="absolute right-3 top-3 w-4 h-4 text-gray-400 rotate-90 pointer-events-none"/>
+                                    </div>
+                                  ) : field.type === 'datetime' ? (
+                                    <input
+                                      type="datetime-local"
+                                      value={toInputDate(value)}
+                                      onChange={(e) => setVal(field.key, e.target.value)}
+                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5"
+                                    />
+                                  ) : (
+                                    <input
+                                      type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                                      value={value ?? ''}
+                                      onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
+                                      placeholder="-"
+                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 placeholder:text-gray-300"
+                                    />
+                                  )}
+                                </div>
                             ) : (
                                 /* === View Mode === */
                                 <div className="min-h-[24px] flex items-center">
                                   {field.key === 'estado_envio' && value ? (
-                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${deriveEnvioUI({ ...c, ...editData }).classes}`}>
-                                        <Truck className="w-3 h-3"/> {deriveEnvioUI({ ...c, ...editData }).label}
+                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${deriveEnvioUI({ ...c, ...editData }).classes}`}>
+                                        <Truck className="w-3.5 h-3.5"/> {deriveEnvioUI({ ...c, ...editData }).label}
                                      </span>
                                   ) : isEmpty ? (
-                                     <span className="text-gray-300 text-sm italic select-none">-</span>
+                                     <span className="text-gray-300 text-sm select-none font-light italic">Vacío</span>
                                   ) : field.key === 'whatsapp' ? (
-                                     <span className="text-sm font-medium text-gray-900 font-mono bg-gray-50 px-2 py-0.5 rounded">{formatWhatsApp(String(value))}</span>
+                                     <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold text-gray-700 font-mono tracking-wide">{formatWhatsApp(String(value))}</span>
+                                     </div>
                                   ) : (field.type === 'datetime' || field.key === 'fecha_agenda') ? (
-                                     <span className="text-sm font-medium text-purple-700 bg-purple-50 px-2 py-0.5 rounded flex items-center gap-2">
-                                        <Calendar className="w-3.5 h-3.5"/> {formatDate(String(value))}
+                                     <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-gray-400"/> 
+                                        {formatDate(String(value))}
                                      </span>
                                   ) : field.type === 'boolean' ? (
-                                      <span className={`text-sm font-bold ${value ? 'text-green-600' : 'text-gray-500'}`}>{value ? 'Sí' : 'No'}</span>
+                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wide border ${value ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                                        {value ? <CheckCircle className="w-3.5 h-3.5"/> : <X className="w-3.5 h-3.5"/>}
+                                        {value ? 'Sí' : 'No'}
+                                      </span>
                                   ) : (
-                                     <span className="text-sm font-medium text-gray-900 break-words leading-relaxed">
+                                     <span className="text-sm font-medium text-gray-700 break-words leading-relaxed whitespace-pre-wrap">
                                         {String(value)}
                                      </span>
                                   )}
@@ -493,13 +608,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   </div>
                 ))}
               </div>
-              <div className="h-12"></div>
             </div>
-          ) : (
-            <ChatPanel
-              client={c}
-              source={(editData.source ?? c.source) as any}
-            />
           )}
         </div>
       </div>
