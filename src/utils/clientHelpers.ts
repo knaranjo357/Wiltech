@@ -65,8 +65,6 @@ export const formatWhatsApp = (whatsapp: string | number | null | undefined): st
   
   // Convertimos a string explícitamente y limpiamos
   return String(whatsapp)
-    .replace('@s.whatsapp.net', '')
-    .replace('57', '+57 ');
 };
 
 export const isToday = (dateString: string): boolean => {

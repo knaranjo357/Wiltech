@@ -1,9 +1,7 @@
-// src/components/ChatPanel.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint } from 'lucide-react';
 import { Client } from '../types/client';
 import { ApiService } from '../services/apiService';
-// ⛔️ Sin SourceSelector
 import { ChatBubble, ChatMsg } from './ChatBubble';
 
 export type ChatPanelProps = {
@@ -12,6 +10,7 @@ export type ChatPanelProps = {
   source: string | null | undefined;
 };
 
+// Mantenemos el helper, pero ya no lo usaremos para bloquear la UI
 const coerceNumber = (v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'bigint') {
@@ -22,7 +21,7 @@ const coerceNumber = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-// Toma el valor "crudo" como venga del backend (string | number | bigint | null)
+// Toma el valor "crudo" para mostrar y para enviar (evita problemas de precisión con IDs largos)
 const getRawSubscriberId = (c: any): unknown =>
   c?.subscriber_id ?? c?.subscriberId ?? c?.sub_id ?? null;
 
@@ -47,15 +46,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
     [client?.whatsapp]
   );
 
-  // Valor crudo para MOSTRAR sin perder dígitos
+  // Valor crudo (String | Number)
   const rawSubscriberId = getRawSubscriberId(client);
+  
+  // Display en UI
   const subscriberIdDisplay =
     rawSubscriberId === null || rawSubscriberId === undefined || rawSubscriberId === ''
       ? '—'
       : String(rawSubscriberId);
 
-  // Valor numérico para ENVIAR (como lo pides)
-  const subscriberIdNumber = useMemo(() => coerceNumber(rawSubscriberId), [rawSubscriberId]);
+  // Validamos si tenemos ALGO con que enviar (WhatsApp O SubscriberID)
+  const hasContactMethod = hasWhatsapp || (rawSubscriberId !== null && rawSubscriberId !== undefined && rawSubscriberId !== '');
 
   const scrollToBottom = (smooth = false) => {
     const el = scrollRef.current;
@@ -91,14 +92,19 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
     ta.style.height = Math.min(150, ta.scrollHeight) + 'px';
   }, [input]);
 
-  // --- Cargar historial SIEMPRE por WhatsApp ---
+  // --- Cargar historial ---
   const loadConversation = async () => {
-    if (!hasWhatsapp) return; 
+    // Intentamos cargar si tiene whatsapp, si no, intentamos con lo que haya
+    if (!hasWhatsapp && !rawSubscriberId) return; 
+
     try {
       setLoading(true);
       setError(null);
       const body: any = { whatsapp: client.whatsapp };
+      
+      // Enviamos el source si existe, o subscriber_id si no hay whatsapp
       if (source) body.source = source;
+      if (!hasWhatsapp && rawSubscriberId) body.subscriber_id = rawSubscriberId;
 
       const resp = await ApiService.post<any[]>('/conversacion', body);
       const normalized: ChatMsg[] = Array.isArray(resp)
@@ -120,25 +126,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(false)));
       setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e: any) {
-      setError(e?.message || 'No se pudo cargar la conversación');
+      // No mostramos error invasivo si es solo carga inicial
+      console.error('Error cargando chat:', e);
+      // setError(e?.message || 'No se pudo cargar la conversación');
     } finally {
       setLoading(false);
     }
   };
 
-  // Cargar historial (por whatsapp)
+  // Cargar historial
   useEffect(() => {
     loadConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.whatsapp, source]);
 
-  // --- Enviar (requiere subscriber_id numérico) ---
+  // --- Enviar Mensaje (MODIFICADO) ---
   const sendMessage = async () => {
     const text = input.trim();
-    if (!text || subscriberIdNumber == null) return;
+    // Validar: debe tener texto Y (tener whatsapp O tener subscriber_id)
+    if (!text || !hasContactMethod) return;
 
     stickToBottomRef.current = true;
 
+    // Mensaje optimista
     const optimistic: ChatMsg = {
       id: `local-${Date.now()}`,
       type: 'ai', 
@@ -151,19 +161,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
     setError(null);
 
     try {
+      // Lógica solicitada:
+      // 1. Si source es null/vacio -> "Directo". Si tiene source -> usarlo.
+      const finalSource = source || 'Directo';
+
       const body: any = {
-        subscriber_id: subscriberIdNumber,
         whatsapp: client.whatsapp,
         mensaje: text,
+        source: finalSource,
       };
-      if (source) body.source = source;
+
+      // 2. Adjuntamos subscriber_id solo si existe (raw, sin forzar null si no existe)
+      if (rawSubscriberId !== null && rawSubscriberId !== undefined && rawSubscriberId !== '') {
+         body.subscriber_id = rawSubscriberId;
+      }
 
       await ApiService.post('/enviarmensaje', body);
+      
+      // Recargar para confirmar IDs y estado real
       await loadConversation();
     } catch (e: any) {
       setError(e?.message || 'No se pudo enviar el mensaje');
-      setMsgs((prev) => prev.filter((m) => m !== optimistic));
-      setInput(text);
+      setMsgs((prev) => prev.filter((m) => m.id !== optimistic.id)); // Eliminar optimista si falló
+      setInput(text); // Restaurar texto
       inputRef.current?.focus();
     } finally {
       setSending(false);
@@ -191,7 +211,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
     } catch {}
   };
 
-  const canSend = subscriberIdNumber != null && !!input.trim() && !sending;
+  // Habilitamos envío si hay texto y algún método de contacto
+  const canSend = hasContactMethod && !!input.trim() && !sending;
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-white border-l border-gray-100/50">
@@ -239,7 +260,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
 
         <button
           onClick={loadConversation}
-          disabled={!hasWhatsapp || loading}
+          disabled={!hasContactMethod || loading}
           className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all disabled:opacity-50"
           title="Actualizar conversación"
         >
@@ -253,24 +274,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
           ref={scrollRef}
           className="absolute inset-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
         >
-          {/* Alertas de Estado */}
-          {!hasWhatsapp && (
+          {/* Alerta solo si NO hay forma de contacto */}
+          {!hasContactMethod && (
             <div className="flex gap-3 p-3 rounded-xl bg-red-50 border border-red-100 text-red-800 text-sm mx-auto max-w-md shadow-sm">
               <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
               <div>
-                <p className="font-bold">Sin WhatsApp</p>
-                <p className="text-red-700/80 text-xs mt-0.5">No hay número asociado para cargar el historial.</p>
-              </div>
-            </div>
-          )}
-
-          {subscriberIdNumber == null && hasWhatsapp && (
-            <div className="flex gap-3 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-900 text-sm mx-auto max-w-md shadow-sm">
-              <Fingerprint className="w-5 h-5 shrink-0 text-amber-500" />
-              <div>
-                <p className="font-bold">Modo Lectura</p>
-                <p className="text-amber-800/80 text-xs mt-0.5">
-                   Visualizando historial por WhatsApp. Para <b>enviar</b> necesitas un <b>Subscriber ID</b> válido.
+                <p className="font-bold">Contacto no disponible</p>
+                <p className="text-red-700/80 text-xs mt-0.5">
+                  Este cliente no tiene WhatsApp ni Subscriber ID. No es posible enviar mensajes.
                 </p>
               </div>
             </div>
@@ -290,7 +301,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
             </div>
           )}
 
-          {!loading && !error && msgs.length === 0 && hasWhatsapp && (
+          {!loading && !error && msgs.length === 0 && hasContactMethod && (
              <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
                 <MessageCircle className="w-10 h-10 opacity-20" />
                 <p className="text-sm">No hay mensajes aún</p>
@@ -332,10 +343,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={subscriberIdNumber == null ? 'Solo lectura...' : 'Escribe un mensaje...'}
-                disabled={subscriberIdNumber == null}
+                placeholder={!hasContactMethod ? 'No se puede enviar mensajes...' : 'Escribe un mensaje...'}
+                disabled={!hasContactMethod}
                 className={`w-full bg-gray-50 border rounded-2xl px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:bg-white transition-all resize-none max-h-[150px]
-                   ${subscriberIdNumber == null 
+                   ${!hasContactMethod
                       ? 'border-gray-200 text-gray-400 cursor-not-allowed' 
                       : 'border-gray-200 text-gray-900 focus:border-indigo-500 focus:ring-indigo-500/10 placeholder-gray-400'
                    }
@@ -371,7 +382,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
               <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
                  <span>Source:</span>
                  <span className="font-mono font-medium text-gray-600 bg-gray-50 px-1 rounded">
-                    {source || 'auto'}
+                    {source || 'Directo (auto)'}
                  </span>
               </div>
               <span className={`text-[10px] transition-colors ${input.length > 500 ? 'text-orange-500' : 'text-gray-300'}`}>

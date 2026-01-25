@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, 
   ChevronRight, Search, CalendarDays, History, ArrowRightCircle,
-  Smartphone, MessageSquare, FileText, Globe, AlertCircle, Check, User, Clock, ChevronDown
+  Smartphone, MessageSquare, FileText, Globe, AlertCircle, Check, User, Clock, ChevronDown,
+  CalendarClock, Send, Edit3, Layers, PenBox // <--- Icono nuevo para edición manual
 } from 'lucide-react';
 import { ClientService } from '../services/clientService';
+import { ApiService } from '../services/apiService';
 import { Client } from '../types/client';
 import { getEtapaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
@@ -15,7 +17,6 @@ const SOURCE_TO_SEDE: Record<string, string> = {
   WiltechBga: 'Bucaramanga',
 };
 
-// --- PREVENCIÓN DE CRASHES (Null Safety) ---
 const safeText = (v: unknown): string => {
   if (v === null || v === undefined) return '';
   const s = String(v).trim();
@@ -143,6 +144,69 @@ const SedeModal: React.FC<{
   );
 };
 
+/** ================== Modal Reagendar Mensaje ================== */
+const ReagendarModal: React.FC<{
+  isOpen: boolean;
+  client: Client | null;
+  loading: boolean;
+  onClose: () => void;
+  onSend: (msg: string) => void;
+}> = ({ isOpen, client, loading, onClose, onSend }) => {
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    if (client) {
+      const firstName = safeText(client.nombre).split(' ')[0] || 'Hola';
+      setMsg(`${firstName}, por alguna razón notamos que no pudiste asistir a la cita que teníamos agendada. ¿Te gustaría reagendar?`);
+    }
+  }, [client]);
+
+  if (!isOpen || !client) return null;
+
+  return (
+    <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 transform transition-all scale-100 flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+           <div className="flex items-center gap-2 text-indigo-700">
+              <CalendarClock className="w-5 h-5" />
+              <h3 className="font-bold text-lg">Reagendar Cita</h3>
+           </div>
+           <button onClick={onClose} disabled={loading} className="p-1 hover:bg-slate-200 rounded-full transition text-slate-400 hover:text-slate-600">
+             <X className="w-5 h-5" />
+           </button>
+        </div>
+        <div className="p-5">
+           <p className="text-sm text-slate-500 mb-2">
+             Se enviará el siguiente mensaje a <span className="font-bold text-slate-800">{client.nombre}</span>:
+           </p>
+           <div className="relative">
+             <textarea
+               value={msg}
+               onChange={(e) => setMsg(e.target.value)}
+               disabled={loading}
+               rows={4}
+               className="w-full text-sm p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none leading-relaxed text-slate-700 shadow-sm"
+               placeholder="Escribe el mensaje de reagendamiento..."
+             />
+             <Edit3 className="absolute right-3 bottom-3 w-4 h-4 text-slate-300 pointer-events-none" />
+           </div>
+           <div className="mt-4 flex gap-2 items-center text-xs text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-100">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <p>Al enviar, el estado del cliente cambiará automáticamente a <b>"Reagendar"</b>.</p>
+           </div>
+        </div>
+        <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+           <button onClick={onClose} disabled={loading} className="px-4 py-2 rounded-xl text-slate-600 font-medium hover:bg-slate-200 hover:text-slate-800 transition text-sm">Cancelar</button>
+           <button onClick={() => onSend(msg)} disabled={loading || !msg.trim()} className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 active:scale-95 flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+             {loading ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}
+             Enviar Mensaje
+           </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /** ================== Componente Principal ================== */
 export const AgendaPage: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -159,6 +223,12 @@ export const AgendaPage: React.FC = () => {
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRow, setSavingRow] = useState<number | null>(null);
   const [showSedeModal, setShowSedeModal] = useState<boolean>(false);
+
+  // Reagendar
+  const [reagendarModalOpen, setReagendarModalOpen] = useState(false);
+  const [clientToReagendar, setClientToReagendar] = useState<Client | null>(null);
+  const [sendingReagendar, setSendingReagendar] = useState(false);
+  
   const initRef = useRef(false);
 
   /** --- Carga de Datos --- */
@@ -246,12 +316,83 @@ export const AgendaPage: React.FC = () => {
     }
   };
 
+  // --- LÓGICA DE REAGENDAMIENTO AUTOMÁTICO (Modal) ---
+  const handleOpenReagendarModal = (client: Client, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (safeText(client.estado_etapa).toLowerCase() === 'reagendar') return;
+    setClientToReagendar(client);
+    setReagendarModalOpen(true);
+  };
+
+  const handleConfirmReagendar = async (messageText: string) => {
+    if (!clientToReagendar) return;
+    setSendingReagendar(true);
+    try {
+        const payload = {
+            row_number: clientToReagendar.row_number,
+            nombre: clientToReagendar.nombre,
+            whatsapp: clientToReagendar.whatsapp,
+            source: clientToReagendar.source || 'Agenda',
+            mensaje: messageText
+        };
+        await ApiService.post('/enviarmensaje-reagendar', payload);
+        await onUpdate({ 
+            row_number: clientToReagendar.row_number, 
+            estado_etapa: 'Reagendar' 
+        });
+        setReagendarModalOpen(false);
+        setClientToReagendar(null);
+    } catch (error) {
+        console.error('Error reagendando:', error);
+        alert('Error enviando el mensaje: ' + (error instanceof Error ? error.message : 'Error desconocido'));
+    } finally {
+        setSendingReagendar(false);
+    }
+  };
+
+  // --- NUEVA LÓGICA: CAMBIO MANUAL A REAGENDAR (Fallback) ---
+  const handleManualSetReagendar = async (client: Client, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (window.confirm("¿Deseas cambiar manualmente la etapa a 'Reagendar' sin enviar mensaje?")) {
+        await onUpdate({ 
+            row_number: client.row_number, 
+            estado_etapa: 'Reagendar' 
+        });
+    }
+  };
+
   const handleToggleAsistencia = async (client: Client, e: React.MouseEvent) => {
     e.stopPropagation();
     const current = (client as any).asistio_agenda === true;
     await onUpdate({ row_number: client.row_number, asistio_agenda: !current });
   };
 
+  // --- LÓGICA BOTÓN WHATSAPP ---
+  const handleWhatsAppClick = (val: string, e: React.MouseEvent, client: Client) => {
+    e.stopPropagation();
+    const source = safeText(client.source).toLowerCase();
+    
+    // Regla: Permitir si empieza por "wil", es "directo", o está vacío/null
+    const allowRedirect = source.startsWith('wil') || source === 'directo' || source === '';
+
+    if (allowRedirect) {
+        window.open(`https://wa.me/${safeText(val).replace('@s.whatsapp.net', '')}`, '_blank');
+    } else {
+        alert(`La redirección directa a WhatsApp solo está habilitada para fuentes Wiltech, Directo o sin asignar.\nFuente actual: "${client.source}"`);
+    }
+  };
+
+  const handleOpenClient = (client: Client) => {
+    const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
+    if (isWeb1) {
+      const webId = safeText((client as any).asignado_a) || safeText(client.whatsapp) || `row_${client.row_number}`;
+      setViewClient({ ...client, whatsapp: webId });
+    } else {
+      setViewClient(client);
+    }
+  };
+
+  // ... (useMemos de filtros: filteredClientsBase, stats, finalDisplayClients) ...
   const filteredClientsBase = useMemo(() => {
     let filtered = [...clients];
     if (selectedSede && selectedSede !== 'Todas') {
@@ -300,25 +441,6 @@ export const AgendaPage: React.FC = () => {
     return filtered;
   }, [filteredClientsBase, dateFilter, customDate]);
 
-  const handleOpenClient = (client: Client) => {
-    const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
-    if (isWeb1) {
-      const webId = safeText((client as any).asignado_a) || safeText(client.whatsapp) || `row_${client.row_number}`;
-      setViewClient({ ...client, whatsapp: webId });
-    } else {
-      setViewClient(client);
-    }
-  };
-
-  const handleWhatsAppClick = (val: string, e: React.MouseEvent, isWeb1: boolean) => {
-    e.stopPropagation();
-    if (isWeb1) {
-        alert("Este es un cliente Web 1 (Chat interno). Usa la tarjeta para ver la conversación.");
-        return;
-    }
-    window.open(`https://wa.me/${safeText(val).replace('@s.whatsapp.net', '')}`, '_blank');
-  };
-
   const FilterTab = ({ id, label, count, icon: Icon }: any) => {
     const isActive = dateFilter === id;
     return (
@@ -349,16 +471,18 @@ export const AgendaPage: React.FC = () => {
         defaultSede={(selectedSede as string) || undefined}
         onSelect={(s) => { setSelectedSede(s); setShowSedeModal(false); }}
       />
+      <ReagendarModal
+        isOpen={reagendarModalOpen}
+        client={clientToReagendar}
+        loading={sendingReagendar}
+        onClose={() => { setReagendarModalOpen(false); setClientToReagendar(null); }}
+        onSend={handleConfirmReagendar}
+      />
 
-      {/* HEADER FLOTANTE ESTILO GLASSMORPHISM */}
       <div className="sticky top-4 z-40 w-full max-w-7xl mx-auto">
         <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 p-3 md:p-4 ring-1 ring-slate-900/5">
           <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-            
-            {/* Sede & Search Bloque */}
             <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3 items-stretch sm:items-center flex-1">
-              
-              {/* Sede Selector */}
               <button
                 onClick={() => setShowSedeModal(true)}
                 className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 hover:bg-white border border-slate-200/60 rounded-2xl transition-all group lg:min-w-[220px]"
@@ -372,8 +496,6 @@ export const AgendaPage: React.FC = () => {
                 </div>
                 <ChevronDown className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
               </button>
-
-              {/* Barra Búsqueda */}
               <div className="relative group w-full max-w-md">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                   <Search className="h-4.5 w-4.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -391,32 +513,16 @@ export const AgendaPage: React.FC = () => {
                 )}
               </div>
             </div>
-
-            {/* Acciones Derecha */}
             <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
-               <button
-                  onClick={fetchClients}
-                  disabled={loading}
-                  className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-colors"
-                  title="Refrescar"
-                >
+               <button onClick={fetchClients} disabled={loading} className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-colors">
                   <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 </button>
-                
-                {/* Custom Date Picker Compacto */}
                 <div className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all ${dateFilter === 'custom' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-transparent border-transparent'}`}>
                   <span className="text-xs font-bold uppercase tracking-wide opacity-50">Ir a:</span>
-                  <input
-                    type="date"
-                    value={customDate}
-                    onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }}
-                    className="bg-transparent border-none text-sm font-semibold p-0 focus:ring-0 cursor-pointer"
-                  />
+                  <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} className="bg-transparent border-none text-sm font-semibold p-0 focus:ring-0 cursor-pointer" />
                 </div>
             </div>
           </div>
-
-          {/* Filtros Tabs Scrollable */}
           <div className="mt-4 pt-3 border-t border-slate-100 flex overflow-x-auto pb-1 gap-2 no-scrollbar scroll-smooth">
              <FilterTab id="today" label="Hoy" count={stats.today} icon={CalendarDays} />
              <FilterTab id="tomorrow" label="Mañana" count={stats.tomorrow} icon={ArrowRightCircle} />
@@ -427,7 +533,6 @@ export const AgendaPage: React.FC = () => {
         </div>
       </div>
 
-      {/* LISTA DE CITAS */}
       <div className="w-full max-w-7xl mx-auto space-y-4 pb-12">
         {loading ? (
           <div className="space-y-4 max-w-5xl mx-auto">
@@ -441,8 +546,11 @@ export const AgendaPage: React.FC = () => {
               const dateObj = parseAgendaDate((client as any).fecha_agenda);
               const attended = (client as any).asistio_agenda === true;
               const isSaving = savingRow === client.row_number;
+              const isEtapaReagendar = safeText(client.estado_etapa).toLowerCase() === 'reagendar';
+
               const lastMsg = (client as any).last_msg;
               const lastMsgDate = (client as any).created; 
+              
               const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
               const contactDisplay = isWeb1 ? (safeText((client as any).asignado_a) || 'Visitante') : formatWhatsApp(safeText(client.whatsapp));
               
@@ -457,13 +565,11 @@ export const AgendaPage: React.FC = () => {
                     }
                   `}
                 >
-                  {/* Status Strip Lateral */}
                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${attended ? 'bg-emerald-500' : 'bg-slate-200 group-hover:bg-indigo-500'} transition-colors duration-300`} />
-
                   <div className="flex flex-col lg:flex-row items-stretch">
                     
-                    {/* LEFT: Hora & Acciones */}
-                    <div className="flex flex-row lg:flex-col items-center lg:items-center justify-between lg:justify-center gap-4 p-5 lg:w-[140px] lg:bg-slate-50/50 lg:border-r border-slate-100">
+                    {/* LEFT: Hora & Acciones (Automáticas) */}
+                    <div className="flex flex-row lg:flex-col items-center lg:items-center justify-between lg:justify-center gap-4 p-5 lg:w-[150px] lg:bg-slate-50/50 lg:border-r border-slate-100">
                       <div className="text-center">
                         <span className={`block text-3xl font-black tracking-tighter ${attended ? 'text-emerald-600' : 'text-slate-800'}`}>
                           {dateObj ? getDisplayTime(dateObj) : '--:--'}
@@ -472,19 +578,39 @@ export const AgendaPage: React.FC = () => {
                           {dateObj ? getDisplayFullDate(dateObj) : ''}
                         </span>
                       </div>
-                      
-                      <button
-                         onClick={(e) => handleToggleAsistencia(client, e)}
-                         disabled={isSaving}
-                         className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all active:scale-95
-                           ${attended 
-                             ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200 shadow-sm' 
-                             : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600 hover:shadow-sm'
-                           } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
-                       >
-                         {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                         {attended ? 'Asistió' : 'Pendiente'}
-                       </button>
+                      <div className="flex flex-col gap-2 w-full sm:w-auto">
+                        <button
+                           onClick={(e) => handleToggleAsistencia(client, e)}
+                           disabled={isSaving}
+                           className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all active:scale-95 w-full
+                             ${attended 
+                               ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200 shadow-sm' 
+                               : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600 hover:shadow-sm'
+                             } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                         >
+                           {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                           {attended ? 'Asistió' : 'Pendiente'}
+                         </button>
+                         {!attended && (
+                             <button
+                                onClick={(e) => handleOpenReagendarModal(client, e)}
+                                disabled={isEtapaReagendar}
+                                className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all active:scale-95 w-full
+                                  ${isEtapaReagendar 
+                                     ? 'bg-amber-100 text-amber-700 border-amber-200 cursor-default opacity-80' 
+                                     : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 shadow-sm'
+                                  }`}
+                                title={isEtapaReagendar ? "El cliente ya está en proceso de reagendamiento" : "Enviar mensaje para reagendar"}
+                             >
+                                {isEtapaReagendar ? (
+                                    <Clock className="w-3.5 h-3.5" />
+                                ) : (
+                                    <CalendarClock className="w-3.5 h-3.5" />
+                                )}
+                                {isEtapaReagendar ? 'Reagendando' : 'Reagendar'}
+                             </button>
+                         )}
+                      </div>
                     </div>
 
                     {/* CENTER: Info Principal */}
@@ -501,8 +627,6 @@ export const AgendaPage: React.FC = () => {
                                 </span>
                              )}
                            </div>
-                           
-                           {/* Badges Info */}
                            <div className="flex flex-wrap items-center gap-2 mt-2">
                              <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
                                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
@@ -512,14 +636,18 @@ export const AgendaPage: React.FC = () => {
                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
                                <span>{getClientSede(client)}</span>
                              </div>
+                             {safeText(client.source) && (
+                                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md" title="Fuente / Origen">
+                                   <Layers className="w-3.5 h-3.5 text-slate-400" />
+                                   <span className="truncate max-w-[120px]">{safeText(client.source)}</span>
+                                </div>
+                             )}
                              <span className={`inline-flex px-2 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wide ${getEtapaColor(client.estado_etapa as any)}`}>
                                 {safeText(client.estado_etapa).replace(/_/g, ' ')}
                              </span>
                            </div>
                         </div>
                       </div>
-
-                      {/* Info Extra (Notas) visible en mobile */}
                       {(safeText(client.intencion) || safeText(client.notas)) && (
                         <div className="mt-3 flex items-start gap-2 text-slate-500">
                            <FileText className="w-4 h-4 shrink-0 mt-0.5 text-slate-300" />
@@ -530,7 +658,7 @@ export const AgendaPage: React.FC = () => {
                       )}
                     </div>
 
-                    {/* RIGHT: Último Mensaje & Acción */}
+                    {/* RIGHT: Mensajes y Acciones Manuales */}
                     <div className="w-full lg:w-[32%] border-t lg:border-t-0 lg:border-l border-slate-100 p-4 bg-slate-50/30 flex flex-col justify-between">
                       <div className="space-y-2">
                          {lastMsg ? (
@@ -548,9 +676,26 @@ export const AgendaPage: React.FC = () => {
                          )}
                       </div>
 
-                      <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex justify-end gap-2">
+                        {/* Botón Manual "Forzar Reagendar" */}
+                        {!attended && (
+                            <button
+                                onClick={(e) => handleManualSetReagendar(client, e)}
+                                disabled={isEtapaReagendar}
+                                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors border
+                                    ${isEtapaReagendar
+                                        ? 'bg-amber-100 text-amber-700 border-amber-200 opacity-50 cursor-default'
+                                        : 'bg-white text-slate-400 border-slate-200 hover:text-indigo-600 hover:border-indigo-200'
+                                    }`}
+                                title="Cambiar etapa manualmente a 'Reagendar' (Sin mensaje)"
+                            >
+                                <PenBox className="w-4 h-4" />
+                            </button>
+                        )}
+
+                        {/* Botón WhatsApp */}
                         <button
-                          onClick={(e) => handleWhatsAppClick(isWeb1 ? contactDisplay : safeText(client.whatsapp), e, isWeb1)}
+                          onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp), e, client)}
                           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border
                               ${isWeb1 
                               ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'
@@ -562,7 +707,6 @@ export const AgendaPage: React.FC = () => {
                         </button>
                       </div>
                     </div>
-
                   </div>
                 </div>
               );

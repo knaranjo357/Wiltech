@@ -46,6 +46,16 @@ const toInputDate = (val: any): string => {
   }
 };
 
+// NUEVO HELPER: Maneja IDs grandes de FB/IG evitando notación científica
+const safeBigIntStr = (val: any): string => {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'number') {
+    // Convierte números grandes a string sin usar notación científica (e.g. 1.2e+15)
+    return val.toLocaleString('fullwide', { useGrouping: false });
+  }
+  return String(val);
+};
+
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
@@ -147,8 +157,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   };
 
   // === LÓGICA DEL BOT CORREGIDA ===
-  // null, undefined, "", true, "true" = ON
-  // solo false o "false" = OFF
   const isBotOn = (v: any) => {
     if (v === false) return false;
     if (typeof v === 'string' && v.toLowerCase() === 'false') return false;
@@ -159,8 +167,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto) as any;
     const currentlyOn = isBotOn(currentRaw);
     
-    // Si estaba encendido (null o true), ahora se apaga (false).
-    // Si estaba apagado (false), ahora se enciende (true).
     const newValue = !currentlyOn;
 
     if (currentlyOn) {
@@ -277,9 +283,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     ]},
   ];
 
-  // Helper para calcular campos llenos vs totales por Tab
   const getTabCounts = (tabId: TabID) => {
-    if (tabId === 'chat') return null; // Chat no tiene campos
+    if (tabId === 'chat') return null;
     const relevantSections = allSections.filter(s => s.tab === tabId);
     let total = 0;
     let filled = 0;
@@ -288,7 +293,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       section.fields.forEach(field => {
         total++;
         const val = getVal(field.key);
-        // Consideramos "lleno" si no es null, undefined o string vacío
         if (val !== null && val !== undefined && val !== '') {
           filled++;
         }
@@ -325,7 +329,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-blue-200 shrink-0 border-2 border-white ring-1 ring-gray-100">
                   {initials}
                 </div>
-                {/* Indicador de activo si fuera real-time */}
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
               </div>
               <div className="min-w-0">
@@ -393,10 +396,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                  </span>
                )}
                
-               {/* Separador vertical */}
                <div className="h-6 w-px bg-gray-300 mx-1 hidden sm:block"></div>
 
-               {/* Toggle Bot */}
                <button 
                  onClick={handleBotToggle}
                  disabled={saving}
@@ -410,7 +411,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                  <span>{isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'Bot Activo' : 'Bot Apagado'}</span>
                </button>
 
-               {/* Toggle Asistencia */}
                {canShowAsistio && (
                  <button
                    onClick={toggleAsistio}
@@ -425,7 +425,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                )}
             </div>
 
-            {/* Links de Contacto Rápido */}
             <div className="flex items-center gap-2 text-sm overflow-x-auto no-scrollbar">
                <a href={waLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-3 py-1.5 bg-white text-gray-700 rounded-lg hover:text-green-600 hover:border-green-200 hover:shadow-sm transition border border-gray-200 whitespace-nowrap font-medium text-xs group">
                  <MessageCircle className="w-4 h-4 text-green-500 group-hover:scale-110 transition-transform" /> 
@@ -462,7 +461,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   <tab.icon className={`w-4 h-4 transition-colors ${isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
                   <span>{tab.label}</span>
                   
-                  {/* Badge de contador */}
                   {counts && (
                     <span className={`ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md transition-colors
                       ${isActive 
@@ -508,11 +506,16 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                         const isEmpty = !safeStr(value);
                         const isFullWidth = field.type === 'textarea';
                         
+                        // CORRECCIÓN PRINCIPAL AQUÍ:
+                        // Usamos safeBigIntStr para asegurarnos de que los IDs de FB no se muestren como 1.23e+15
+                        const displayValue = field.key === 'subscriber_id' 
+                           ? safeBigIntStr(value) 
+                           : (value ?? '');
+
                         return (
                           <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
                             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider pl-0.5 mb-1 flex items-center justify-between">
                                {field.label}
-                               {/* Pequeño indicador si hay dato en modo vista */}
                                {!isEditing && !isEmpty && field.type !== 'boolean' && (
                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400/50" />
                                )}
@@ -564,7 +567,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   ) : (
                                     <input
                                       type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
-                                      value={value ?? ''}
+                                      // USAMOS displayValue AQUÍ
+                                      value={displayValue}
                                       onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                       placeholder="-"
                                       className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 placeholder:text-gray-300"
@@ -596,7 +600,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                       </span>
                                   ) : (
                                      <span className="text-sm font-medium text-gray-700 break-words leading-relaxed whitespace-pre-wrap">
-                                        {String(value)}
+                                        {/* USAMOS displayValue TAMBIÉN AQUÍ */}
+                                        {String(displayValue)}
                                      </span>
                                   )}
                                 </div>
