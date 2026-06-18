@@ -134,88 +134,111 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
   const sourceName = labels?.[activeTab] || `WhatsApp ${activeTab}`;
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-xl p-6 max-w-4xl mx-auto">
-      <div className="flex flex-col gap-5 mb-6">
+    <div className="bg-white/70 backdrop-blur-xl border border-white shadow-2xl rounded-[40px] p-8 sm:p-10 max-w-5xl mx-auto overflow-hidden relative group/card">
+      {/* Decorative Blur */}
+      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2" />
+      
+      <div className="flex flex-col gap-6 mb-8 relative z-10">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold flex items-center gap-2 text-gray-800">
-            <QrCode className="w-6 h-6 text-indigo-600" />
-            Central de Conexiones
-          </h2>
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-2xl bg-slate-900 text-white shadow-lg">
+              <QrCode className="w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">Canales de WhatsApp</h2>
+          </div>
           <button
             onClick={fetchQR}
             disabled={loading}
-            className="p-2 rounded-full hover:bg-gray-100 transition-colors disabled:opacity-50"
-            title="Refrescar estado"
+            className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-white hover:shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
-            <RefreshCcw className={`w-5 h-5 text-gray-600 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
           </button>
         </div>
 
-        {/* Tabs de los 8 números */}
-        <div className="flex flex-wrap gap-2 p-1 bg-gray-50 rounded-xl border border-gray-100">
-          {([1, 2, 3, 4, 5, 6, 7, 8 , 9, 10, 11, 12, 13, 14, 15] as WppSourceId[]).map((id) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`flex-1 min-w-[100px] py-2 px-3 rounded-lg text-sm font-medium transition-all
-                ${
-                  activeTab === id
-                    ? "bg-white text-indigo-600 shadow-sm ring-1 ring-black/5"
-                    : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
-                }`}
-            >
-              {labels?.[id] || `Línea ${id}`}
-            </button>
-          ))}
+        {/* Grid Selection */}
+        <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-2">
+          {([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as WppSourceId[]).map((id) => {
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`
+                  flex flex-col items-center justify-center p-2 rounded-xl border transition-all duration-200
+                  ${isActive 
+                    ? "bg-slate-900 border-slate-900 text-white shadow-lg scale-105 z-10" 
+                    : "bg-white border-slate-100 text-slate-400 hover:border-slate-200 hover:text-slate-600"
+                  }
+                `}
+              >
+                <span className="text-[10px] font-black leading-none mb-1 opacity-50">LÍNEA</span>
+                <span className="text-lg font-black leading-none">{id}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="bg-gray-50 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[400px] border border-dashed border-gray-200">
-        <div className="mb-4 flex items-center gap-2 px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-sm font-semibold">
-          <MapPin className="w-4 h-4" />
+      {/* Main Display Area */}
+      <div className="relative min-h-[460px] flex flex-col items-center justify-center rounded-[32px] border border-dashed border-slate-200 bg-slate-50/40 p-10 overflow-hidden">
+        {/* Background Pattern */}
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" 
+             style={{ backgroundImage: "radial-gradient(#4f46e5 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
+
+        <div className="mb-8 flex items-center gap-2.5 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-full text-xs font-black uppercase tracking-[0.15em] shadow-sm relative z-10 transition-transform hover:scale-105">
+          <MapPin className="w-4 h-4 text-indigo-500" />
           {sourceName}
         </div>
 
         {imgSrc ? (
-          <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in duration-300">
-            <div className="bg-white p-4 rounded-2xl shadow-lg border border-gray-100">
+          <div className="flex flex-col items-center gap-8 animate-in fade-in zoom-in duration-700 relative z-10">
+            <div className="p-8 bg-white rounded-[48px] shadow-2xl border border-slate-100/50 relative group">
+              <div className="absolute -inset-1 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-[52px] opacity-10 blur-xl group-hover:opacity-20 transition-opacity" />
               <img
                 src={imgSrc}
-                alt="QR Code"
-                className="w-[280px] h-[280px] md:w-[320px] md:h-[320px] object-contain"
+                alt="WhatsApp QR Code"
+                className="w-[280px] h-[280px] md:w-[340px] md:h-[340px] relative z-20 grayscale hover:grayscale-0 transition-all duration-700"
               />
             </div>
+            
             <div className="text-center">
-              <p className="text-gray-700 font-medium">Escanea para conectar esta línea</p>
-              <p className="text-xs text-gray-400 mt-1">El código se actualiza automáticamente</p>
+              <p className="text-slate-800 font-black text-2xl tracking-tight">Escanea el Código QR</p>
             </div>
           </div>
         ) : connected ? (
-          <div className="w-full max-w-md p-6 rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-900 animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex flex-col items-center text-center gap-3">
-              <div className="bg-emerald-100 p-3 rounded-full">
-                <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+          <div className="w-full max-w-md p-10 rounded-[40px] bg-white border border-emerald-100 shadow-2xl shadow-emerald-500/5 animate-in fade-in slide-in-from-bottom-8 duration-700 relative z-10">
+            <div className="flex flex-col items-center text-center gap-6">
+              <div className="relative">
+                <div className="absolute inset-0 bg-emerald-500 blur-2xl opacity-20 animate-pulse" />
+                <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-emerald-600 text-white rounded-3xl flex items-center justify-center shadow-xl relative z-10">
+                  <CheckCircle2 className="w-10 h-10" />
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-bold">Línea Conectada</h3>
-                <p className="text-emerald-700/80 text-sm mt-1">
-                  La conexión con <b>{sourceName}</b> está activa y funcionando.
+              
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Conectado</h3>
+                <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                  Línea <span className="text-indigo-600 font-bold">{sourceName}</span> activa.
                 </p>
-                {connectedNumber && (
-                  <div className="mt-4 px-3 py-1 bg-white/50 rounded-lg inline-block border border-emerald-200">
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 mr-2">Número:</span>
-                    <span className="font-mono font-bold">{connectedNumber}</span>
-                  </div>
-                )}
               </div>
+
+              {connectedNumber && (
+                <div className="w-full mt-2 p-5 bg-slate-50 rounded-[28px] border border-slate-100 flex flex-col items-center gap-1 group/num hover:bg-slate-100/50 transition-colors">
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">Número Vinculado</span>
+                  <span className="text-xl font-black text-slate-700 font-mono tracking-tighter">{connectedNumber}</span>
+                </div>
+              )}
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-10 h-10 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
-            <span className="text-gray-500 font-medium">
-              {loading ? "Verificando conexión..." : "Esperando respuesta..."}
-            </span>
+          <div className="flex flex-col items-center gap-4 relative z-10">
+            <div className="relative">
+               <div className="w-16 h-16 border-[6px] border-indigo-100 rounded-full shadow-inner" />
+               <div className="absolute inset-0 w-16 h-16 border-[6px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="text-center">
+              <span className="text-slate-800 font-bold block">Verificando...</span>
+            </div>
           </div>
         )}
       </div>

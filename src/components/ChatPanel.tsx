@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint } from 'lucide-react';
+import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint, MessageSquare, RefreshCw } from 'lucide-react';
 import { Client } from '../types/client';
 import { ApiService } from '../services/apiService';
 import { ChatBubble, ChatMsg } from './ChatBubble';
@@ -94,7 +94,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
 
   // --- Cargar historial ---
   const loadConversation = async () => {
-    // Intentamos cargar si tiene whatsapp, si no, intentamos con lo que haya
     if (!hasWhatsapp && !rawSubscriberId) return; 
 
     try {
@@ -102,7 +101,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       setError(null);
       const body: any = { whatsapp: client.whatsapp };
       
-      // Enviamos el source si existe, o subscriber_id si no hay whatsapp
       if (source) body.source = source;
       if (!hasWhatsapp && rawSubscriberId) body.subscriber_id = rawSubscriberId;
 
@@ -126,29 +124,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(false)));
       setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e: any) {
-      // No mostramos error invasivo si es solo carga inicial
       console.error('Error cargando chat:', e);
-      // setError(e?.message || 'No se pudo cargar la conversación');
     } finally {
       setLoading(false);
     }
   };
 
-  // Cargar historial
   useEffect(() => {
     loadConversation();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.whatsapp, source]);
 
-  // --- Enviar Mensaje (MODIFICADO) ---
   const sendMessage = async () => {
     const text = input.trim();
-    // Validar: debe tener texto Y (tener whatsapp O tener subscriber_id)
     if (!text || !hasContactMethod) return;
 
     stickToBottomRef.current = true;
 
-    // Mensaje optimista
     const optimistic: ChatMsg = {
       id: `local-${Date.now()}`,
       type: 'ai', 
@@ -161,8 +152,6 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
     setError(null);
 
     try {
-      // Lógica solicitada:
-      // 1. Si source es null/vacio -> "Directo". Si tiene source -> usarlo.
       const finalSource = source || 'Directo';
 
       const body: any = {
@@ -171,19 +160,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
         source: finalSource,
       };
 
-      // 2. Adjuntamos subscriber_id solo si existe (raw, sin forzar null si no existe)
       if (rawSubscriberId !== null && rawSubscriberId !== undefined && rawSubscriberId !== '') {
          body.subscriber_id = rawSubscriberId;
       }
 
       await ApiService.post('/enviarmensaje', body);
-      
-      // Recargar para confirmar IDs y estado real
       await loadConversation();
     } catch (e: any) {
       setError(e?.message || 'No se pudo enviar el mensaje');
-      setMsgs((prev) => prev.filter((m) => m.id !== optimistic.id)); // Eliminar optimista si falló
-      setInput(text); // Restaurar texto
+      setMsgs((prev) => prev.filter((m) => m.id !== optimistic.id)); 
+      setInput(text); 
       inputRef.current?.focus();
     } finally {
       setSending(false);
@@ -211,47 +197,52 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
     } catch {}
   };
 
-  // Habilitamos envío si hay texto y algún método de contacto
   const canSend = hasContactMethod && !!input.trim() && !sending;
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-white border-l border-gray-100/50">
+    <div className="flex-1 flex flex-col w-full h-full min-h-0 bg-white border-l border-slate-100 overflow-hidden relative">
       
+      {/* Background Subtle Pattern */}
+      <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#4f46e5 0.5px, transparent 0.5px)', backgroundSize: '24px 24px' }} />
+
       {/* === Header === */}
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-4 bg-white/80 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 font-bold shrink-0 shadow-sm">
-            {client?.nombre?.trim()?.[0]?.toUpperCase() || 'C'}
+      <div className="relative z-10 px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-white/70 backdrop-blur-xl">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="relative">
+             <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20" />
+             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 text-white flex items-center justify-center font-black shadow-xl shadow-indigo-100 relative z-10 border border-white/20">
+               <span>{client?.nombre?.trim()?.[0]?.toUpperCase() || 'C'}</span>
+             </div>
           </div>
           
           <div className="min-w-0">
-            <h3 className="font-bold text-gray-900 leading-tight truncate">
+            <h3 className="text-lg font-black text-slate-900 leading-tight truncate tracking-tight">
               {client?.nombre || 'Cliente sin nombre'}
             </h3>
             
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500 flex-wrap">
+            <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500 font-black uppercase tracking-[0.1em] flex-wrap">
               {/* Phone Badge */}
-              <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
-                 <MessageCircle className="w-3 h-3 text-green-500" />
+              <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
+                 <MessageCircle className="w-3 h-3 text-emerald-500" />
                  <span className="font-mono">{phone || '—'}</span>
                  {phone && (
                     <button onClick={copyPhone} className="ml-1 hover:text-indigo-600 transition-colors" title="Copiar">
-                       {copiedPhone ? <Check className="w-3 h-3 text-green-600"/> : <Copy className="w-3 h-3"/>}
+                       {copiedPhone ? <Check className="w-3 h-3 text-emerald-600"/> : <Copy className="w-3 h-3"/>}
                     </button>
                  )}
               </div>
 
               {/* Sub ID Badge */}
-              <div className="flex items-center gap-1 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+              <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                  <Fingerprint className="w-3 h-3 text-purple-500" />
-                 <span className="font-mono max-w-[80px] truncate" title={subscriberIdDisplay}>{subscriberIdDisplay}</span>
+                 <span className="font-mono max-w-[100px] truncate" title={subscriberIdDisplay}>{subscriberIdDisplay}</span>
                  <button 
                     onClick={copySubscriberId} 
                     className="ml-1 hover:text-indigo-600 transition-colors disabled:opacity-30" 
                     title="Copiar ID"
                     disabled={subscriberIdDisplay === '—'}
                  >
-                    {copiedSub ? <Check className="w-3 h-3 text-green-600"/> : <Copy className="w-3 h-3"/>}
+                    {copiedSub ? <Check className="w-3 h-3 text-emerald-600"/> : <Copy className="w-3 h-3"/>}
                  </button>
               </div>
             </div>
@@ -261,7 +252,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
         <button
           onClick={loadConversation}
           disabled={!hasContactMethod || loading}
-          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all disabled:opacity-50"
+          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 shadow-sm transition-all active:scale-95 disabled:opacity-50"
           title="Actualizar conversación"
         >
           <Repeat2 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -269,86 +260,83 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       </div>
 
       {/* === Messages Area === */}
-      <div className="flex-1 relative overflow-hidden bg-[#F8F9FC]">
+      <div className="flex-1 relative overflow-hidden bg-[#F8F9FC]/50 backdrop-blur-sm">
         <div
           ref={scrollRef}
-          className="absolute inset-0 overflow-y-auto p-4 space-y-4 overscroll-contain"
+          className="absolute inset-0 overflow-y-auto p-6 space-y-6 overscroll-contain custom-scrollbar"
         >
-          {/* Alerta solo si NO hay forma de contacto */}
           {!hasContactMethod && (
-            <div className="flex gap-3 p-3 rounded-xl bg-red-50 border border-red-100 text-red-800 text-sm mx-auto max-w-md shadow-sm">
-              <AlertTriangle className="w-5 h-5 shrink-0 text-red-500" />
+            <div className="flex gap-4 p-5 rounded-3xl bg-red-50/80 backdrop-blur-sm border border-red-100 text-red-800 text-sm mx-auto max-w-md shadow-xl animate-in fade-in slide-in-from-top-4">
+              <AlertTriangle className="w-6 h-6 shrink-0 text-red-500" />
               <div>
-                <p className="font-bold">Contacto no disponible</p>
-                <p className="text-red-700/80 text-xs mt-0.5">
-                  Este cliente no tiene WhatsApp ni Subscriber ID. No es posible enviar mensajes.
+                <p className="font-black uppercase tracking-wider text-xs mb-1">Contacto no disponible</p>
+                <p className="text-red-700/70 text-xs leading-relaxed">
+                  Este cliente no cuenta con WhatsApp ni Subscriber ID configurado.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Loading & Empty States */}
           {loading && msgs.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-10 gap-3 text-gray-400 animate-pulse">
-               <div className="w-2 h-2 rounded-full bg-gray-300"></div>
-               <span className="text-xs">Cargando mensajes...</span>
+            <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
+               <div className="relative">
+                  <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
+                  <MessageCircle className="absolute inset-0 m-auto w-5 h-5 text-indigo-500/50" />
+               </div>
+               <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Cargando Conversación</span>
             </div>
           )}
 
           {error && (
-            <div className="p-3 text-center text-xs text-red-600 bg-red-50 rounded-xl border border-red-100 mx-auto max-w-xs">
+            <div className="p-4 text-center text-[10px] font-black uppercase tracking-widest text-red-600 bg-red-50 rounded-2xl border border-red-100 mx-auto max-w-xs shadow-lg">
               {error}
             </div>
           )}
 
           {!loading && !error && msgs.length === 0 && hasContactMethod && (
-             <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2">
-                <MessageCircle className="w-10 h-10 opacity-20" />
-                <p className="text-sm">No hay mensajes aún</p>
+             <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-4 py-20">
+                <div className="w-20 h-20 rounded-[40px] bg-slate-100 flex items-center justify-center border border-white shadow-xl relative group">
+                   <div className="absolute inset-0 bg-indigo-500 blur-3xl opacity-0 group-hover:opacity-10 transition-opacity" />
+                   <MessageSquare className="w-8 h-8 text-slate-200" />
+                </div>
+                <p className="text-xs font-black uppercase tracking-[0.2em]">No hay mensajes aún</p>
              </div>
           )}
 
-          {/* Lista de Mensajes */}
           {msgs.map((m) => (
             <ChatBubble key={m.id} msg={m} />
           ))}
           
-          <div className="h-2"></div>
+          <div className="h-4"></div>
         </div>
 
         {/* Scroll To Bottom Button */}
         {showJumpToBottom && (
-          <div className="absolute bottom-4 right-4 z-20 animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-6 right-6 z-20 animate-in fade-in slide-in-from-bottom-2">
             <button
               onClick={() => scrollToBottom(true)}
-              className="p-2 bg-white/90 backdrop-blur text-indigo-600 rounded-full shadow-lg border border-indigo-100 hover:bg-indigo-50 transition-all hover:scale-105 active:scale-95"
+              className="w-11 h-11 flex items-center justify-center bg-slate-900 text-white rounded-2xl shadow-2xl hover:bg-indigo-600 transition-all hover:-translate-y-1 active:scale-95 group"
             >
-              <ArrowDown className="w-5 h-5" />
+              <ArrowDown className="w-5 h-5 group-hover:animate-bounce" />
             </button>
           </div>
         )}
       </div>
 
       {/* === Composer === */}
-      <div className="p-4 bg-white border-t border-gray-100">
-        <div className="relative flex flex-col gap-2">
-           <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (canSend) sendMessage();
-              }}
-              className="relative"
-            >
+      <div className="relative z-10 p-6 bg-white border-t border-slate-100">
+        <div className="max-w-4xl mx-auto w-full relative">
+           <div className="relative group transition-all duration-300">
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder={!hasContactMethod ? 'No se puede enviar mensajes...' : 'Escribe un mensaje...'}
+                placeholder={!hasContactMethod ? 'Canal de comunicación inactivo...' : 'Escribe tu respuesta aquí...'}
                 disabled={!hasContactMethod}
-                className={`w-full bg-gray-50 border rounded-2xl px-4 py-3 pr-12 text-sm focus:outline-none focus:ring-2 focus:bg-white transition-all resize-none max-h-[150px]
+                className={`w-full bg-slate-50 border rounded-3xl px-6 py-5 pr-20 text-[14px] leading-relaxed focus:outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white focus:border-indigo-400 transition-all resize-none max-h-[180px] font-medium
                    ${!hasContactMethod
-                      ? 'border-gray-200 text-gray-400 cursor-not-allowed' 
-                      : 'border-gray-200 text-gray-900 focus:border-indigo-500 focus:ring-indigo-500/10 placeholder-gray-400'
+                      ? 'border-slate-100 text-slate-300 cursor-not-allowed opacity-50' 
+                      : 'border-slate-200 text-slate-900 placeholder-slate-400 shadow-sm'
                    }
                 `}
                 rows={1}
@@ -360,34 +348,41 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
                 }}
               />
               
-              <div className="absolute right-2 bottom-2">
+              <div className="absolute right-3 bottom-3">
                  <button
-                    type="submit"
+                    type="button"
+                    onClick={sendMessage}
                     disabled={!canSend}
-                    className="p-2 rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
-                      bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 shadow-md shadow-indigo-200
-                    "
+                    className="w-12 h-12 flex items-center justify-center bg-slate-900 text-white hover:bg-indigo-600 rounded-2xl transition-all duration-300 shadow-xl hover:shadow-indigo-200 disabled:opacity-20 disabled:shadow-none active:scale-90"
                  >
                     {sending ? (
-                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                       <RefreshCw className="w-5 h-5 animate-spin" />
                     ) : (
-                       <Send className="w-4 h-4" />
+                       <Send className="w-5 h-5" />
                     )}
                  </button>
               </div>
-           </form>
+           </div>
 
            {/* Footer Info */}
-           <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
-                 <span>Source:</span>
-                 <span className="font-mono font-medium text-gray-600 bg-gray-50 px-1 rounded">
-                    {source || 'Directo (auto)'}
-                 </span>
+           <div className="flex items-center justify-between px-2 mt-4">
+              <div className="flex items-center gap-3">
+                 <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fuente:</span>
+                    <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 shadow-sm">
+                       {source || 'Autodetección'}
+                    </span>
+                 </div>
+                 <div className="w-1 h-1 rounded-full bg-slate-200" />
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{input.length} caracteres</span>
               </div>
-              <span className={`text-[10px] transition-colors ${input.length > 500 ? 'text-orange-500' : 'text-gray-300'}`}>
-                 {input.length} chars
-              </span>
+              
+              {hasContactMethod && (
+                 <div className="flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Chat Activo</span>
+                 </div>
+              )}
            </div>
         </div>
       </div>

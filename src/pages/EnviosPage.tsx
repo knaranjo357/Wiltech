@@ -4,43 +4,14 @@ import {
   Truck, RefreshCw, Phone, MapPin, Search, ArrowRight, 
   Package, ShieldCheck, AlertTriangle, CheckCircle2, X,
   ArrowUpDown, Clock, MessageCircle, Bot, AlertCircle,
-  Send, ClipboardCheck, User
+  Send, ClipboardCheck, User, ChevronDown
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
 import { formatWhatsApp, deriveEnvioUI, ENVIO_LABELS } from '../utils/clientHelpers';
 import type { EnvioUIKey } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
-
-/** ================== Helpers de Seguridad (Blindaje Anti-Crash) ================== */
-
-// Transforma null/undefined en string vacío seguro y trimmeado
-const safeText = (v: unknown): string => {
-  if (v === null || v === undefined) return '';
-  const s = String(v).trim();
-  // Detecta strings que dicen "null", "undefined", "no aplica" explícitamente
-  const lower = s.toLowerCase();
-  if (lower === 'null' || lower === 'undefined' || lower === 'no aplica' || lower === 'no') return '';
-  return s;
-};
-
-// Normaliza para búsquedas (quita tildes y mayúsculas)
-const normalize = (s: string) => safeText(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-
-// Formateo seguro de fechas
-const formatTimeDate = (val: string | number | undefined) => {
-  if (!val) return '—';
-  const date = new Date(typeof val === 'number' && val < 10000000000 ? val * 1000 : val);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' });
-};
-
-// Lógica segura para el Bot
-const isBotOn = (v: any) => {
-  if (v === false) return false;
-  if (String(v).toLowerCase() === 'false') return false;
-  return true; 
-};
+import { safeText, normalize, formatTimeDate, isBotOn } from '../utils/textUtils';
 
 // --- VALIDACIÓN DE CAMPOS OBLIGATORIOS PARA RECOGIDA ---
 const checkGuiaDataComplete = (c: Client) => {
@@ -289,206 +260,363 @@ export const EnviosPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 sm:p-6 space-y-6 w-full font-sans">
+    <div className="page-container relative flex flex-col space-y-8 min-h-[calc(100vh-100px)] overflow-hidden">
       
-      {/* Header */}
-      <div className="sticky top-2 z-30 w-full">
-        <div className="bg-white/90 backdrop-blur-xl rounded-2xl shadow-sm border border-gray-200 p-4">
-           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-lg">
-                    <Truck className="w-5 h-5" />
-                 </div>
-                 <div>
-                    <h1 className="text-lg font-bold text-gray-900">Logística de Envíos</h1>
-                    <p className="text-xs text-gray-500">{filtered.length} envíos visibles</p>
-                 </div>
+      {/* Background Decorations */}
+      <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-purple-500/5 blur-[100px] rounded-full pointer-events-none" />
+
+      {/* === Header Dashboard === */}
+      <div className="relative z-10 flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <div className="absolute inset-0 bg-indigo-400 blur-xl opacity-20 animate-pulse" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-xl shadow-indigo-200/40 relative z-10 border border-white/20">
+                <Truck className="w-7 h-7" />
               </div>
-              
-              <div className="flex flex-col xl:flex-row gap-2 flex-1 md:justify-end">
-                 
-                 {/* TABS */}
-                 <div className="bg-gray-100 p-1 rounded-xl flex items-center gap-1">
-                    <button onClick={() => setCurrentTab('PENDIENTES')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${currentTab === 'PENDIENTES' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Pendientes</button>
-                    <button onClick={() => setCurrentTab('GESTIONADOS')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${currentTab === 'GESTIONADOS' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Gestionados</button>
-                    <button onClick={() => setCurrentTab('TODOS')} className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${currentTab === 'TODOS' ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Todos</button>
-                 </div>
-
-                 <select value={sedeFilter} onChange={(e) => setSedeFilter(e.target.value)} className="px-3 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none">
-                    <option value="Todas">Todas las Sedes</option>
-                    {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
-                 </select>
-
-                 <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><ArrowUpDown className="h-4 w-4 text-gray-400" /></div>
-                    <select value={sortOption} onChange={(e) => setSortOption(e.target.value as SortOption)} className="w-full pl-9 pr-8 py-2 border border-gray-200 rounded-xl text-sm focus:bg-white bg-gray-50/50 outline-none">
-                       <option value="priority">Prioridad (Datos)</option>
-                       <option value="last_msg_desc">Última Actividad</option>
-                       <option value="created_desc">Recientes</option>
-                    </select>
-                 </div>
-
-                 <div className="relative w-48">
-                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search className="h-4 w-4 text-gray-400" /></div>
-                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar..." className="w-full pl-9 pr-8 py-2 border rounded-xl text-sm focus:ring-2 focus:ring-purple-500" />
-                 </div>
-
-                 <button onClick={fetchClients} className="p-2 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors">
-                    <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                 </button>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Logística de Envíos</h1>
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex -space-x-1">
+                   <div className="w-2 h-2 rounded-full bg-indigo-500 border-2 border-white" />
+                   <div className="w-2 h-2 rounded-full bg-indigo-300 border-2 border-white animate-ping" />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.15em]">Gestión de Guías y Recogidas</p>
               </div>
-           </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+             <div className="flex bg-white/50 backdrop-blur-xl p-1.5 rounded-[22px] border border-white/60 shadow-xl shadow-slate-100 hover:shadow-indigo-200/20 transition-all duration-500">
+                <button 
+                  onClick={() => setCurrentTab('PENDIENTES')}
+                  className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2
+                    ${currentTab === 'PENDIENTES' 
+                      ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' 
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}
+                  `}
+                >
+                  <Clock size={12} /> Pendientes
+                </button>
+                <button 
+                  onClick={() => setCurrentTab('GESTIONADOS')}
+                  className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2
+                    ${currentTab === 'GESTIONADOS' 
+                      ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' 
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}
+                  `}
+                >
+                  <CheckCircle2 size={12} /> Gestionados
+                </button>
+                <button 
+                  onClick={() => setCurrentTab('TODOS')}
+                  className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300
+                    ${currentTab === 'TODOS' 
+                      ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' 
+                      : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}
+                  `}
+                >
+                  Todos
+                </button>
+             </div>
+
+             <button 
+               onClick={fetchClients}
+               className="p-3.5 bg-white shadow-lg border border-white rounded-[20px] text-indigo-500 hover:text-indigo-700 hover:scale-110 active:scale-95 transition-all duration-300 group"
+             >
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+             </button>
+          </div>
+        </div>
+
+        {/* Filters Row */}
+        <div className="bg-white/40 backdrop-blur-md border border-white/40 rounded-[28px] p-2.5 flex flex-col md:flex-row gap-3 shadow-xl shadow-slate-200/20">
+          <div className="relative group flex-1">
+             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+                <Search size={16} />
+             </div>
+             <input 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre, guía, whatsapp o cédula..."
+                className="w-full pl-12 pr-6 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-xs font-bold text-slate-700 placeholder-slate-400 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white transition-all"
+             />
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+             <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-colors">
+                  <MapPin size={14} />
+                </div>
+                <select 
+                   value={sedeFilter} 
+                   onChange={(e) => setSedeFilter(e.target.value)} 
+                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all min-w-[160px]"
+                >
+                  <option value="Todas">Todas las Sedes</option>
+                  {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+             </div>
+
+             <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors">
+                  <ArrowUpDown size={14} />
+                </div>
+                <select 
+                   value={sortOption} 
+                   onChange={(e) => setSortOption(e.target.value as SortOption)} 
+                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all"
+                >
+                  <option value="priority">Prioridad (Datos)</option>
+                  <option value="last_msg_desc">Última Actividad</option>
+                  <option value="created_desc">Recientes Primero</option>
+                </select>
+                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+             </div>
+          </div>
         </div>
       </div>
 
-      {/* Lista */}
-      <div className="max-w-7xl mx-auto space-y-4">
-        {loading ? (
-            <div className="space-y-4 animate-pulse">
-               {[...Array(3)].map((_, i) => <div key={i} className="bg-white rounded-2xl h-40 border border-gray-100"/>)}
-            </div>
-        ) : filtered.length > 0 ? (
-          filtered.map(client => {
-            const ui = deriveEnvioUI(client);
-            const { isComplete, missingFields } = checkGuiaDataComplete(client);
-            const botActive = isBotOn(client.consentimiento_contacto);
-            const isGestionado = client.estado_etapa === ETAPA_GESTIONADO;
-            
-            const canGenerateIda = isComplete && !safeText(client.guia_numero_ida);
+      {/* === Logistics List === */}
+      <div className="w-full max-w-7xl mx-auto space-y-4 pb-20 relative z-10">
+         {loading && clients.length === 0 ? (
+           <div className="flex flex-col items-center justify-center py-32 space-y-4 opacity-50">
+              <RefreshCw className="w-10 h-10 animate-spin text-indigo-500" />
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Sincronizando Logística...</p>
+           </div>
+         ) : filtered.length > 0 ? (
+           <div className="grid grid-cols-1 gap-5">
+             {filtered.map((client) => {
+               const ui = deriveEnvioUI(client);
+               const { isComplete, missingFields } = checkGuiaDataComplete(client);
+               const botActive = isBotOn(client.consentimiento_contacto);
+               const isGestionado = client.estado_etapa === ETAPA_GESTIONADO;
+               const isSaving = savingRow === client.row_number;
+               const canGenerateIda = isComplete && !safeText(client.guia_numero_ida);
+               
+               return (
+                 <div 
+                   key={client.row_number}
+                   onClick={() => setViewClient(client)}
+                   className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[28px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.995] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
+                 >
+                   {/* Status Strip */}
+                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-500 ${isGestionado ? 'bg-emerald-500' : 'bg-indigo-500'} ${!isGestionado && !isComplete ? 'bg-amber-400' : ''}`} />
 
-            return (
-              <div 
-                key={client.row_number}
-                onClick={() => setViewClient(client)}
-                className={`bg-white rounded-2xl border transition-all cursor-pointer relative hover:shadow-lg
-                  ${isGestionado ? 'border-emerald-200 bg-emerald-50/30' : 'border-gray-200'}
-                `}
-              >
-                <div className="flex flex-col lg:flex-row">
-                  {/* Info Principal */}
-                  <div className="flex-1 p-5 space-y-4">
-                    <div className="flex items-center gap-3 text-sm">
-                       <div className="flex items-center gap-2 font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
-                          <MapPin className="w-3.5 h-3.5" /> 
-                          {safeText(client.agenda_ciudad_sede) || <span className="text-gray-400 italic">Sede Origen?</span>}
-                       </div>
-                       <ArrowRight className="w-4 h-4 text-gray-300" />
-                       <div className="flex items-center gap-2 font-bold text-gray-600 bg-gray-100 px-3 py-1.5 rounded-lg">
-                          <MapPin className="w-3.5 h-3.5" /> 
-                          {safeText(client.guia_ciudad) || <span className="text-red-400 italic">Destino?</span>}
-                       </div>
-                       
-                       <div className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide border ${isGestionado ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-purple-50 text-purple-700 border-purple-100'}`}>
-                          {isGestionado ? 'Gestionado' : 'Pendiente'}
-                       </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800">
-                        {safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre de guía'}
-                      </h3>
-                      <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                        <User className="w-3.5 h-3.5" /> 
-                        CC/NIT: {safeText(client.guia_cedula_id) || '---'}
-                      </p>
-                      <p className="text-sm text-gray-500 mt-1">
-                        {safeText(client.guia_direccion) || <span className="text-red-400 italic">Sin dirección</span>}
-                      </p>
-                    </div>
-
-                    <div className="flex gap-4">
-                      <div className={`px-3 py-2 rounded-lg border border-dashed ${safeText(client.guia_numero_ida) ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase">Guía Ida</p>
-                        <p className="text-sm font-mono font-bold text-blue-700">{safeText(client.guia_numero_ida) || '---'}</p>
-                      </div>
-                      <div className={`px-3 py-2 rounded-lg border border-dashed ${safeText(client.guia_numero_retorno) ? 'bg-purple-50 border-purple-200' : 'bg-gray-50 border-gray-200 opacity-60'}`}>
-                        <p className="text-[10px] text-gray-500 font-bold uppercase">Guía Retorno</p>
-                        <p className="text-sm font-mono font-bold text-purple-700">{safeText(client.guia_numero_retorno) || '---'}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Acciones Logísticas */}
-                  <div className={`w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-gray-100 p-5 flex flex-col justify-between gap-4 
-                     ${isGestionado ? 'bg-emerald-50/20' : 'bg-gray-50/50'}
-                  `}>
-                    
-                    {/* Tag de Estado (Datos) */}
-                    <div className="flex justify-end">
-                      <span className={`px-2 py-1 rounded-md text-[10px] font-bold border flex items-center gap-1 ${ui.classes}`}>
-                        <StatusIcon uiKey={ui.key} />
-                        {ENVIO_LABELS[ui.key]}
-                      </span>
-                    </div>
-
-                    {/* Bloque de Generación de Guías */}
-                    <div className="space-y-2">
-                      {canGenerateIda ? (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleGenerarGuia(client); }}
-                          disabled={!!webhookLoading}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm transition-transform active:scale-95 disabled:opacity-50"
-                        >
-                          {webhookLoading === client.whatsapp ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                          GENERAR GUÍA RECOGIDA
-                        </button>
-                      ) : !safeText(client.guia_numero_ida) ? (
-                        <div className="p-3 bg-orange-50 border border-orange-100 rounded-xl">
-                          <p className="text-[10px] font-bold text-orange-700 flex items-center gap-1">
-                            <AlertTriangle className="w-3 h-3" /> FALTAN DATOS OBLIGATORIOS:
-                          </p>
-                          <p className="text-[9px] text-orange-600 mt-1 leading-tight">
-                            {missingFields.join(', ').replace(/guia_/g, '')}
-                          </p>
+                   <div className="flex flex-col lg:flex-row items-stretch">
+                     
+                     {/* LEFT: Origin-Destination Path */}
+                     <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-4 p-5 lg:w-[180px] lg:bg-slate-50/40 lg:border-r border-white/20">
+                        <div className="flex flex-col items-center gap-2">
+                           <div className="w-9 h-9 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-indigo-500">
+                             <MapPin size={16} />
+                           </div>
+                           <span className="text-[9px] font-black uppercase tracking-tight text-slate-500 text-center truncate max-w-[120px]">
+                              {safeText(client.agenda_ciudad_sede) || 'Origen?'}
+                           </span>
                         </div>
-                      ) : null}
+                        
+                        <div className="h-[20px] w-[2px] bg-gradient-to-b from-indigo-200 to-purple-200 hidden lg:block relative">
+                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white border border-indigo-400" />
+                        </div>
+                        <ArrowRight size={14} className="text-slate-300 lg:hidden" />
 
-                      {/* Botón Marcar Gestionado */}
-                      <button
-                         onClick={(e) => toggleGestionado(client, e)}
-                         className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold border transition-all active:scale-95
-                           ${isGestionado 
-                             ? 'bg-white text-emerald-600 border-emerald-200 hover:bg-emerald-50' 
-                             : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 shadow-sm'}
-                         `}
-                      >
-                         {isGestionado ? <X className="w-4 h-4" /> : <ClipboardCheck className="w-4 h-4" />}
-                         {isGestionado ? 'REABRIR (A PENDIENTE)' : 'MARCAR GESTIONADO'}
-                      </button>
-                    </div>
+                        <div className="flex flex-col items-center gap-2">
+                           <div className={`w-9 h-9 rounded-xl bg-white shadow-sm border flex items-center justify-center ${safeText(client.guia_ciudad) ? 'text-indigo-600 border-indigo-100' : 'text-rose-400 border-rose-100'}`}>
+                             <MapPin size={16} />
+                           </div>
+                           <span className={`text-[9px] font-black uppercase tracking-tight text-center truncate max-w-[120px] ${safeText(client.guia_ciudad) ? 'text-slate-700' : 'text-rose-500 italic'}`}>
+                              {safeText(client.guia_ciudad) || 'Destino?'}
+                           </span>
+                        </div>
+                     </div>
 
-                    <div className="flex gap-2 pt-2 border-t border-gray-200/50">
-                      <button 
-                        onClick={e => { e.stopPropagation(); handleWhatsAppClick(safeText(client.whatsapp), e); }}
-                        className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold hover:bg-green-100"
-                      >
-                        <Phone className="w-3.5 h-3.5" /> WhatsApp
-                      </button>
-                      <button 
-                        onClick={e => handleToggleBot(client, e)}
-                        className={`px-3 py-2 rounded-lg text-xs font-bold border transition-colors ${botActive ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-400'}`}
-                      >
-                        BOT: {botActive ? 'ON' : 'OFF'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                     {/* CENTER: Main info & Shipment Numbers */}
+                     <div className="flex-1 p-6 flex flex-col justify-center min-w-0">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                           <div className="min-w-0 flex-1">
+                               <div className="flex items-center gap-3 mb-1 flex-wrap">
+                                  <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-indigo-600 transition-colors truncate">
+                                     {safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}
+                                  </h3>
+                                  <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm border flex items-center gap-1.5
+                                     ${isGestionado 
+                                       ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                       : 'bg-indigo-50 text-indigo-600 border-indigo-100'}
+                                  `}>
+                                     {isGestionado ? 'Gestionado' : 'Pendiente'}
+                                  </span>
+                               </div>
+                               
+                               <div className="flex flex-wrap items-center gap-3 text-xs">
+                                  <div className="flex items-center gap-1.5 text-slate-400 font-bold group/val" onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}>
+                                     <Phone className="w-3 h-3 text-emerald-400 group-hover/val:scale-110 transition-transform" />
+                                     <span className="font-mono tracking-tight group-hover/val:text-emerald-600 transition-colors uppercase leading-none">{formatWhatsApp(client.whatsapp as any)}</span>
+                                  </div>
+                                  <div className="h-3 w-[1px] bg-slate-200" />
+                                  <div className="flex items-center gap-1.5 text-slate-400 font-bold">
+                                     <User className="w-3 h-3 text-slate-300" />
+                                     <span className="font-mono text-[9px]">ID: {safeText(client.guia_cedula_id) || '---'}</span>
+                                  </div>
+                               </div>
+                           </div>
+
+                           <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border flex items-center gap-1.5 whitespace-nowrap ${ui.classes}`}>
+                              <StatusIcon uiKey={ui.key} />
+                              {ENVIO_LABELS[ui.key]}
+                           </div>
+                        </div>
+
+                        {/* Shipping Numbers Boxes */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div className={`p-4 rounded-2xl border transition-all relative group/box
+                              ${safeText(client.guia_numero_ida) 
+                                ? 'bg-indigo-50/30 border-indigo-100/50' 
+                                : 'bg-slate-50/50 border-slate-200/50 opacity-60'}
+                           `}>
+                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-indigo-500 text-[8px] font-black uppercase tracking-widest rounded-lg border border-indigo-100 shadow-sm">
+                                 Guía de Ida
+                              </span>
+                              <div className="flex items-center justify-between">
+                                 <div className="flex items-center gap-3">
+                                    <Package className="w-4 h-4 text-indigo-300" />
+                                    <p className="font-mono text-sm font-black text-indigo-900 tracking-wider">
+                                       {safeText(client.guia_numero_ida) || 'POR ASIGNAR'}
+                                    </p>
+                                 </div>
+                                 {safeText(client.guia_numero_ida) && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                              </div>
+                           </div>
+
+                           <div className={`p-4 rounded-2xl border transition-all relative group/box
+                              ${safeText(client.guia_numero_retorno) 
+                                ? 'bg-purple-50/30 border-purple-100/50' 
+                                : 'bg-slate-50/50 border-slate-200/50 opacity-60'}
+                           `}>
+                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-purple-500 text-[8px] font-black uppercase tracking-widest rounded-lg border border-purple-100 shadow-sm">
+                                 Guía de Retorno
+                              </span>
+                              <div className="flex items-center justify-between">
+                                 <div className="flex items-center gap-3">
+                                    <Package className="w-4 h-4 text-purple-300" />
+                                    <p className="font-mono text-sm font-black text-purple-900 tracking-wider">
+                                       {safeText(client.guia_numero_retorno) || 'SIN REGISTRO'}
+                                    </p>
+                                 </div>
+                                 {safeText(client.guia_numero_retorno) && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                              </div>
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* RIGHT: Meta info & Actions */}
+                     <div className={`w-full lg:w-[280px] p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6 ${isGestionado ? 'bg-emerald-50/10' : 'bg-indigo-50/10'}`}>
+                        <div className="space-y-3">
+                           <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
+                                 <Clock size={12} className="text-indigo-400" />
+                                 <div className="flex flex-col overflow-hidden">
+                                    <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-0.5">Última Actividad</span>
+                                    <span className="text-[9px] font-black uppercase tracking-wider truncate">{formatTimeDate(client.last_msg || client.created)}</span>
+                                 </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
+                                 <Truck size={12} className="text-indigo-400" />
+                                 <span className="text-[9px] font-black uppercase tracking-wider truncate">
+                                    {safeText(client.guia_departamento_estado) || 'Sin Dpto'}
+                                 </span>
+                              </div>
+                           </div>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                           {canGenerateIda ? (
+                             <button
+                               onClick={(e) => { e.stopPropagation(); handleGenerarGuia(client); }}
+                               disabled={!!webhookLoading}
+                               className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 text-white rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all hover:bg-indigo-700 hover:-translate-y-0.5 border border-indigo-500 shadow-lg shadow-indigo-200/40 active:scale-95 disabled:opacity-50"
+                             >
+                               {webhookLoading === client.whatsapp ? <RefreshCw className="w-4 h-4 animate-spin text-white/50" /> : <Send className="w-4 h-4" />}
+                               GENERAR GUÍA RECOGIDA
+                             </button>
+                           ) : !safeText(client.guia_numero_ida) && !isGestionado ? (
+                             <div className="p-3 bg-amber-50/80 rounded-2xl border border-amber-100 flex flex-col gap-1.5 shadow-sm">
+                               <div className="flex items-center gap-2 text-amber-600">
+                                  <AlertCircle size={14} />
+                                  <span className="text-[9px] font-black uppercase tracking-widest">Datos Faltantes</span>
+                               </div>
+                               <p className="text-[9px] text-amber-700 font-semibold leading-tight px-1 uppercase tracking-tight opacity-70">
+                                 {missingFields.join(', ').replace(/guia_/g, '').replace(/_/g, ' ')}
+                               </p>
+                             </div>
+                           ) : null}
+
+                           <button
+                              onClick={(e) => toggleGestionado(client, e)}
+                              disabled={isSaving}
+                              className={`flex items-center justify-center gap-2 w-full py-3 rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all border shadow-md active:scale-95
+                                 ${isGestionado 
+                                   ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
+                                   : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
+                              `}
+                           >
+                              {isGestionado ? <RefreshCw className="w-3.5 h-3.5" /> : <ClipboardCheck className="w-3.5 h-3.5" />}
+                              {isGestionado ? 'Reabrir Envío' : 'Marcar Gestionado'}
+                           </button>
+
+                           <div className="grid grid-cols-2 gap-2">
+                              <button 
+                                 onClick={(e) => handleToggleBot(client, e)} 
+                                 className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
+                                    ${botActive 
+                                       ? 'bg-white text-indigo-600 border-indigo-100 hover:shadow-sm' 
+                                       : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
+                                 `}
+                              >
+                                 <Bot size={12} className={botActive ? 'text-indigo-500' : 'text-rose-400'} /> 
+                                 {botActive ? 'Bot ON' : 'Bot OFF'}
+                              </button>
+                              
+                              <button 
+                                 onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
+                                 className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-[18px] text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                              >
+                                 <Phone size={12} /> Chat
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                   </div>
+                 </div>
+               );
+             })}
+           </div>
+         ) : (
+           <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in duration-700 relative">
+              <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">
+                 <div className="absolute inset-0 bg-indigo-500 blur-3xl opacity-10 group-hover:opacity-20 transition-opacity" />
+                 <Truck className={`w-10 h-10 ${currentTab === 'PENDIENTES' ? 'text-indigo-400' : 'text-slate-300'} relative z-10`} />
               </div>
-            );
-          })
-        ) : (
-          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200 text-center max-w-4xl mx-auto">
-             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4 shadow-inner">
-                <Truck className="w-10 h-10 text-gray-300" />
-             </div>
-             <h3 className="text-xl font-bold text-gray-900">
-               {currentTab === 'PENDIENTES' ? 'No hay envíos pendientes' : 'Sin resultados'}
-             </h3>
-             <p className="text-gray-500 max-w-md mt-2 px-4 text-center">
-               {search ? `No hay resultados para "${search}"` : 'Intenta cambiar los filtros o la pestaña.'}
-             </p>
-          </div>
-        )}
+              <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
+                  {currentTab === 'PENDIENTES' ? 'Logística al Día' : 'Sin Resultados'}
+              </h3>
+              <p className="text-slate-500 max-w-xs font-semibold leading-relaxed">
+                 {currentTab === 'PENDIENTES' 
+                   ? 'No hay envíos pendientes por gestionar. Todo el flujo logístico está en proceso o finalizado.' 
+                   : 'No se encontraron registros que coincidan con los filtros aplicados en esta categoría.'}
+              </p>
+              <button 
+                onClick={() => { setCurrentTab('PENDIENTES'); setSearch(''); setSedeFilter('Todas'); }}
+                className="mt-10 px-10 py-4 bg-slate-900 text-white rounded-[24px] font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-slate-200 hover:bg-black hover:shadow-black/20 hover:-translate-y-1 transition-all active:scale-95"
+              >
+                Ver Pendientes
+              </button>
+           </div>
+         )}
       </div>
 
       <ClientModal

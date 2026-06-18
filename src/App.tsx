@@ -8,7 +8,7 @@ import { PreciosPage } from "./pages/PreciosPage";
 import { CRMPage } from "./pages/CRMPage";
 import { AgendaPage } from "./pages/AgendaPage";
 import { EnviosPage } from "./pages/EnviosPage";
-import { Resultados } from "./pages/Resultados";
+import { Resultados } from "./pages/Resultados/index";
 import { WppPage } from "./pages/WppPage";
 import { AgentePage } from "./pages/AgentePage";
 import ConversacionesPage from "./pages/ConversacionesPage";
@@ -19,7 +19,7 @@ import { UsuariosPage } from "./pages/UsuariosPage";
 // 1. DEFINICIÓN DE CLAVES (Deben coincidir con los roles del Backend)
 type PageKey = 
   | "precios" 
-  | "whatsapp" // IMPORTANTE: Coincide con el rol del backend
+  | "whatsapp"
   | "crm" 
   | "agenda" 
   | "envios" 
@@ -37,7 +37,7 @@ function App() {
   const pathToPage = useMemo<Record<string, PageKey>>(
     () => ({
       "/precios": "precios",
-      "/wpp": "whatsapp", // URL /wpp carga el módulo 'whatsapp'
+      "/wpp": "whatsapp", 
       "/crm": "crm",
       "/agenda": "agenda",
       "/envios": "envios",

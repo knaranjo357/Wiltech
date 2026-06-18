@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, Bot, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { AuthService } from '../services/authService';
 
@@ -17,11 +17,9 @@ export const LoginForm: React.FC = () => {
     setError('');
 
     try {
-      await login(email, password); // guarda token, rol y ciudad en localStorage
-      // Redirigir a /agenda (recarga limpia, sin dejar /login en el historial)
+      await login(email, password);
       window.location.replace('/agenda');
     } catch (err) {
-      // Limpia tokens viejos para que al refrescar NO te deje dentro
       AuthService.logout();
       setError(err instanceof Error ? err.message : 'Usuario o contraseña incorrectos');
     } finally {
@@ -30,92 +28,115 @@ export const LoginForm: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-md">
-        {/* Logo and title */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-            <Bot className="w-10 h-10 text-white" />
+    <div className="min-h-screen bg-gradient-animated flex items-center justify-center p-6 relative overflow-hidden">
+
+      {/* Decorative blobs */}
+      <div className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-indigo-200/20 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-[-15%] left-[-10%] w-[500px] h-[500px] rounded-full bg-purple-200/20 blur-3xl pointer-events-none" />
+      <div className="absolute top-[30%] left-[20%] w-[300px] h-[300px] rounded-full bg-sky-200/15 blur-3xl pointer-events-none" />
+
+      <div className="w-full max-w-md relative z-10 slide-up">
+
+        {/* Logo */}
+        <div className="text-center mb-10">
+          <div className="bg-black p-4 rounded-3xl flex items-center justify-center mx-auto mb-5 shadow-2xl ring-4 ring-white/50 w-24 h-24 overflow-hidden">
+            <img 
+              src="/images/logowiltech.png" 
+              alt="Wiltech Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-700 to-purple-600 bg-clip-text text-transparent">
             Wiltech
           </h1>
-          <p className="text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
+          <p className="text-slate-500 mt-2 text-sm font-medium">Inicia sesión en tu cuenta</p>
         </div>
 
-        {/* Login form */}
-        <form onSubmit={handleSubmit} className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border border-white/40 p-8">
+        {/* Form Card */}
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 border border-white/80 p-8 ring-1 ring-slate-900/[0.04] space-y-6"
+        >
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
-              <p className="text-red-600 text-sm text-center">
-                {error || 'Usuario o contraseña incorrectos'}
-              </p>
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl animate-in slide-in-from-top-2 duration-200">
+              <p className="text-red-600 text-sm text-center font-medium">{error}</p>
             </div>
           )}
 
-          <div className="space-y-6">
-            {/* Email field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="tu@email.com"
-                  required
-                />
-              </div>
+          {/* Email */}
+          <div className="space-y-2">
+            <label htmlFor="email" className="block text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">
+              Email
+            </label>
+            <div className="relative group">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <input
+                type="email"
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-400 font-medium"
+                placeholder="tu@email.com"
+                required
+              />
             </div>
-
-            {/* Password field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Contraseña
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300"
-                  placeholder="••••••••"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            >
-              {loading ? (
-                <div className="flex items-center justify-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  <span>Iniciando sesión...</span>
-                </div>
-              ) : (
-                'Iniciar sesión'
-              )}
-            </button>
           </div>
+
+          {/* Password */}
+          <div className="space-y-2">
+            <label htmlFor="password" className="block text-xs font-bold text-slate-500 uppercase tracking-wider pl-1">
+              Contraseña
+            </label>
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full pl-11 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-400 font-medium"
+                placeholder="••••••••"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3.5 px-6 rounded-2xl font-semibold hover:from-indigo-700 hover:to-purple-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-indigo-200/50 hover:shadow-xl hover:shadow-indigo-300/50 flex items-center justify-center gap-3 group overflow-hidden"
+          >
+            {loading ? (
+              <div className="flex items-center gap-3">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Iniciando sesión...</span>
+              </div>
+            ) : (
+              <>
+                <span>Iniciar sesión</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+
+            {/* Shimmer effect */}
+            {!loading && (
+              <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 transition-opacity" />
+            )}
+          </button>
         </form>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-slate-400 mt-6 font-medium">
+          Powered by <span className="text-slate-500 font-semibold">Alliasoft</span>
+        </p>
       </div>
     </div>
   );

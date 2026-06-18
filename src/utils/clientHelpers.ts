@@ -90,19 +90,16 @@ export const isYesterday = (dateString: string): boolean => {
   return date.toDateString() === yesterday.toDateString();
 };
 
-/* ======================= Helpers internos ======================= */
+/* ======================= Helpers internos (ahora en textUtils) ======================= */
 
-const EMPTY_MARKERS = new Set(['', '-', '—', 'null', 'undefined', 'n/a', 'na']);
+import { isInvalid, safeText, normalize, formatTimeDate, isBotOn } from './textUtils';
 
-// Normaliza valores para verificar si están vacíos
-const norm = (v: unknown): string => {
-  if (v === null || v === undefined) return '';
-  const s = String(v).trim();
-  return EMPTY_MARKERS.has(s.toLowerCase()) ? '' : s;
-};
+// Re-exportar utilidades centralizadas
+export { isInvalid, safeText, normalize, formatTimeDate, isBotOn };
 
-// Verifica si un valor ha sido provisto
-const provided = (v: unknown) => norm(v) !== '';
+// Helpers internos para estado de envío
+const norm = (v: unknown) => safeText(v).toLowerCase();
+const provided = (v: unknown) => !isInvalid(v);
 
 /* ======================= Estado de envío (Logística) ======================= */
 

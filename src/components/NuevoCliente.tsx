@@ -1,5 +1,6 @@
 // src/components/NuevoCliente.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Plus, X, Save, Phone, MapPin, User, Smartphone, FileText, Settings, 
   DollarSign, UserCheck, Calendar, ShieldCheck, ClipboardList, ClipboardCheck, 
@@ -8,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
+import { SedeSelect } from './SedeSelect';
 
 /** ===================== Helpers ===================== **/
 
@@ -36,7 +38,7 @@ function toWaJid(raw: string): { jid: string; e164: string } | null {
 }
 
 /** Tipos de campo idénticos a ClientModal */
-type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean';
+type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean' | 'sede';
 
 type FieldDef<K extends keyof Client = keyof Client> = {
   label: string;
@@ -165,7 +167,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
         { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
         { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
         { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
-        { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: MapPin, type: 'text' },
+        { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: MapPin, type: 'sede' },
         { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
       ],
     },
@@ -229,6 +231,12 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
       return;
     }
 
+    // Validación dependiente para Sede y Fecha de agenda
+    if ((form.fecha_agenda && !form.agenda_ciudad_sede) || (!form.fecha_agenda && form.agenda_ciudad_sede)) {
+      setError('Si ingresas la Sede Agendada, debes especificar la Fecha de Agenda y viceversa.');
+      return;
+    }
+
     // Payload
     const payload: Partial<Client> = {
       ...form,
@@ -263,11 +271,13 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     }
   };
 
+
+
   return (
     <>
       {/* Botón Flotante */}
       {floating && (
-        <div className="fixed bottom-6 right-6 z-[110] animate-in slide-in-from-bottom-4 duration-500">
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <button
             onClick={() => setOpen(true)}
             className="group flex items-center gap-2 bg-blue-600 text-white px-5 py-3.5 rounded-full shadow-lg shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/50 transition-all active:scale-95 border border-blue-500"
@@ -280,60 +290,60 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
       )}
 
       {/* Modal Overlay */}
-      {open && (
+      {open && createPortal(
         <div
           ref={overlayRef}
           onMouseDown={onOverlayClick}
-          className="fixed inset-0 z-[130] bg-gray-900/70 backdrop-blur-sm flex justify-center items-center transition-all duration-300"
+          className="wt-overlay"
           role="dialog"
         >
-          {/* Main Container - Estilo idéntico a ClientModal */}
           <div
             onMouseDown={(e) => e.stopPropagation()}
-            className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300 border border-gray-200"
+            className="wt-modal h-full sm:h-[92vh] sm:max-w-6xl flex flex-col"
           >
-            
             {/* Header */}
-            <div className="relative shrink-0 bg-white z-20 shadow-sm px-4 sm:px-6 py-4 flex items-center justify-between border-b border-gray-100">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-200 border-2 border-white ring-1 ring-gray-100">
-                   <Plus className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900 tracking-tight">Crear Nuevo Cliente</h2>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
-                       <Bot className="w-3 h-3" /> Bot: Activo
-                    </span>
-                    <span className="text-xs text-gray-400">Complete la información requerida</span>
+            <div className="relative shrink-0 bg-white z-20">
+              <div className="wt-modal-header py-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-200 border-2 border-white ring-1 ring-gray-100">
+                     <Plus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">Crear Nuevo Cliente</h2>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
+                         <Bot className="w-3 h-3" /> Bot: Activo
+                      </span>
+                      <span className="text-xs text-gray-400">Complete la información requerida</span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleClose}
-                  className="px-4 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition font-medium text-sm border border-transparent hover:border-gray-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition shadow-md shadow-blue-200 disabled:opacity-70 active:scale-95 font-medium"
-                >
-                  {saving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-                      <span>Guardando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-4 h-4" />
-                      <span>Guardar Cliente</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleClose}
+                    className="btn-secondary"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className="btn-primary px-6"
+                  >
+                    {saving ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
+                        <span>Guardando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>Guardar Cliente</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -351,15 +361,14 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
             <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-8">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">
                 {sections.map((section, idx) => (
-                  <div key={idx} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-fit flex flex-col">
-                    
+                  <div key={idx} className="card overflow-hidden h-fit flex flex-col relative">
                     {/* Section Header */}
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
                         <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${section.iconColor}`}>
+                            <div className={`p-2 rounded-xl shadow-sm ${section.iconColor}`}>
                                 <section.icon className="w-5 h-5" />
                             </div>
-                            <h3 className="font-bold text-gray-800 text-base tracking-tight">{section.title}</h3>
+                            <h3 className="font-extrabold text-slate-800 text-sm uppercase tracking-widest">{section.title}</h3>
                         </div>
                     </div>
 
@@ -371,7 +380,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
 
                         return (
                           <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
-                             <label className="text-xs font-bold text-gray-400 uppercase tracking-wider pl-0.5 mb-1 flex items-center justify-between">
+                             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest pl-0.5 mb-1 flex items-center justify-between">
                                 {field.label} {field.required && <span className="text-red-500">*</span>}
                              </label>
                              
@@ -381,7 +390,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    rows={3}
-                                   className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-gray-300"
+                                   className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
                                    placeholder="Escribe aquí..."
                                  />
                                ) : field.type === 'boolean' ? (
@@ -389,7 +398,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                     <select
                                       value={val === true ? 'true' : 'false'}
                                       onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 appearance-none"
+                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 appearance-none"
                                     >
                                       <option value="true">Sí</option>
                                       <option value="false">No</option>
@@ -403,13 +412,18 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5"
                                  />
+                               ) : field.type === 'sede' ? (
+                                 <SedeSelect
+                                   value={val ?? ''}
+                                   onChange={(v) => setVal(field.key, v)}
+                                 />
                                ) : (
                                  <input
                                    type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                    placeholder={field.placeholder || '-'}
-                                   className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 placeholder:text-gray-300"
+                                   className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
                                  />
                                )}
                                
@@ -441,7 +455,8 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

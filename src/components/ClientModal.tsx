@@ -1,5 +1,6 @@
 // src/components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
   Copy, MessageCircle, ShieldCheck, ClipboardList, Building2, ClipboardCheck,
@@ -15,6 +16,8 @@ import {
   deriveEnvioUI,
 } from '../utils/clientHelpers';
 import { ChatPanel } from './ChatPanel';
+import { isBotOn, safeBigIntStr, safeText as safeStr } from '../utils/textUtils';
+import { SedeSelect } from './SedeSelect';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -23,7 +26,7 @@ interface ClientModalProps {
   onUpdate: (client: Partial<Client>) => Promise<boolean>;
 }
 
-type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean';
+type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean' | 'sede';
 type FieldDef<K extends keyof Client = keyof Client> = {
   label: string;
   key: K;
@@ -44,17 +47,7 @@ const toInputDate = (val: any): string => {
   } catch {
     return '';
   }
-};
-
-// NUEVO HELPER: Maneja IDs grandes de FB/IG evitando notación científica
-const safeBigIntStr = (val: any): string => {
-  if (val === null || val === undefined) return '';
-  if (typeof val === 'number') {
-    // Convierte números grandes a string sin usar notación científica (e.g. 1.2e+15)
-    return val.toLocaleString('fullwide', { useGrouping: false });
-  }
-  return String(val);
-};
+}
 
 const parseAgendaDate = (raw?: string | null): Date | null => {
   if (!raw || typeof raw !== 'string') return null;
@@ -62,14 +55,7 @@ const parseAgendaDate = (raw?: string | null): Date | null => {
   const t1 = Date.parse(s);
   if (!Number.isNaN(t1)) return new Date(t1);
   return null;
-};
-
-const safeStr = (v?: unknown) => {
-  if (v === null || v === undefined) return '';
-  const s = String(v).trim();
-  const l = s.toLowerCase();
-  return l === 'null' || l === 'undefined' ? '' : s;
-};
+}
 
 // ========= Definición de Tabs =========
 type TabID = 'general' | 'comercial' | 'logistica' | 'notas' | 'chat';
@@ -145,6 +131,15 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   };
 
   const handleSave = async () => {
+    // Validar dependencia mutua de Sede Agendada y Fecha agenda
+    const sede = editData.agenda_ciudad_sede ?? c.agenda_ciudad_sede;
+    const fecha = editData.fecha_agenda ?? c.fecha_agenda;
+
+    if ((fecha && !sede) || (!fecha && sede)) {
+      alert('Si ingresas la Sede Agendada, debes especificar la Fecha de Agenda y viceversa.');
+      return;
+    }
+
     try {
       setSaving(true);
       const fullPayload: Partial<Client> = { ...editData, row_number: c.row_number };
@@ -156,12 +151,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     } finally { setSaving(false); }
   };
 
-  // === LÓGICA DEL BOT CORREGIDA ===
-  const isBotOn = (v: any) => {
-    if (v === false) return false;
-    if (typeof v === 'string' && v.toLowerCase() === 'false') return false;
-    return true;
-  };
+  // Bot state uses centralized isBotOn from textUtils
 
   const handleBotToggle = async () => {
     const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto) as any;
@@ -245,7 +235,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     // --- TAB COMERCIAL ---
     { tab: 'comercial', title: 'Agenda', icon: Calendar, iconColor: 'text-teal-600 bg-teal-50', fields: [
        { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
-       { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: Building2, type: 'text' },
+       { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: Building2, type: 'sede' },
        { label: 'Asistió', key: 'asistio_agenda', icon: CheckCircle, type: 'boolean' },
     ]},
     { tab: 'comercial', title: 'Diagnóstico y Comercial', icon: DollarSign, iconColor: 'text-green-600 bg-green-50', fields: [
@@ -306,46 +296,46 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
 
   if (!shouldRender) return null;
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-[120] bg-gray-900/70 backdrop-blur-sm flex justify-end sm:justify-center sm:items-center transition-all duration-300"
+      className="wt-overlay"
       role="dialog"
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
-        className="bg-white w-full h-full sm:h-[90vh] sm:w-[95vw] sm:max-w-6xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-300 border border-gray-200"
+        className="wt-modal h-full sm:h-[92vh] sm:max-w-6xl flex flex-col"
       >
         
         {/* === HEADER PRINCIPAL === */}
-        <div className="relative shrink-0 bg-white z-20 shadow-sm">
+        <div className="relative shrink-0 bg-white z-20">
           
           {/* Top Bar: Info Cliente & Acciones Globales */}
-          <div className="px-4 sm:px-6 py-4 flex flex-col md:flex-row gap-4 md:items-center justify-between bg-white border-b border-gray-100">
+          <div className="wt-modal-header py-4">
             {/* Cliente Info */}
             <div className="flex items-center gap-4 min-w-0">
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-blue-200 shrink-0 border-2 border-white ring-1 ring-gray-100">
+              <div className="relative shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-indigo-200/50 border-2 border-white ring-1 ring-slate-200">
                   {initials}
                 </div>
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></div>
               </div>
               <div className="min-w-0">
-                <h2 className="text-2xl font-bold text-gray-900 tracking-tight truncate">
+                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight leading-none truncate mb-1">
                   {safeStr(c?.nombre) || 'Sin Nombre'}
                 </h2>
-                <div className="flex items-center gap-3 text-gray-500 text-sm mt-1">
-                  <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-100">
-                     <Smartphone className="w-3.5 h-3.5 text-gray-400" />
-                     <span className="truncate font-medium">{safeStr(c?.modelo) || 'Modelo desconocido'}</span>
+                <div className="flex items-center gap-3 text-slate-500 text-sm">
+                  <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200/60 font-semibold text-[11px] uppercase tracking-wide">
+                     <Smartphone className="w-3 h-3 text-slate-400" />
+                     <span className="truncate">{safeStr(c?.modelo) || 'Modelo desconocido'}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Acciones Principales */}
-            <div className="flex flex-wrap items-center gap-3 justify-end">
+            <div className="flex items-center gap-2">
                {isEditing ? (
                  <>
                    <button
@@ -356,29 +346,29 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                         }
                      }}
                      disabled={saving}
-                     className="px-4 py-2.5 rounded-xl text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition font-medium text-sm border border-transparent hover:border-gray-200"
+                     className="btn-secondary"
                    >
                      Cancelar
                    </button>
                    <button
                      onClick={handleSave}
                      disabled={saving}
-                     className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition shadow-md shadow-blue-200 disabled:opacity-70 active:scale-95 font-medium"
+                     className="btn-primary px-6"
                    >
                      {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Save className="w-4 h-4" />}
-                     <span>Guardar Cambios</span>
+                     <span>Guardar</span>
                    </button>
                  </>
                ) : (
                  <>
                    <button
                      onClick={() => { setIsEditing(true); setEditData(c); }}
-                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 transition shadow-sm active:scale-95 font-medium"
+                     className="btn-secondary"
                    >
                      <Edit2 className="w-4 h-4" />
-                     <span>Editar</span>
+                     <span className="hidden sm:inline">Editar</span>
                    </button>
-                   <button onClick={onClose} className="p-2.5 rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 transition border border-transparent hover:border-red-100 ml-1">
+                   <button onClick={onClose} className="btn-ghost p-2 text-slate-400">
                      <X className="w-6 h-6" />
                    </button>
                  </>
@@ -387,7 +377,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
           </div>
 
           {/* Quick Info Bar & Toggles */}
-          <div className="px-4 sm:px-6 py-3 flex flex-col xl:flex-row gap-4 xl:items-center justify-between bg-gray-50/80 backdrop-blur border-b border-gray-100">
+          <div className="px-4 sm:px-6 py-3 flex flex-col xl:flex-row gap-4 xl:items-center justify-between bg-slate-50/80 backdrop-blur-md border-b border-slate-100">
             {/* Etiquetas y Toggles */}
             <div className="flex flex-wrap items-center gap-3">
                {c?.estado_etapa && (
@@ -396,17 +386,17 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                  </span>
                )}
                
-               <div className="h-6 w-px bg-gray-300 mx-1 hidden sm:block"></div>
+               <div className="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
 
                <button 
                  onClick={handleBotToggle}
                  disabled={saving}
-                 className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all active:scale-95 shadow-sm
+                 className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-bold border transition-all active:scale-95 shadow-sm uppercase tracking-wider
                    ${isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) 
-                     ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' 
-                     : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 grayscale'}`}
+                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                     : 'bg-slate-100 text-slate-400 border-slate-200 hover:bg-slate-200 grayscale'}`}
                >
-                 <div className={`w-2 h-2 rounded-full ${isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`} />
+                 <div className={`w-2 h-2 rounded-full ${isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
                  <Bot className="w-3.5 h-3.5"/>
                  <span>{isBotOn(editData.consentimiento_contacto ?? c.consentimiento_contacto) ? 'Bot Activo' : 'Bot Apagado'}</span>
                </button>
@@ -414,13 +404,13 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                {canShowAsistio && (
                  <button
                    onClick={toggleAsistio}
-                   className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-semibold border transition-all active:scale-95 shadow-sm
+                   className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-bold border transition-all active:scale-95 shadow-sm uppercase tracking-wider
                      ${asistio 
-                        ? 'bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-200' 
-                        : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100'}`}
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
+                        : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
                  >
                    {asistio ? <CheckCircle className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
-                   <span>{asistio ? 'Asistió' : 'Pendiente Asistencia'}</span>
+                   <span>{asistio ? 'Asistió' : 'Pendiente'}</span>
                  </button>
                )}
             </div>
@@ -444,7 +434,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
           </div>
 
           {/* === TABS NAVIGATION === */}
-          <div className="px-4 sm:px-6 flex overflow-x-auto gap-6 border-b border-gray-100 no-scrollbar bg-white">
+          <div className="px-4 sm:px-6 py-3 flex overflow-x-auto border-b border-slate-100 no-scrollbar bg-white">
+            <div className="wt-filter-group">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id;
               const counts = getTabCounts(tab.id);
@@ -453,25 +444,23 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`group relative flex items-center gap-2 py-4 text-sm font-medium border-b-2 transition-all whitespace-nowrap outline-none
-                    ${isActive 
-                      ? 'border-blue-600 text-blue-700' 
-                      : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-200'}`}
+                  className={`wt-filter-pill ${isActive ? 'wt-filter-pill-active' : ''} flex items-center gap-2`}
                 >
-                  <tab.icon className={`w-4 h-4 transition-colors ${isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-600'}`} />
+                  <tab.icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
                   <span>{tab.label}</span>
                   
                   {counts && (
                     <span className={`ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md transition-colors
                       ${isActive 
-                        ? 'bg-blue-100 text-blue-700' 
-                        : 'bg-gray-100 text-gray-500 group-hover:bg-gray-200'}`}>
+                        ? 'bg-indigo-100 text-indigo-700' 
+                        : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
                       {counts.filled}/{counts.total}
                     </span>
                   )}
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
 
@@ -484,18 +473,18 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               source={(editData.source ?? c.source) as any}
             />
           ) : (
-            <div className="flex-1 overflow-y-auto p-4 sm:p-8 animate-in fade-in duration-300">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-8 animate-in fade-in duration-500 bg-slate-50/50">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">
                 
                 {sectionsToRender.map((section, idx) => (
-                  <div key={`${section.title}-${idx}`} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-fit flex flex-col">
+                  <div key={`${section.title}-${idx}`} className="card overflow-hidden h-fit flex flex-col relative">
                     {/* Section Header */}
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
                         <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg ${section.iconColor}`}>
+                            <div className={`p-2 rounded-xl shadow-sm ${section.iconColor.replace('bg-', 'bg-')}`}>
                                 <section.icon className="w-5 h-5" />
                             </div>
-                            <h3 className="font-bold text-gray-800 text-base tracking-tight">{section.title}</h3>
+                            <h3 className="font-extrabold text-slate-800 text-sm uppercase tracking-widest">{section.title}</h3>
                         </div>
                     </div>
 
@@ -506,56 +495,57 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                         const isEmpty = !safeStr(value);
                         const isFullWidth = field.type === 'textarea';
                         
-                        // CORRECCIÓN PRINCIPAL AQUÍ:
-                        // Usamos safeBigIntStr para asegurarnos de que los IDs de FB no se muestren como 1.23e+15
                         const displayValue = field.key === 'subscriber_id' 
                            ? safeBigIntStr(value) 
                            : (value ?? '');
 
                         return (
                           <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
-                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider pl-0.5 mb-1 flex items-center justify-between">
+                            <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest pl-0.5 mb-1 flex items-center justify-between">
                                {field.label}
                                {!isEditing && !isEmpty && field.type !== 'boolean' && (
-                                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400/50" />
+                                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-400/50" />
                                )}
                             </label>
 
                             {isEditing ? (
                                 /* === Edit Mode === */
-                                <div className="relative group">
+                                <div className="wt-input-wrap">
                                   {field.key === 'estado_envio' ? (
                                     <div className="relative">
                                         <select
                                             value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
                                             onChange={(e) => setVal('estado_envio', e.target.value as any)}
-                                            className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 appearance-none"
+                                            className="appearance-none pr-10"
                                         >
                                             <option value="">(Seleccionar)</option>
                                             <option value="envio_gestionado">Envío gestionado</option>
                                             <option value="no_aplica">No aplica</option>
                                         </select>
-                                        <ChevronRight className="absolute right-3 top-3 w-4 h-4 text-gray-400 rotate-90 pointer-events-none"/>
+                                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 rotate-90 pointer-events-none"/>
                                     </div>
+                                  ) : field.type === 'sede' ? (
+                                    <SedeSelect
+                                      value={value ?? ''}
+                                      onChange={(v) => setVal(field.key, v)}
+                                    />
                                   ) : field.type === 'textarea' ? (
                                     <textarea
                                       value={value ?? ''}
                                       onChange={(e) => setVal(field.key, e.target.value)}
-                                      rows={3}
-                                      placeholder="Escribe aquí..."
-                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-gray-300"
+                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
                                     />
                                   ) : field.type === 'boolean' ? (
                                     <div className="relative">
                                         <select
                                             value={value === true ? 'true' : 'false'}
                                             onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                            className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 appearance-none"
+                                            className="appearance-none pr-10"
                                         >
                                             <option value="true">Sí</option>
                                             <option value="false">No</option>
                                         </select>
-                                        <ChevronRight className="absolute right-3 top-3 w-4 h-4 text-gray-400 rotate-90 pointer-events-none"/>
+                                        <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 rotate-90 pointer-events-none"/>
                                     </div>
                                   ) : field.type === 'datetime' ? (
                                     <input
@@ -567,11 +557,10 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   ) : (
                                     <input
                                       type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
-                                      // USAMOS displayValue AQUÍ
                                       value={displayValue}
                                       onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                       placeholder="-"
-                                      className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5 placeholder:text-gray-300"
+                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
                                     />
                                   )}
                                 </div>
@@ -579,28 +568,32 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                 /* === View Mode === */
                                 <div className="min-h-[24px] flex items-center">
                                   {field.key === 'estado_envio' && value ? (
-                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${deriveEnvioUI({ ...c, ...editData }).classes}`}>
+                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest border ${deriveEnvioUI({ ...c, ...editData }).classes}`}>
                                         <Truck className="w-3.5 h-3.5"/> {deriveEnvioUI({ ...c, ...editData }).label}
                                      </span>
                                   ) : isEmpty ? (
-                                     <span className="text-gray-300 text-sm select-none font-light italic">Vacío</span>
+                                     <span className="text-slate-300 text-xs select-none font-medium italic">Sin definir</span>
+                                  ) : field.key === 'agenda_ciudad_sede' ? (
+                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-sm">
+                                        <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                                        {value}
+                                     </span>
                                   ) : field.key === 'whatsapp' ? (
                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-semibold text-gray-700 font-mono tracking-wide">{formatWhatsApp(String(value))}</span>
+                                        <span className="text-sm font-bold text-slate-700 font-mono tracking-wide">{formatWhatsApp(String(value))}</span>
                                      </div>
                                   ) : (field.type === 'datetime' || field.key === 'fecha_agenda') ? (
-                                     <span className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                        <Calendar className="w-4 h-4 text-gray-400"/> 
+                                     <span className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-slate-400"/> 
                                         {formatDate(String(value))}
                                      </span>
                                   ) : field.type === 'boolean' ? (
-                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold uppercase tracking-wide border ${value ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
-                                        {value ? <CheckCircle className="w-3.5 h-3.5"/> : <X className="w-3.5 h-3.5"/>}
+                                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold uppercase tracking-widest border ${value ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                        {value ? <CheckCircle className="w-3 h-3"/> : <X className="w-3 h-3"/>}
                                         {value ? 'Sí' : 'No'}
                                       </span>
                                   ) : (
-                                     <span className="text-sm font-medium text-gray-700 break-words leading-relaxed whitespace-pre-wrap">
-                                        {/* USAMOS displayValue TAMBIÉN AQUÍ */}
+                                     <span className="text-sm font-semibold text-slate-700 break-words leading-relaxed whitespace-pre-wrap">
                                         {String(displayValue)}
                                      </span>
                                   )}
@@ -617,6 +610,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

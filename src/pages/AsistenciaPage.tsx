@@ -4,38 +4,13 @@ import {
   AlertCircle, CheckCircle2, X, ArrowUpDown, 
   Clock, MessageCircle, Bot, MessageSquare, 
   Smartphone, Check, Edit3, Globe, User, ClipboardCheck, 
-  Filter, ChevronDown
+  Filter, ChevronDown, Fingerprint
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
 import { formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
-
-/** ================== Helpers ================== */
-const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
-
-const isInvalid = (v: unknown) => {
-  const c = String(v || '').toLowerCase().trim();
-  return !c || c === 'no aplica' || c === 'no' || c === 'null' || c === 'undefined';
-};
-
-const safeText = (v: unknown) => {
-  if (isInvalid(v)) return '';
-  return String(v).trim();
-};
-
-const formatTimeDate = (val: string | number | undefined) => {
-  if (!val) return '—';
-  const date = new Date(typeof val === 'number' && val < 10000000000 ? val * 1000 : val);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute:'2-digit' });
-};
-
-const isBotOn = (v: any) => {
-  if (v === false) return false;
-  if (String(v).toLowerCase() === 'false') return false;
-  return true; 
-};
+import { normalize, safeText, formatTimeDate, isBotOn } from '../utils/textUtils';
 
 // Constantes de Categoría
 const CAT_PENDIENTE = 'SOLICITUD_AYUDA';
@@ -179,6 +154,14 @@ export const AsistenciaPage: React.FC = () => {
     return Array.from(s).sort();
   }, [clients]);
 
+  const stats = useMemo(() => {
+    return {
+      pendientes: clients.filter(c => String(c.categoria_contacto).trim().toUpperCase() === CAT_PENDIENTE).length,
+      gestionados: clients.filter(c => String(c.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA).length,
+      total: clients.length,
+    };
+  }, [clients]);
+
   const filtered = useMemo(() => {
     let data = [...clients];
 
@@ -228,326 +211,367 @@ export const AsistenciaPage: React.FC = () => {
     await onUpdate({ row_number: client.row_number, consentimiento_contacto: !currentlyOn });
   };
 
-  const FilterPill = ({ id, label, current }: { id: StatusFilter, label: string, current: StatusFilter }) => (
+  const FilterPill = ({ id, label, count, current }: { id: StatusFilter, label: string, count?: number, current: StatusFilter }) => (
     <button 
       onClick={() => setStatusFilter(id)} 
-      className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 border
+      className={`px-4 py-2 text-[11px] font-black uppercase tracking-widest rounded-xl transition-all duration-300 border flex items-center gap-2
         ${current === id 
-          ? id === 'PENDIENTES' ? 'bg-rose-500 text-white border-rose-600 shadow-md shadow-rose-200'
-          : id === 'GESTIONADOS' ? 'bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-200'
-          : 'bg-slate-800 text-white border-slate-900 shadow-md'
-          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+          ? id === 'PENDIENTES' ? 'bg-rose-500 text-white border-rose-400 shadow-lg shadow-rose-200'
+          : id === 'GESTIONADOS' ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-200'
+          : 'bg-slate-900 text-white border-slate-800 shadow-lg shadow-slate-200'
+          : 'bg-white text-slate-400 border-slate-100 hover:bg-slate-50 hover:text-slate-600'
         }`}
     >
-      {label}
+      <span>{label}</span>
+      {count !== undefined && (
+        <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-black ${current === id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>
+          {count}
+        </span>
+      )}
     </button>
   );
 
   return (
-    <div className="min-h-screen bg-slate-50/80 p-3 sm:p-6 space-y-6 w-full font-sans text-slate-800">
+    <div className="page-container relative flex flex-col space-y-8 min-h-[calc(100vh-100px)] overflow-hidden">
       
-      {/* === Header & Filtros Flotantes === */}
-      <div className="sticky top-4 z-40 w-full max-w-7xl mx-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 p-4 ring-1 ring-slate-900/5">
-           <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
-              
-              {/* Title Section */}
-              <div className="flex items-center gap-4 min-w-[200px]">
-                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-rose-400 to-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-200">
-                    <LifeBuoy className="w-6 h-6" />
-                 </div>
-                 <div>
-                    <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Solicitudes</h1>
-                    <p className="text-xs text-rose-500 font-bold uppercase tracking-wider mt-1.5 flex items-center gap-1">
-                      {filtered.length} tickets visibles
-                    </p>
-                 </div>
+      {/* Background Decorations */}
+      <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-rose-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none" />
+
+      {/* === Header Dashboard === */}
+      <div className="relative z-10 flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <div className="absolute inset-0 bg-rose-400 blur-xl opacity-20 animate-pulse" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 via-rose-600 to-rose-700 text-white flex items-center justify-center shadow-xl shadow-rose-200/40 relative z-10 border border-white/20">
+                <LifeBuoy className="w-7 h-7" />
               </div>
-
-              {/* Controls Section */}
-              <div className="flex flex-col md:flex-row gap-3 w-full xl:w-auto items-stretch md:items-center flex-wrap">
-                 
-                 {/* Status Pills */}
-                 <div className="flex p-1 bg-slate-100 rounded-2xl gap-1">
-                    <FilterPill id="PENDIENTES" label="Pendientes" current={statusFilter} />
-                    <FilterPill id="GESTIONADOS" label="Resueltos" current={statusFilter} />
-                    <FilterPill id="TODOS" label="Todos" current={statusFilter} />
-                 </div>
-
-                 <div className="h-8 w-px bg-slate-200 hidden md:block mx-1"></div>
-
-                 {/* Filters Row */}
-                 <div className="flex gap-2 flex-1 md:flex-initial">
-                    {/* Sede Select */}
-                    <div className="relative group">
-                        <select 
-                            value={sedeFilter} 
-                            onChange={(e) => setSedeFilter(e.target.value)} 
-                            className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border-none bg-slate-100 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer min-w-[140px]"
-                        >
-                            <option value="Todas">Todas Sedes</option>
-                            {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none group-hover:text-slate-600" />
-                    </div>
-
-                    {/* Sort Select */}
-                    <div className="relative group">
-                         <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                            <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
-                         </div>
-                        <select 
-                            value={sortOption} 
-                            onChange={(e) => setSortOption(e.target.value as SortOption)} 
-                            className="appearance-none pl-8 pr-8 py-2.5 rounded-xl border-none bg-slate-100 text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-                        >
-                           <option value="last_msg_desc">Recientes</option>
-                           <option value="priority">Prioridad</option>
-                           <option value="created_desc">Nuevos</option>
-                           <option value="created_asc">Antiguos</option>
-                        </select>
-                    </div>
-                 </div>
-
-                 {/* Search */}
-                 <div className="relative flex-1 md:min-w-[220px]">
-                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                       <Search className="h-4 w-4 text-slate-400" />
-                   </div>
-                   <input 
-                       value={search} 
-                       onChange={(e) => setSearch(e.target.value)} 
-                       placeholder="Buscar cliente, id, mensaje..." 
-                       className="w-full pl-9 pr-8 py-2.5 border-none rounded-xl text-sm bg-slate-100 text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:shadow-md transition-all" 
-                   />
-                   {search && (
-                       <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full text-slate-400 transition-colors">
-                           <X className="w-3 h-3" />
-                       </button>
-                   )}
-                 </div>
-                 
-                 <button 
-                    onClick={fetchClients} 
-                    className="p-2.5 rounded-xl bg-slate-50 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors border border-slate-200"
-                    title="Actualizar lista"
-                 >
-                    <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                 </button>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Centro de Ayuda</h1>
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="flex -space-x-1">
+                   <div className="w-2 h-2 rounded-full bg-rose-500 border-2 border-white" />
+                   <div className="w-2 h-2 rounded-full bg-rose-300 border-2 border-white animate-ping" />
+                </div>
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.15em]">Soporte en Tiempo Real</p>
               </div>
-           </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+             <div className="wt-input-wrap w-full md:w-[280px] lg:w-[350px]">
+               <Search className="wt-input-icon text-slate-400" />
+               <input
+                 value={search}
+                 onChange={(e) => setSearch(e.target.value)}
+                 placeholder="Buscar..."
+                 className="bg-white/60 backdrop-blur-sm border-white/40 shadow-sm focus:bg-white text-sm"
+                 type="search"
+               />
+             </div>
+             <button 
+               onClick={fetchClients} 
+               disabled={loading} 
+               className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-400 hover:text-rose-500 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
+             >
+               <RefreshCw className={`w-4.5 h-4.5 ${loading ? 'animate-spin' : ''}`} />
+             </button>
+          </div>
+        </div>
+
+        {/* Filters & Stats */}
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <div className="flex items-center gap-1.5 p-1.5 bg-slate-100/50 backdrop-blur-sm rounded-2xl border border-slate-200/30">
+            <FilterPill id="PENDIENTES" label="Pendientes" count={stats.pendientes} current={statusFilter} />
+            <FilterPill id="GESTIONADOS" label="Gestionados" count={stats.gestionados} current={statusFilter} />
+            <FilterPill id="TODOS" label="Todos" count={stats.total} current={statusFilter} />
+          </div>
+
+          <div className="flex items-center gap-4">
+             <div className="h-10 w-[1px] bg-slate-200 hidden md:block" />
+             
+             {/* Sede Select */}
+             <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors">
+                  <MapPin size={14} />
+                </div>
+                <select 
+                   value={sedeFilter} 
+                   onChange={(e) => setSedeFilter(e.target.value)} 
+                   className="appearance-none pl-9 pr-10 py-2.5 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all"
+                >
+                   <option value="Todas">Todas las Sedes</option>
+                   {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+             </div>
+
+             {/* Sort Select */}
+             <div className="relative group">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors">
+                  <ArrowUpDown size={14} />
+                </div>
+                <select 
+                   value={sortOption} 
+                   onChange={(e) => setSortOption(e.target.value as SortOption)} 
+                   className="appearance-none pl-9 pr-10 py-2.5 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all"
+                >
+                  <option value="last_msg_desc">Más Recientes</option>
+                  <option value="priority">Prioridad</option>
+                  <option value="created_desc">Nuevos Primero</option>
+                  <option value="created_asc">Antiguos Primero</option>
+                </select>
+                <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+             </div>
+          </div>
         </div>
       </div>
 
-      {/* === Lista de Cards === */}
-      <div className="w-full max-w-7xl mx-auto space-y-4 pb-12">
-         {loading ? (
-           <div className="space-y-4 animate-pulse max-w-5xl mx-auto">
-                {[...Array(3)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-[20px] h-48 w-full border border-slate-100 shadow-sm"/>
-                ))}
+      {/* === Ticket List === */}
+      <div className="w-full max-w-7xl mx-auto space-y-4 pb-20 relative z-10">
+         {loading && clients.length === 0 ? (
+           <div className="flex flex-col items-center justify-center py-32 space-y-4 opacity-50">
+              <RefreshCw className="w-10 h-10 animate-spin text-rose-500" />
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Sincronizando Ayuda...</p>
            </div>
          ) : filtered.length > 0 ? (
-           filtered.map((client) => {
-             const botActive = isBotOn(client.consentimiento_contacto);
-             const isGestionado = String(client.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA;
-             
-             return (
-               <div 
-                 key={client.row_number}
-                 onClick={() => setViewClient(client)}
-                 className={`group relative w-full bg-white rounded-[20px] border transition-all duration-300 hover:shadow-[0_10px_40px_rgb(0,0,0,0.06)] hover:-translate-y-0.5 overflow-hidden cursor-pointer
-                    ${isGestionado 
-                        ? 'border-emerald-100 shadow-sm' 
-                        : 'border-rose-100 shadow-sm hover:border-rose-200'}
-                 `}
-               >
-                 {/* Status Strip Lateral */}
-                 <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isGestionado ? 'bg-emerald-500' : 'bg-rose-500'} transition-colors duration-300`} />
+           <div className="grid grid-cols-1 gap-5">
+             {filtered.map((client) => {
+               const botActive = isBotOn(client.consentimiento_contacto);
+               const isGestionado = String(client.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA;
+               const isSaving = savingRow === client.row_number;
+               
+               return (
+                 <div 
+                   key={client.row_number}
+                   onClick={() => setViewClient(client)}
+                   className="group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[28px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.995] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500"
+                 >
+                   {/* Status Strip */}
+                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-500 ${isGestionado ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
 
-                 <div className="flex flex-col lg:flex-row items-stretch h-full pl-1.5">
-                    
-                    {/* IZQUIERDA: Info Cliente */}
-                    <div className="flex-1 p-5 flex flex-col justify-between gap-4">
-                       <div className="flex items-start justify-between">
-                           <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <h3 className={`text-xl font-bold tracking-tight ${isGestionado ? 'text-emerald-950' : 'text-slate-900'}`}>
-                                        {safeText(client.nombre) || 'Usuario Desconocido'}
-                                    </h3>
-                                    {safeText((client as any).source) && (
-                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-500 uppercase tracking-wide border border-slate-200">
-                                            {safeText((client as any).source)}
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="text-sm text-slate-500 font-medium flex items-center gap-2">
-                                    <Smartphone className="w-3.5 h-3.5" />
-                                    {formatWhatsApp(client.whatsapp as any)} 
-                                    {client.subscriber_id && <span className="text-slate-300">|</span>}
-                                    {client.subscriber_id && <span className="font-mono text-xs text-slate-400">ID: {client.subscriber_id}</span>}
-                                </p>
-                           </div>
-
-                           <div className={`px-3 py-1 rounded-lg border text-[10px] font-bold uppercase tracking-wider shadow-sm
-                                ${isGestionado 
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
-                                    : 'bg-rose-50 text-rose-700 border-rose-100 animate-pulse'}
+                   <div className="flex flex-col lg:flex-row items-stretch">
+                     
+                     {/* LEFT: Client Branding & Identity */}
+                     <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 p-5 lg:w-[150px] lg:bg-slate-50/40 lg:border-r border-white/20">
+                        <div className="relative">
+                           <div className={`absolute inset-0 blur-lg opacity-20 ${isGestionado ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black shadow-lg relative z-10 border border-white/20 transition-transform group-hover:rotate-6
+                              ${isGestionado 
+                                ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white' 
+                                : 'bg-gradient-to-br from-rose-500 to-rose-700 text-white'}
                            `}>
-                              {isGestionado ? 'Solucionado' : 'Pendiente'}
+                              {safeText(client.nombre)?.[0]?.toUpperCase() || '?'}
                            </div>
-                       </div>
+                        </div>
 
-                       {/* Metadata Chips */}
-                       <div className="flex flex-wrap items-center gap-2 text-xs">
-                          {client.agenda_ciudad_sede && (
-                            <div className="flex items-center gap-1.5 font-semibold text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
-                               <MapPin className="w-3.5 h-3.5 text-slate-400" /> {safeText(client.agenda_ciudad_sede)}
-                            </div>
-                          )}
-                          
-                          <div className="flex items-center gap-1.5 bg-slate-50 text-slate-500 px-2.5 py-1.5 rounded-lg border border-slate-100">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" /> 
-                            <span>Creado: {formatTimeDate(client.created)}</span>
-                          </div>
-
-                          {client.last_msg && (
-                             <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border font-medium ${isGestionado ? 'bg-emerald-50/50 border-emerald-100 text-emerald-700' : 'bg-rose-50/50 border-rose-100 text-rose-700'}`}>
-                                <MessageCircle className={`w-3.5 h-3.5 ${isGestionado ? 'text-emerald-500' : 'text-rose-500'}`} />
-                                <span>Actividad: {formatTimeDate(client.last_msg)}</span>
+                        <div className="flex flex-col gap-1.5 w-full max-w-[100px]">
+                           <div className={`px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest text-center shadow-sm
+                              ${isGestionado 
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                : 'bg-rose-50 text-rose-600 border-rose-100'}
+                           `}>
+                              {isGestionado ? 'Gestionado' : 'Pendiente'}
+                           </div>
+                           
+                           {isSaving && (
+                             <div className="flex items-center justify-center gap-1 text-[8px] font-black text-rose-500 animate-pulse">
+                                <RefreshCw className="w-2.5 h-2.5 animate-spin"/> AGUARDA
                              </div>
                            )}
-                       </div>
-                    </div>
+                        </div>
+                     </div>
 
-                    {/* DERECHA: Contexto y Acciones */}
-                    <div className={`w-full lg:w-[40%] border-t lg:border-t-0 lg:border-l border-slate-100 p-5 flex flex-col justify-between gap-4 ${isGestionado ? 'bg-emerald-50/10' : 'bg-rose-50/10'}`}>
-                       
-                       <div className="space-y-3">
-                            {/* Bloque Contexto Original (Problema) */}
-                            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm relative group-hover:border-rose-100 transition-colors">
-                                <div className="flex items-center justify-between mb-2">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-                                        <MessageSquare className="w-3 h-3" /> Contexto / Problema
-                                    </span>
-                                </div>
-                                <p className="text-sm text-slate-700 line-clamp-2 leading-relaxed italic">
+                     {/* CENTER: Main info & Content */}
+                     <div className="flex-1 p-6 flex flex-col justify-center min-w-0">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                           <div className="min-w-0 flex-1">
+                               <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                                  <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-rose-600 transition-colors truncate">
+                                     {safeText(client.nombre) || 'Usuario sin nombre'}
+                                  </h3>
+                                  {safeText((client as any).source) && (
+                                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-100/80 text-slate-500 border border-slate-200 uppercase tracking-widest shadow-sm">
+                                        {safeText((client as any).source)}
+                                     </span>
+                                  )}
+                               </div>
+                               
+                               <div className="flex flex-wrap items-center gap-3 text-xs">
+                                  <div className="flex items-center gap-1.5 text-slate-500 font-bold group/val" onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}>
+                                     <Phone className="w-3 h-3 text-rose-400 group-hover/val:scale-110 transition-transform" />
+                                     <span className="font-mono tracking-tight group-hover/val:text-rose-600 transition-colors">{formatWhatsApp(client.whatsapp as any)}</span>
+                                  </div>
+                                  <div className="h-3 w-[1px] bg-slate-200" />
+                                  <div className="flex items-center gap-1.5 text-slate-400 font-bold">
+                                     <Fingerprint className="w-3 h-3 text-slate-300" />
+                                     <span className="font-mono text-[9px]">ID: {client.subscriber_id || 'N/A'}</span>
+                                  </div>
+                               </div>
+                           </div>
+                        </div>
+
+                        {/* Problems & Context Boxes */}
+                        <div className="space-y-3">
+                           <div className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/20 relative group/box">
+                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-rose-200">
+                                 Solicitud / Problema
+                              </span>
+                              <div className="flex items-start gap-3">
+                                 <MessageSquare className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
+                                 <p className="text-[12px] text-slate-700 leading-relaxed font-medium line-clamp-2 italic">
                                     "{safeText(client.last_input_text) || safeText(client.intencion) || safeText(client.notas) || 'Sin mensaje previo...'}"
-                                </p>
-                            </div>
+                                 </p>
+                              </div>
+                           </div>
 
-                            {/* === BLOQUE DE NOTAS DE SOLUCIÓN === */}
-                            {isGestionado && safeText(client.notas) && (
-                                <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-100/60 relative animate-in fade-in zoom-in-95 duration-300">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1.5">
-                                            <ClipboardCheck className="w-3 h-3" /> Resolución Aplicada
-                                        </span>
-                                    </div>
-                                    <p className="text-sm text-emerald-900 line-clamp-3 leading-relaxed whitespace-pre-wrap font-medium">
-                                        {safeText(client.notas)}
+                           {isGestionado && safeText(client.notas) && (
+                              <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100/20 relative animate-in zoom-in-95 duration-500">
+                                 <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-emerald-100 text-emerald-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-emerald-200">
+                                    Notas de Resolución
+                                 </span>
+                                 <div className="flex items-start gap-3">
+                                    <ClipboardCheck className="w-4 h-4 text-emerald-300 shrink-0 mt-0.5" />
+                                    <p className="text-[12px] text-emerald-800 leading-relaxed font-semibold whitespace-pre-wrap line-clamp-2">
+                                       {safeText(client.notas)}
                                     </p>
-                                </div>
-                            )}
-                       </div>
-                       
-                       {/* Toolbar Acciones */}
-                       <div className="mt-auto pt-4 border-t border-slate-200/50 flex flex-wrap justify-end gap-2">
-                          
-                          {/* BOTON GESTIONAR */}
-                          <button
-                             onClick={(e) => handleMainActionClick(client, e)}
-                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all border active:scale-95 shadow-sm
-                               ${isGestionado 
-                                 ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-700' 
-                                 : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-200 hover:shadow-md'}
-                             `}
-                          >
-                             {isGestionado ? <X className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                             {isGestionado ? 'Reabrir Caso' : 'Solucionar'}
-                          </button>
+                                 </div>
+                              </div>
+                           )}
+                        </div>
+                     </div>
 
-                          <button 
-                            onClick={(e) => handleToggleBot(client, e)} 
-                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border active:scale-95 
-                                ${botActive 
-                                    ? 'bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100' 
-                                    : 'bg-rose-50 text-rose-700 border-rose-100 hover:bg-rose-100'}
-                            `}
-                          >
-                             {botActive ? <Bot className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />} 
-                             {botActive ? 'Bot Activo' : 'Bot Apagado'}
-                          </button>
+                     {/* RIGHT: Meta info & Actions */}
+                     <div className={`w-full lg:w-[260px] p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6 ${isGestionado ? 'bg-emerald-50/10' : 'bg-rose-50/10'}`}>
+                        <div className="space-y-3">
+                           <div className="flex flex-col gap-2">
+                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
+                                 <MapPin size={12} className="text-rose-400" />
+                                 <span className="text-[9px] font-black uppercase tracking-wider truncate">{safeText(client.agenda_ciudad_sede) || 'Sede sin definir'}</span>
+                              </div>
+                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
+                                 <Clock size={12} className="text-rose-400" />
+                                 <div className="flex flex-col overflow-hidden">
+                                    <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest leading-none mb-0.5">Actividad</span>
+                                    <span className="text-[9px] font-black uppercase tracking-wider truncate">{formatTimeDate(client.last_msg || client.created)}</span>
+                                 </div>
+                              </div>
+                           </div>
+                        </div>
 
-                          <button 
-                            onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
-                            className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-xl text-xs font-bold transition-colors"
-                          >
-                             <Phone className="w-3.5 h-3.5" /> WhatsApp
-                          </button>
-                       </div>
-                    </div>
+                        <div className="flex flex-col gap-2">
+                           <button
+                              onClick={(e) => handleMainActionClick(client, e)}
+                              disabled={isSaving}
+                              className={`flex items-center justify-center gap-2 w-full py-3 rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all border shadow-md active:scale-95
+                                 ${isGestionado 
+                                   ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
+                                   : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
+                              `}
+                           >
+                              {isGestionado ? <RefreshCw className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                              {isGestionado ? 'Reabrir Ticket' : 'Resolver'}
+                           </button>
+
+                           <div className="grid grid-cols-2 gap-2">
+                              <button 
+                                 onClick={(e) => handleToggleBot(client, e)} 
+                                 className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
+                                    ${botActive 
+                                       ? 'bg-white text-indigo-600 border-indigo-100 hover:shadow-sm' 
+                                       : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
+                                 `}
+                              >
+                                 <Bot size={12} className={botActive ? 'text-indigo-500' : 'text-rose-400'} /> 
+                                 {botActive ? 'Bot ON' : 'Bot OFF'}
+                              </button>
+                              
+                              <button 
+                                 onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
+                                 className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-[18px] text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                              >
+                                 <Phone size={12} /> WhatsApp
+                              </button>
+                           </div>
+                        </div>
+                     </div>
+                   </div>
                  </div>
-               </div>
-             );
-           })
+               );
+             })}
+           </div>
          ) : (
-           <div className="flex flex-col items-center justify-center py-24 bg-white rounded-[32px] border border-dashed border-slate-200 text-center max-w-3xl mx-auto shadow-sm">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner ${statusFilter === 'PENDIENTES' ? 'bg-rose-50' : 'bg-emerald-50'}`}>
-                 <LifeBuoy className={`w-10 h-10 ${statusFilter === 'PENDIENTES' ? 'text-rose-300' : 'text-emerald-300'}`} />
+           <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in duration-700 relative">
+              <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">
+                 <div className="absolute inset-0 bg-rose-500 blur-3xl opacity-10 group-hover:opacity-20 transition-opacity" />
+                 <LifeBuoy className={`w-10 h-10 ${statusFilter === 'PENDIENTES' ? 'text-emerald-400' : 'text-slate-300'} relative z-10`} />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-1">
-                  {statusFilter === 'PENDIENTES' ? 'Todo al día' : 'Sin registros'}
+              <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
+                  {statusFilter === 'PENDIENTES' ? '¡Todo Resuelto!' : 'Sin Registros'}
               </h3>
-              <p className="text-slate-500 max-w-sm mx-auto">
+              <p className="text-slate-500 max-w-xs font-semibold leading-relaxed">
                  {statusFilter === 'PENDIENTES' 
-                    ? 'No hay solicitudes de ayuda pendientes en este momento. ¡Buen trabajo!' 
-                    : 'No se encontraron tickets con los filtros actuales.'}
+                   ? 'No hay solicitudes de ayuda pendientes en este momento. Los canales están fluyendo perfectamente.' 
+                   : 'No se encontraron tickets en esta categoría con los filtros aplicados.'}
               </p>
+              <button 
+                onClick={() => { setStatusFilter('PENDIENTES'); setSearch(''); setSedeFilter('Todas'); }}
+                className="mt-10 px-10 py-4 bg-slate-900 text-white rounded-[24px] font-black uppercase text-[11px] tracking-[0.2em] shadow-2xl shadow-slate-200 hover:bg-black hover:shadow-black/20 hover:-translate-y-1 transition-all active:scale-95"
+              >
+                Volver al Dashboard
+              </button>
            </div>
          )}
       </div>
 
-      {/* ================= MODAL DE RESOLUCIÓN REFINADO ================= */}
+      {/* ================= MODERN RESOLUTION MODAL ================= */}
       {resolveModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-           <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden transform transition-all scale-100 ring-1 ring-white/20">
-              
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setResolveModal(null)} />
+           
+           <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden relative z-10 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 border border-white/20">
               {/* Header Modal */}
-              <div className="bg-emerald-600 px-6 py-5 flex items-center justify-between relative overflow-hidden">
-                 <div className="absolute inset-0 bg-emerald-500/20 pattern-dots opacity-30"></div>
-                 <h3 className="text-white font-bold text-lg flex items-center gap-2.5 relative z-10">
-                    <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
-                        <CheckCircle2 className="w-5 h-5 text-white" />
+              <div className="bg-emerald-600 px-10 py-8 relative overflow-hidden">
+                 <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-white/10 blur-[60px] rounded-full pointer-events-none" />
+                 <div className="relative z-10">
+                    <div className="flex items-center gap-4 mb-2">
+                       <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md border border-white/20">
+                          <CheckCircle2 className="w-6 h-6 text-white" />
+                       </div>
+                       <h3 className="text-white font-black text-2xl tracking-tight">Cerrar Ticket</h3>
                     </div>
-                    Solucionar Solicitud
-                 </h3>
-                 <button onClick={() => setResolveModal(null)} className="text-white/70 hover:text-white hover:bg-white/10 p-2 rounded-full transition-all relative z-10">
-                    <X className="w-5 h-5" />
+                    <p className="text-emerald-100 font-bold text-xs uppercase tracking-widest pl-1">Registrar resolución final</p>
+                 </div>
+                 <button 
+                  onClick={() => setResolveModal(null)} 
+                  className="absolute top-6 right-6 text-white/50 hover:text-white hover:bg-white/10 p-2.5 rounded-full transition-all"
+                 >
+                    <X className="w-6 h-6" />
                  </button>
               </div>
               
-              <div className="p-6 sm:p-8">
-                 <div className="flex items-start gap-4 mb-6">
-                     <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center shrink-0">
-                         <ClipboardCheck className="w-5 h-5 text-emerald-600" />
+              <div className="p-10 space-y-8">
+                 <div className="flex items-start gap-5">
+                     <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
+                         <ClipboardCheck className="w-6 h-6 text-emerald-600" />
                      </div>
                      <div>
-                         <h4 className="text-slate-900 font-bold mb-1">Finalizar gestión</h4>
-                         <p className="text-slate-500 text-sm leading-relaxed">
-                            Estás por marcar el caso de <span className="font-semibold text-slate-700">{safeText(resolveModal.client.nombre)}</span> como <span className="text-emerald-600 font-bold">Gestionado</span>.
-                            ¿Deseas agregar una nota interna?
+                         <h4 className="text-slate-900 font-black text-lg mb-1 leading-none tracking-tight">Finalizar gestión</h4>
+                         <p className="text-slate-500 text-sm leading-relaxed font-medium">
+                            Marcarás la solicitud de <span className="font-bold text-slate-800">{safeText(resolveModal.client.nombre)}</span> como gestionada.
                          </p>
                      </div>
                  </div>
                  
-                 <div className="relative group">
-                    <div className="absolute left-3.5 top-3.5 text-slate-400">
-                        <Edit3 className="w-4 h-4" />
+                 <div className="relative group/field">
+                    <div className="absolute left-5 top-5 text-slate-400 group-focus-within/field:text-emerald-500 transition-colors">
+                        <Edit3 size={18} />
                     </div>
                     <textarea 
-                       className="w-full pl-10 p-3.5 bg-slate-50 border-0 rounded-2xl text-slate-700 placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/30 shadow-inner resize-none text-sm transition-all"
-                       placeholder="Escribe aquí los detalles de la solución (opcional)..."
+                       className="w-full pl-12 p-6 bg-slate-50 border-transparent rounded-[24px] text-slate-700 placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/5 focus:border-emerald-200 outline-none shadow-inner resize-none text-sm transition-all"
+                       placeholder="Describe brevemente cómo se resolvió el caso..."
                        rows={4}
                        value={resolutionNote}
                        onChange={(e) => setResolutionNote(e.target.value)}
@@ -555,19 +579,18 @@ export const AsistenciaPage: React.FC = () => {
                     />
                  </div>
 
-                 <div className="flex items-center justify-end gap-3 mt-8">
+                 <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4">
                     <button 
                        onClick={() => setResolveModal(null)}
-                       className="px-5 py-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl text-sm font-bold transition-all"
+                       className="w-full sm:w-auto px-8 py-4 text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-[20px] text-[11px] font-black uppercase tracking-widest transition-all"
                     >
                        Cancelar
                     </button>
                     <button 
                        onClick={confirmResolution}
-                       className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold flex items-center gap-2 shadow-lg shadow-emerald-200 hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                       className="w-full sm:w-auto px-10 py-4 bg-emerald-600 hover:bg-black text-white rounded-[20px] text-[11px] font-black uppercase tracking-[0.2em] shadow-xl shadow-emerald-200 hover:shadow-black/20 transition-all active:scale-95"
                     >
-                       <Check className="w-4 h-4" /> 
-                       {resolutionNote.trim() ? 'Guardar Resolución' : 'Confirmar sin Nota'}
+                       {resolutionNote.trim() ? 'Guardar Solución' : 'Finalizar sin Nota'}
                     </button>
                  </div>
               </div>

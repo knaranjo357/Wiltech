@@ -10,6 +10,7 @@ import { Client } from '../types/client';
 import { ClientModal } from '../components/ClientModal';
 import { NuevoCliente } from '../components/NuevoCliente';
 import { formatWhatsApp, getEtapaColor, formatDate } from '../utils/clientHelpers';
+import { safeText, normalize } from '../utils/textUtils';
 
 /** 
  * ==============================================================================
@@ -26,15 +27,6 @@ interface OptimizedClient extends Client {
   _normEtapa: string;
 }
 
-const safeText = (v: any) => {
-  if (v === null || v === undefined) return '';
-  const s = String(v).trim();
-  const lower = s.toLowerCase();
-  if (lower === 'null' || lower === 'undefined' || lower === 'no aplica') return '';
-  return s;
-};
-
-const normalize = (v: any) => String(v || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
 const SOURCE_EMPTY = 'Directo';
 
 // Lógica de detección de envío (Idéntica a Resultados)
@@ -200,64 +192,61 @@ export const CRMPage: React.FC = () => {
 
   // --- Render ---
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-20 font-sans relative">
+    <div className="page-container space-y-6 flex flex-col">
       
       {/* Botón Flotante Nuevo Cliente */}
-      <div className="fixed bottom-8 right-8 z-50 animate-in zoom-in duration-300">
-         <NuevoCliente onCreated={loadData} />
-      </div>
+      <NuevoCliente onCreated={loadData} floating={true} />
 
       {/* HEADER STICKY & FILTROS */}
-      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
-        <div className="px-4 md:px-8 py-4">
+      <div className="header-bar rounded-2xl flex flex-col gap-4">
           
           {/* Fila Superior: Título y Totales */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-200">
-                <Users size={20} />
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200/50">
+                <Users className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-800">Base de Contactos</h1>
-                <p className="text-xs text-gray-500">
-                  Mostrando <span className="font-bold text-gray-800">{filteredData.length}</span> de {rawData.length} clientes
+                <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Base de Contactos</h1>
+                <p className="text-xs text-indigo-500 font-bold uppercase tracking-wider mt-1.5 flex items-center gap-1">
+                  {filteredData.length} contactos filtrados
                 </p>
               </div>
             </div>
 
             {/* Stats Rápidos en Header */}
-            <div className="flex gap-3 text-xs overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
-               <div className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-100 flex items-center gap-2 whitespace-nowrap">
-                  <CheckCircle2 size={14}/> 
-                  <span>Agendados: <b>{filteredData.filter(c => c._tsAgenda > 0).length}</b></span>
+            <div className="flex gap-2 lg:gap-3 text-xs w-full md:w-auto">
+               <div className="px-3 py-2 bg-slate-50 text-slate-700 rounded-xl font-medium border border-slate-200/60 flex items-center gap-2">
+                  <CheckCircle2 size={14} className="text-blue-500"/> 
+                  <span>Agendados: <b className="text-slate-900">{filteredData.filter(c => c._tsAgenda > 0).length}</b></span>
                </div>
-               <div className="px-3 py-1.5 bg-orange-50 text-orange-700 rounded-lg border border-orange-100 flex items-center gap-2 whitespace-nowrap">
-                  <Truck size={14}/> 
-                  <span>Con Envíos: <b>{filteredData.filter(c => c._isEnvio).length}</b></span>
+               <div className="px-3 py-2 bg-slate-50 text-slate-700 rounded-xl font-medium border border-slate-200/60 flex items-center gap-2">
+                  <Truck size={14} className="text-orange-500"/> 
+                  <span>Con Envíos: <b className="text-slate-900">{filteredData.filter(c => c._isEnvio).length}</b></span>
                </div>
             </div>
           </div>
 
           {/* Fila Inferior: Filtros */}
-          <div className="flex flex-col lg:flex-row gap-3">
+          <div className="flex flex-col lg:flex-row gap-3 w-full">
             
             {/* Buscador */}
-            <div className="relative flex-1 min-w-[250px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <div className="wt-input-wrap flex-1 min-w-[250px]">
+              <Search className="wt-input-icon" />
               <input 
                 placeholder="Buscar por nombre, teléfono, ciudad..." 
                 value={searchText}
                 onChange={e => setSearchText(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all focus:bg-white"
+                type="search"
               />
               {searchText && (
-                <button onClick={() => setSearchText('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <X size={14} />
+                <button onClick={() => setSearchText('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-slate-200 p-1 rounded-full">
+                  <X size={12} />
                 </button>
               )}
             </div>
 
-            <div className="flex gap-2 overflow-x-auto pb-1 lg:pb-0 no-scrollbar">
+            <div className="flex gap-3 overflow-x-auto pb-1 lg:pb-0 no-scrollbar">
               {/* Filtro Sede */}
               <select 
                 value={sedeFilter} onChange={e => setSedeFilter(e.target.value)}
@@ -287,19 +276,18 @@ export const CRMPage: React.FC = () => {
 
             {/* Rango Fechas */}
             <div className="flex bg-white border border-gray-200 rounded-xl overflow-hidden shrink-0">
-               <input type="date" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} className="px-3 py-2 text-sm outline-none text-gray-600 border-r border-gray-100" />
-               <input type="date" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} className="px-3 py-2 text-sm outline-none text-gray-600" />
+               <input type="date" value={dateRange.from} onChange={e => setDateRange({...dateRange, from: e.target.value})} className="px-3 py-2 text-sm outline-none text-gray-600 border-r border-gray-100 bg-transparent" />
+               <input type="date" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} className="px-3 py-2 text-sm outline-none text-gray-600 bg-transparent" />
             </div>
             
-            <button onClick={loadData} className="p-2 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 text-gray-600 transition-colors" title="Recargar">
+            <button onClick={loadData} className="btn-secondary px-3 py-2" title="Recargar">
               <RefreshCw size={18} className={isProcessing ? 'animate-spin' : ''} />
             </button>
           </div>
-        </div>
       </div>
 
       {/* CONTENIDO PRINCIPAL: TABLA */}
-      <div className="px-4 md:px-8 py-6">
+      <div className="w-full mx-auto">
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
           {isProcessing && filteredData.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 p-10">
@@ -316,19 +304,19 @@ export const CRMPage: React.FC = () => {
           ) : (
             <>
               {/* Tabla Responsive */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-gray-50/80 text-xs text-gray-500 uppercase font-semibold border-b border-gray-200">
+              <div className="overflow-x-auto custom-scrollbar">
+                <table className="wt-table">
+                  <thead>
                     <tr>
-                      <th className="px-6 py-4">Cliente / Modelo</th>
-                      <th className="px-6 py-4">Contacto</th>
-                      <th className="px-6 py-4">Ubicación / Sede</th>
-                      <th className="px-6 py-4">Estado (Etapa)</th>
-                      <th className="px-6 py-4">Fecha Agenda</th>
-                      <th className="px-6 py-4 text-center">Acciones</th>
+                      <th>Cliente / Modelo</th>
+                      <th>Contacto</th>
+                      <th>Ubicación / Sede</th>
+                      <th>Estado (Etapa)</th>
+                      <th>Fecha Agenda</th>
+                      <th className="text-center">Acciones</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody>
                     {paginatedData.map((client) => {
                       const initials = getInitials(client.nombre || '?');
                       const avatarColor = getRandomColor(client.nombre || '?');
@@ -438,20 +426,20 @@ export const CRMPage: React.FC = () => {
                       <option value={100}>100 / pág</option>
                     </select>
 
-                    <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="flex bg-slate-100 rounded-full p-1">
                        <button 
                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
                          disabled={currentPage === 1}
-                         className="px-3 py-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 border-r border-gray-200 transition-colors"
+                         className="px-3 py-1.5 rounded-full hover:bg-white disabled:pointer-events-none disabled:opacity-50 transition-colors text-slate-700 data-[active=true]:shadow-sm"
                        >
-                         <ChevronLeft size={16} className="text-gray-600" />
+                         <ChevronLeft size={16} />
                        </button>
                        <button 
                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
                          disabled={currentPage === totalPages}
-                         className="px-3 py-1.5 bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                         className="px-3 py-1.5 rounded-full hover:bg-white disabled:pointer-events-none disabled:opacity-50 transition-colors text-slate-700 data-[active=true]:shadow-sm"
                        >
-                         <ChevronRight size={16} className="text-gray-600" />
+                         <ChevronRight size={16} />
                        </button>
                     </div>
                  </div>

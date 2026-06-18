@@ -10,17 +10,13 @@ import { ApiService } from '../services/apiService';
 import { Client } from '../types/client';
 import { getEtapaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
+import { NuevoCliente } from '../components/NuevoCliente';
+import { safeText, normalize } from '../utils/textUtils';
 
 /** ================== Configuración y Utils ================== */
 const SOURCE_TO_SEDE: Record<string, string> = {
   Wiltech: 'Bogotá',
   WiltechBga: 'Bucaramanga',
-};
-
-const safeText = (v: unknown): string => {
-  if (v === null || v === undefined) return '';
-  const s = String(v).trim();
-  return (s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') ? '' : s;
 };
 
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
@@ -67,7 +63,6 @@ const formatMsgTime = (val?: string | number) => {
   return d.toLocaleDateString('es-ES', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-const normalize = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim();
 
 type DateFilter = 'today' | 'tomorrow' | 'history' | 'custom' | 'future';
 
@@ -112,22 +107,22 @@ const SedeModal: React.FC<{
           </h3>
           <p className="text-slate-400 text-sm mt-1 relative z-10">Filtra la agenda por ubicación.</p>
         </div>
-        <div className="p-3 max-h-[60vh] overflow-y-auto space-y-2">
+        <div className="p-4 max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-3 custom-scrollbar">
           <button
             onClick={() => setSel('Todas')}
-            className={`w-full text-left px-4 py-3.5 rounded-xl border transition-all flex items-center justify-between group ${sel === 'Todas' ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-600'}`}
+            className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${sel === 'Todas' ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-600 bg-white shadow-sm ring-1 ring-slate-900/5'}`}
           >
-            <span className="font-medium">Todas las sedes</span>
-            {sel === 'Todas' && <CheckCircle2 className="w-5 h-5 text-blue-600"/>}
+            <span className="font-medium text-sm">Todas</span>
+            {sel === 'Todas' && <CheckCircle2 className="w-4 h-4 text-blue-600"/>}
           </button>
           {options.map(s => (
             <button
               key={s}
               onClick={() => setSel(s)}
-              className={`w-full text-left px-4 py-3.5 rounded-xl border transition-all flex items-center justify-between group ${sel === s ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-600'}`}
+              className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${sel === s ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-600 bg-white shadow-sm ring-1 ring-slate-900/5'}`}
             >
-              <span className="font-medium">{s}</span>
-              {sel === s && <CheckCircle2 className="w-5 h-5 text-blue-600"/>}
+              <span className="font-medium text-sm truncate">{s}</span>
+              {sel === s && <CheckCircle2 className="w-4 h-4 text-blue-600"/>}
             </button>
           ))}
         </div>
@@ -446,16 +441,13 @@ export const AgendaPage: React.FC = () => {
     return (
       <button
         onClick={() => setDateFilter(id)}
-        className={`relative flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition-all duration-300
-          ${isActive 
-            ? 'bg-slate-900 text-white shadow-md shadow-slate-200 transform scale-105 ring-2 ring-slate-100' 
-            : 'bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 border border-transparent'}`}
+        className={`flex items-center gap-1.5 ${isActive ? 'wt-filter-pill-active' : 'wt-filter-pill'}`}
       >
-        <Icon className={`w-4 h-4 ${isActive ? 'text-blue-300' : 'opacity-60'}`} />
+        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-500' : 'opacity-60'}`} />
         <span>{label}</span>
         {count > 0 && (
-          <span className={`ml-1 flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold rounded-full 
-            ${isActive ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-600'}`}>
+          <span className={`ml-1 px-1.5 py-0.5 text-[9px] rounded-full font-bold
+            ${isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200/50 text-slate-500'}`}>
             {count}
           </span>
         )}
@@ -464,7 +456,7 @@ export const AgendaPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/80 p-3 sm:p-6 space-y-8 w-full font-sans text-slate-800">
+    <>
       <SedeModal
         isOpen={showSedeModal}
         options={sedes}
@@ -479,65 +471,81 @@ export const AgendaPage: React.FC = () => {
         onSend={handleConfirmReagendar}
       />
 
-      <div className="sticky top-4 z-40 w-full max-w-7xl mx-auto">
-        <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 p-3 md:p-4 ring-1 ring-slate-900/5">
-          <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-            <div className="flex flex-col sm:flex-row w-full lg:w-auto gap-3 items-stretch sm:items-center flex-1">
-              <button
-                onClick={() => setShowSedeModal(true)}
-                className="flex items-center gap-3 px-4 py-2.5 bg-slate-50 hover:bg-white border border-slate-200/60 rounded-2xl transition-all group lg:min-w-[220px]"
-              >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform duration-300">
-                   <MapPin className="w-4 h-4" />
-                </div>
-                <div className="flex-1 text-left">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Ubicación</p>
-                  <p className="text-sm font-bold text-slate-800 truncate">{selectedSede || 'Todas'}</p>
-                </div>
-                <ChevronDown className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
-              </button>
-              <div className="relative group w-full max-w-md">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                  <Search className="h-4.5 w-4.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                </div>
-                <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar cliente, celular, modelo..."
-                  className="block w-full pl-10 pr-10 py-3 border-0 bg-slate-100/50 rounded-2xl text-sm text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-indigo-100 focus:shadow-md transition-all"
-                />
-                {searchTerm && (
-                  <button onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 bg-slate-200 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-300 transition-all">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
+      <div className="page-container relative overflow-hidden flex flex-col space-y-8 min-h-[calc(100vh-100px)]">
+        
+        {/* Background Decorations */}
+        <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-blue-500/5 blur-[100px] rounded-full pointer-events-none" />
+
+      {/* HEADER DASHBOARD */}
+      <div className="relative z-10 flex flex-col gap-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+               <div className="absolute inset-0 bg-indigo-400 blur-xl opacity-20 animate-pulse" />
+               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-violet-700 text-white flex items-center justify-center shadow-xl shadow-indigo-200/40 relative z-10 border border-white/20">
+                 <Calendar className="w-7 h-7" />
+               </div>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">Agenda de Citas</h1>
+              <div className="flex items-center gap-2 mt-1.5 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setShowSedeModal(true)}>
+                <MapPin className="w-3.5 h-3.5 text-indigo-500" />
+                <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">{selectedSede || 'Todas las Sedes'}</p>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
               </div>
             </div>
-            <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
-               <button onClick={fetchClients} disabled={loading} className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-50 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 transition-colors">
-                  <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-full border transition-all ${dateFilter === 'custom' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-transparent border-transparent'}`}>
-                  <span className="text-xs font-bold uppercase tracking-wide opacity-50">Ir a:</span>
-                  <input type="date" value={customDate} onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} className="bg-transparent border-none text-sm font-semibold p-0 focus:ring-0 cursor-pointer" />
-                </div>
-            </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-slate-100 flex overflow-x-auto pb-1 gap-2 no-scrollbar scroll-smooth">
-             <FilterTab id="today" label="Hoy" count={stats.today} icon={CalendarDays} />
-             <FilterTab id="tomorrow" label="Mañana" count={stats.tomorrow} icon={ArrowRightCircle} />
-             <div className="w-px h-6 bg-slate-200 mx-1 self-center hidden sm:block"></div>
-             <FilterTab id="future" label="Futuras" count={stats.future} icon={Calendar} />
-             <FilterTab id="history" label="Pasadas" count={stats.history} icon={History} />
+
+          <div className="flex items-center gap-3">
+            <div className="wt-input-wrap w-full md:w-[300px] lg:w-[400px]">
+              <Search className="wt-input-icon" />
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nombre, celular o modelo..."
+                className="bg-white/60 backdrop-blur-sm border-white/40 shadow-sm"
+                type="search"
+              />
+            </div>
+            <button 
+              onClick={fetchClients} 
+              disabled={loading} 
+              className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-indigo-600 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* QUICK STATS & FILTERS */}
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-1.5 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/30 backdrop-blur-sm">
+            <FilterTab id="today" label="Hoy" count={stats.today} icon={CalendarDays} />
+            <FilterTab id="tomorrow" label="Mañana" count={stats.tomorrow} icon={ArrowRightCircle} />
+            <FilterTab id="future" label="Próximas" count={stats.future} icon={Calendar} />
+            <FilterTab id="history" label="Pasadas" count={stats.history} icon={History} />
+          </div>
+
+          <div className="h-10 w-[1px] bg-slate-200 hidden sm:block" />
+
+          <div className="flex items-center gap-3 px-4 py-2 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl shadow-sm group hover:border-indigo-300 transition-all">
+            <Clock className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+            <input 
+              type="date" 
+              value={customDate} 
+              onChange={(e) => { setCustomDate(e.target.value); setDateFilter('custom'); }} 
+              className="bg-transparent border-none text-xs font-black uppercase tracking-wider p-0 focus:ring-0 cursor-pointer text-slate-600" 
+            />
           </div>
         </div>
       </div>
 
-      <div className="w-full max-w-7xl mx-auto space-y-4 pb-12">
+      <div className="w-full mx-auto space-y-4 pb-12">
         {loading ? (
           <div className="space-y-4 max-w-5xl mx-auto">
-             {[...Array(3)].map((_, i) => (
-               <div key={i} className="bg-white rounded-3xl h-44 w-full border border-slate-100 animate-pulse shadow-sm" />
+            {[...Array(3)].map((_, i) => (
+               <div key={i} className="shimmer-skeleton h-44 w-full" />
              ))}
           </div>
         ) : finalDisplayClients.length > 0 ? (
@@ -558,148 +566,144 @@ export const AgendaPage: React.FC = () => {
                 <div
                   key={client.row_number}
                   onClick={() => handleOpenClient(client)}
-                  className={`group relative bg-white rounded-[20px] border transition-all duration-300 hover:shadow-[0_10px_40px_rgb(0,0,0,0.06)] hover:-translate-y-0.5 cursor-pointer overflow-hidden
-                    ${attended 
-                      ? 'border-emerald-200/60 shadow-sm' 
-                      : 'border-slate-200/60 shadow-sm hover:border-indigo-200'
-                    }
-                  `}
+                  className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[32px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.98] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
                 >
-                  <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${attended ? 'bg-emerald-500' : 'bg-slate-200 group-hover:bg-indigo-500'} transition-colors duration-300`} />
+                  <div className={`absolute left-0 top-0 bottom-0 w-2 transition-colors duration-300 ${attended ? 'bg-emerald-500' : 'bg-slate-200 group-hover:bg-indigo-500'}`} />
+                  
                   <div className="flex flex-col lg:flex-row items-stretch">
                     
-                    {/* LEFT: Hora & Acciones (Automáticas) */}
-                    <div className="flex flex-row lg:flex-col items-center lg:items-center justify-between lg:justify-center gap-4 p-5 lg:w-[150px] lg:bg-slate-50/50 lg:border-r border-slate-100">
+                    {/* TIME & ACTIONS */}
+                    <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-6 p-6 lg:w-[160px] lg:bg-slate-50/40 lg:border-r border-white/20">
                       <div className="text-center">
-                        <span className={`block text-3xl font-black tracking-tighter ${attended ? 'text-emerald-600' : 'text-slate-800'}`}>
+                        <span className={`block text-3xl font-black tracking-tighter transition-colors ${attended ? 'text-emerald-600' : 'text-slate-900 group-hover:text-indigo-600'}`}>
                           {dateObj ? getDisplayTime(dateObj) : '--:--'}
                         </span>
-                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest mt-0.5 block">
-                          {dateObj ? getDisplayFullDate(dateObj) : ''}
-                        </span>
+                        <div className="flex items-center justify-center gap-1.5 mt-1">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
+                            {dateObj ? getDisplayFullDate(dateObj) : ''}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-col gap-2 w-full sm:w-auto">
+                      
+                      <div className="flex flex-col gap-2 w-full max-w-[120px]">
                         <button
-                           onClick={(e) => handleToggleAsistencia(client, e)}
-                           disabled={isSaving}
-                           className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all active:scale-95 w-full
-                             ${attended 
-                               ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200 shadow-sm' 
-                               : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-600 hover:shadow-sm'
-                             } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
-                         >
-                           {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                           {attended ? 'Asistió' : 'Pendiente'}
-                         </button>
-                         {!attended && (
-                             <button
-                                onClick={(e) => handleOpenReagendarModal(client, e)}
-                                disabled={isEtapaReagendar}
-                                className={`flex items-center justify-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-all active:scale-95 w-full
-                                  ${isEtapaReagendar 
-                                     ? 'bg-amber-100 text-amber-700 border-amber-200 cursor-default opacity-80' 
-                                     : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100 hover:border-indigo-300 shadow-sm'
-                                  }`}
-                                title={isEtapaReagendar ? "El cliente ya está en proceso de reagendamiento" : "Enviar mensaje para reagendar"}
-                             >
-                                {isEtapaReagendar ? (
-                                    <Clock className="w-3.5 h-3.5" />
-                                ) : (
-                                    <CalendarClock className="w-3.5 h-3.5" />
-                                )}
-                                {isEtapaReagendar ? 'Reagendando' : 'Reagendar'}
-                             </button>
-                         )}
+                          onClick={(e) => handleToggleAsistencia(client, e)}
+                          disabled={isSaving}
+                          className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
+                            ${attended 
+                              ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-200/50' 
+                              : 'bg-white text-slate-400 border-slate-200 hover:border-indigo-200 hover:text-indigo-600 hover:bg-indigo-50/50'
+                            } ${isSaving ? 'opacity-50' : ''}`}
+                        >
+                          {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : attended ? <Check className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border-2 border-current" />}
+                          {attended ? 'Asistió' : 'Marcar'}
+                        </button>
+
+                        {!attended && (
+                          <button
+                            onClick={(e) => handleOpenReagendarModal(client, e)}
+                            disabled={isEtapaReagendar}
+                            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
+                              ${isEtapaReagendar 
+                                ? 'bg-amber-100 text-amber-600 border-amber-200 opacity-60' 
+                                : 'bg-white text-indigo-500 border-indigo-100 hover:bg-white hover:shadow-md'
+                              }`}
+                          >
+                            <CalendarClock className="w-3.5 h-3.5" />
+                            {isEtapaReagendar ? 'Pend.' : 'Reagend.'}
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    {/* CENTER: Info Principal */}
-                    <div className="flex-1 p-5 min-w-0 flex flex-col justify-center">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="w-full">
-                           <div className="flex items-center gap-2 mb-1">
-                             <h3 className={`text-lg sm:text-xl font-bold truncate ${attended ? 'text-emerald-950' : 'text-slate-900'}`}>
+                    {/* MAIN CONTENT */}
+                    <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
+                      <div className="flex items-start justify-between gap-4 mb-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                             <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight truncate max-w-[300px]">
                                {safeText(client.nombre) || 'Sin Nombre'}
                              </h3>
                              {isWeb1 && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-blue-100 text-blue-700 uppercase tracking-wide">
+                                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-blue-100 text-blue-600 border border-blue-200 uppercase tracking-widest shadow-sm">
                                   WEB
                                 </span>
                              )}
-                           </div>
-                           <div className="flex flex-wrap items-center gap-2 mt-2">
-                             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
-                               <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                               <span className="truncate max-w-[150px]">{safeText(client.modelo) || 'Modelo no esp.'}</span>
-                             </div>
-                             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md">
-                               <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                               <span>{getClientSede(client)}</span>
-                             </div>
-                             {safeText(client.source) && (
-                                <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 bg-slate-100 px-2.5 py-1 rounded-md" title="Fuente / Origen">
-                                   <Layers className="w-3.5 h-3.5 text-slate-400" />
-                                   <span className="truncate max-w-[120px]">{safeText(client.source)}</span>
-                                </div>
-                             )}
-                             <span className={`inline-flex px-2 py-1 rounded-md text-[10px] font-bold border uppercase tracking-wide ${getEtapaColor(client.estado_etapa as any)}`}>
+                             <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-widest shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}>
                                 {safeText(client.estado_etapa).replace(/_/g, ' ')}
                              </span>
-                           </div>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-3 mt-4">
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                              <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                              <span className="truncate max-w-[120px]">{safeText(client.modelo) || 'Modelo no esp.'}</span>
+                            </div>
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{getClientSede(client)}</span>
+                            </div>
+                            {safeText(client.source) && (
+                              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                                 <Layers className="w-3.5 h-3.5 text-slate-400" />
+                                 <span className="truncate max-w-[100px]">{safeText(client.source)}</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
+
                       {(safeText(client.intencion) || safeText(client.notas)) && (
-                        <div className="mt-3 flex items-start gap-2 text-slate-500">
-                           <FileText className="w-4 h-4 shrink-0 mt-0.5 text-slate-300" />
-                           <p className="text-xs line-clamp-1 italic text-slate-500">
+                        <div className="flex items-start gap-3 p-4 bg-indigo-50/30 rounded-2xl border border-indigo-100/30">
+                           <FileText className="w-4 h-4 shrink-0 mt-0.5 text-indigo-300" />
+                           <p className="text-xs text-slate-600 leading-relaxed italic line-clamp-2">
                              {safeText(client.intencion || client.notas)}
                            </p>
                         </div>
                       )}
                     </div>
 
-                    {/* RIGHT: Mensajes y Acciones Manuales */}
-                    <div className="w-full lg:w-[32%] border-t lg:border-t-0 lg:border-l border-slate-100 p-4 bg-slate-50/30 flex flex-col justify-between">
-                      <div className="space-y-2">
+                    {/* MESSAGES & MANUAL ACTIONS */}
+                    <div className="w-full lg:w-[320px] bg-slate-50/50 p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6">
+                      <div className="space-y-3">
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block ml-1">Último Mensaje</span>
                          {lastMsg ? (
-                            <div className="bg-white p-3 rounded-2xl rounded-tl-sm shadow-sm border border-slate-100">
-                               <div className="flex justify-between items-center mb-1">
-                                  <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider">Reciente</span>
-                                  <span className="text-[9px] text-slate-400">{formatMsgTime(lastMsgDate)}</span>
+                            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative group/msg">
+                               <div className="flex justify-between items-center mb-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                                  <span className="text-[9px] font-bold text-slate-400 uppercase">{formatMsgTime(lastMsgDate)}</span>
                                </div>
-                               <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">"{lastMsg}"</p>
+                               <p className="text-[11px] text-slate-700 font-medium leading-relaxed line-clamp-3">"{lastMsg}"</p>
                             </div>
                          ) : (
-                            <div className="h-16 flex items-center justify-center border border-dashed border-slate-200 rounded-xl">
-                               <span className="text-xs text-slate-400 italic">Sin mensajes recientes</span>
+                            <div className="h-20 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl">
+                               <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Sin actividad</span>
                             </div>
                          )}
                       </div>
 
-                      <div className="mt-3 flex justify-end gap-2">
-                        {/* Botón Manual "Forzar Reagendar" */}
+                      <div className="flex items-center gap-2 justify-end">
                         {!attended && (
                             <button
                                 onClick={(e) => handleManualSetReagendar(client, e)}
                                 disabled={isEtapaReagendar}
-                                className={`flex items-center justify-center w-8 h-8 rounded-lg transition-colors border
+                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border
                                     ${isEtapaReagendar
-                                        ? 'bg-amber-100 text-amber-700 border-amber-200 opacity-50 cursor-default'
-                                        : 'bg-white text-slate-400 border-slate-200 hover:text-indigo-600 hover:border-indigo-200'
+                                        ? 'bg-amber-50 text-amber-500 border-amber-100 opacity-50'
+                                        : 'bg-white text-slate-400 border-slate-100 hover:text-indigo-600 hover:border-indigo-200 hover:shadow-md'
                                     }`}
-                                title="Cambiar etapa manualmente a 'Reagendar' (Sin mensaje)"
+                                title="Editar manualmente"
                             >
                                 <PenBox className="w-4 h-4" />
                             </button>
                         )}
 
-                        {/* Botón WhatsApp */}
                         <button
                           onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp), e, client)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors border
+                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all border tracking-wide
                               ${isWeb1 
-                              ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'
-                              : 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100 hover:text-green-700'
+                              ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-200/50 hover:bg-blue-700'
+                              : 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-200/50 hover:bg-emerald-700'
                               }`}
                         >
                           {isWeb1 ? <Globe className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
@@ -713,26 +717,28 @@ export const AgendaPage: React.FC = () => {
             })}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-24 bg-white rounded-[30px] border border-dashed border-slate-200 text-center max-w-3xl mx-auto mt-4 shadow-sm">
-            <div className="w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-6 shadow-inner animate-in zoom-in duration-300">
-              <Calendar className="w-10 h-10 text-indigo-300" />
+          <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in duration-700 relative z-10">
+            <div className="w-24 h-24 rounded-[40px] bg-white shadow-xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">
+              <div className="absolute inset-0 bg-indigo-500 blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
+              <Calendar className="w-10 h-10 text-slate-300 relative z-10" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 mb-2">No hay citas en esta vista</h3>
-            <p className="text-slate-500 max-w-md px-4">
+            <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Agenda Vacía</h3>
+            <p className="text-slate-500 max-w-xs font-medium leading-relaxed">
               {searchTerm 
-                ? `No encontramos resultados para "${searchTerm}" en ${selectedSede || 'la sede actual'}.`
-                : `Todo limpio por aquí. No hay registros para la fecha seleccionada.`}
+                ? `No hay resultados para "${searchTerm}" en esta vista.`
+                : `Todo al día. No hay citas programadas para el filtro seleccionado.`}
             </p>
             {(searchTerm || dateFilter !== 'today') && (
               <button 
                 onClick={() => { setSearchTerm(''); setDateFilter('today'); }}
-                className="mt-8 px-6 py-2 bg-slate-900 text-white rounded-full text-sm font-medium hover:bg-black transition-all shadow-lg hover:shadow-xl"
+                className="mt-10 px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 hover:bg-black hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-95"
               >
-                Limpiar filtros
+                Restablecer Filtros
               </button>
             )}
           </div>
         )}
+      </div>
       </div>
 
       <ClientModal
@@ -741,6 +747,8 @@ export const AgendaPage: React.FC = () => {
         client={viewClient}
         onUpdate={onUpdate}
       />
-    </div>
+
+      <NuevoCliente onCreated={fetchClients} floating={true} />
+    </>
   );
 };

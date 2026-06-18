@@ -67,8 +67,8 @@ export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
   ------------------------------------------------------------ */
   if (isSystem) {
     return (
-      <div className="flex justify-center my-4 opacity-75">
-        <span className="bg-gray-100 text-gray-500 text-[11px] font-medium px-3 py-1 rounded-full border border-gray-200 shadow-sm uppercase tracking-wide">
+      <div className="flex justify-center my-6 opacity-80 animate-in fade-in zoom-in-95 duration-500">
+        <span className="bg-slate-100/80 backdrop-blur-sm text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full border border-slate-200/50 shadow-sm">
           {msg.content}
         </span>
       </div>
@@ -80,58 +80,61 @@ export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
   ------------------------------------------------------------ */
   return (
     <div 
-      className={`flex w-full group animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+      className={`flex w-full group animate-in fade-in slide-in-from-bottom-3 duration-500 ${
         isAgent ? 'justify-end' : 'justify-start'
       }`}
     >
       {/* Container principal de la fila */}
-      <div className={`flex max-w-[85%] sm:max-w-[75%] gap-2 ${isAgent ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`flex max-w-[85%] sm:max-w-[70%] gap-3 ${isAgent ? 'flex-row-reverse' : 'flex-row'}`}>
         
         {/* AVATAR (Icono lateral) */}
         <div className="shrink-0 flex flex-col justify-end pb-1">
-          <div className={`w-6 h-6 rounded-full flex items-center justify-center shadow-sm border
+          <div className={`w-8 h-8 rounded-2xl flex items-center justify-center shadow-lg border transition-transform group-hover:scale-110
             ${isAgent 
-              ? 'bg-indigo-100 border-indigo-200 text-indigo-700' 
-              : 'bg-white border-gray-200 text-gray-600'
+              ? 'bg-gradient-to-br from-indigo-500 to-indigo-700 border-indigo-400/30 text-white' 
+              : 'bg-white border-slate-200 text-slate-400'
             }`}
           >
-            {isAgent ? <Bot className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+            {isAgent ? <Bot className="w-4 h-4" /> : <User className="w-4 h-4" />}
           </div>
         </div>
 
         {/* BURBUJA DE TEXTO */}
         <div className="relative flex flex-col">
           <div
-            className={`relative px-4 py-2.5 shadow-sm text-sm leading-relaxed break-words border
+            className={`relative px-5 py-3.5 shadow-xl text-[14px] leading-[1.6] break-words border transition-all
               ${isAgent
-                ? 'bg-indigo-600 text-white border-indigo-600 rounded-2xl rounded-br-sm' // Burbuja derecha
-                : 'bg-white text-gray-800 border-gray-200 rounded-2xl rounded-bl-sm'   // Burbuja izquierda
+                ? 'bg-slate-900 text-white border-slate-800 rounded-[20px] rounded-br-[4px] shadow-slate-200/50' 
+                : 'bg-white text-slate-700 border-slate-100 rounded-[20px] rounded-bl-[4px] shadow-slate-100/50'   
               }
             `}
           >
             {/* Contenido */}
-            <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+            <div 
+              className="font-medium tracking-tight"
+              dangerouslySetInnerHTML={{ __html: htmlContent }} 
+            />
 
             {/* Hora y Status dentro de la burbuja */}
-            <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] select-none
-               ${isAgent ? 'text-indigo-200' : 'text-gray-400'}
+            <div className={`flex items-center justify-end gap-1.5 mt-2 text-[10px] font-bold uppercase tracking-wider select-none
+               ${isAgent ? 'text-indigo-300/80' : 'text-slate-400'}
             `}>
                <span>{timeStr}</span>
                {isAgent && (
-                 <CheckCheck className="w-3 h-3 opacity-80" />
+                 <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
                )}
             </div>
           </div>
 
-          {/* BOTÓN COPIAR (Aparece fuera de la burbuja al hacer hover) */}
+          {/* BOTÓN COPIAR (Aparece al hacer hover) */}
           <button
             onClick={handleCopy}
-            className={`absolute top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white border border-gray-100 shadow-md text-gray-500 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:text-indigo-600 hover:scale-110 z-10
-              ${isAgent ? '-left-10' : '-right-10'}
+            className={`absolute top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-xl text-slate-400 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:text-indigo-600 hover:scale-110 active:scale-95 z-10
+              ${isAgent ? '-left-12' : '-right-12'}
             `}
             title="Copiar texto"
           >
-            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+            {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
 

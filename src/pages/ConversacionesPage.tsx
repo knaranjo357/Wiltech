@@ -143,11 +143,10 @@ const RowItem = memo(({
   const timeDisplay = timeTs > 0 ? formatDate(new Date(timeTs).toISOString()) : '—';
   
   const source = row.source || '';
-  let sourceBadgeClass = 'bg-slate-100 text-slate-500 border-slate-200';
+  let sourceBadgeClass = 'bg-slate-100/50 text-slate-500 border-slate-200/50';
   if (normalizeText(source).includes('wiltech')) sourceBadgeClass = 'bg-indigo-50 text-indigo-700 border-indigo-100';
   else if (source) sourceBadgeClass = 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100';
 
-  // Como ya normalizamos antes, true es explícitamente encendido
   const botActive = row.consentimiento_contacto === true; 
 
   return (
@@ -155,74 +154,78 @@ const RowItem = memo(({
       onClick={onClick}
       role="button"
       tabIndex={0}
-      className={`group relative w-full p-4 rounded-2xl border transition-all duration-300 cursor-pointer flex items-start gap-3.5 select-none
+      className={`group relative w-full p-4 rounded-3xl border transition-all duration-300 cursor-pointer flex items-start gap-4 select-none mb-2
         ${active 
-          ? 'bg-white border-indigo-500 shadow-md shadow-indigo-100 scale-[1.01] z-10' 
-          : 'bg-white border-transparent hover:bg-white hover:border-gray-200 hover:shadow-sm'
+          ? 'bg-white border-indigo-500 shadow-2xl shadow-indigo-100 scale-[1.02] z-10 ring-1 ring-indigo-50' 
+          : 'bg-white/40 backdrop-blur-sm border-transparent hover:bg-white/80 hover:border-slate-200 hover:shadow-xl'
         }
       `}
     >
       <div className="relative shrink-0">
-         <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-sm font-bold border shadow-sm transition-colors ${
-            active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-500 border-gray-100 group-hover:bg-indigo-50 group-hover:text-indigo-600'
+         <div className={`w-12 h-12 rounded-[18px] flex items-center justify-center text-sm font-black border shadow-sm transition-all duration-300 ${
+            active ? 'bg-slate-900 text-white border-slate-900 rotate-3' : 'bg-white text-slate-400 border-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600'
          }`}>
             {(row.nombre || '?').charAt(0).toUpperCase()}
          </div>
-         {botActive && (
-             <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full flex items-center justify-center">
-                 <Zap size={8} className="text-white fill-white" />
+         {botActive ? (
+             <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 border-2 border-white rounded-full flex items-center justify-center shadow-lg animate-pulse" title="Bot Activo">
+                 <Zap size={10} className="text-white fill-white" />
+             </div>
+         ) : (
+            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-slate-200 border-2 border-white rounded-full flex items-center justify-center shadow-lg" title="Modo Manual">
+                 <User size={10} className="text-slate-500" />
              </div>
          )}
       </div>
 
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex justify-between items-start gap-2">
-          <h3 className={`truncate text-sm font-bold leading-tight ${active ? 'text-indigo-950' : 'text-gray-800'}`}>
+          <h3 className={`truncate text-[15px] font-black leading-tight tracking-tight ${active ? 'text-slate-900' : 'text-slate-700'}`}>
             {row.nombre}
           </h3>
-          <span className={`text-[10px] whitespace-nowrap font-medium ${active ? 'text-indigo-400' : 'text-gray-400'}`}>
+          <span className={`text-[10px] whitespace-nowrap font-black uppercase tracking-widest ${active ? 'text-indigo-600' : 'text-slate-400'}`}>
             {timeDisplay}
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs text-gray-500">
-           <span className="font-mono truncate opacity-70 tracking-tight">{formatWhatsApp(row.whatsapp)}</span>
-           {row.modelo && <span className="truncate hidden sm:inline text-gray-400">• {row.modelo}</span>}
+        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+           <span className="font-mono truncate opacity-60 tracking-tight">{formatWhatsApp(row.whatsapp)}</span>
+           {row.modelo && <span className="truncate hidden sm:inline text-slate-300">• {row.modelo}</span>}
         </div>
 
         <div className="flex items-center gap-2 pt-0.5">
-          <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider border ${sourceBadgeClass}`}>
+          <span className={`inline-flex px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-colors ${sourceBadgeClass}`}>
             {labelSource(source)}
           </span>
         </div>
       </div>
 
-      <div className={`absolute right-3 bottom-3 flex gap-1 transition-all duration-200 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+      <div className={`absolute right-3 top-1/2 -translate-y-1/2 flex gap-1.5 transition-all duration-300 ${active ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'}`}>
         <button 
            onClick={onOpenDialog} 
-           className="p-1.5 bg-white border border-gray-200 hover:bg-indigo-50 hover:border-indigo-200 text-gray-400 hover:text-indigo-600 rounded-lg shadow-sm transition-colors" 
-           title="Ver ficha completa" 
+           className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl shadow-xl transition-all active:scale-90" 
+           title="Ficha del Cliente" 
            disabled={busy}
         >
-          <MessageSquare size={14} />
+          <Search size={14} />
         </button>
         <button 
            onClick={onToggleBot} 
-           className={`p-1.5 bg-white border border-gray-200 rounded-lg shadow-sm transition-colors ${
+           className={`w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-xl transition-all active:scale-90 ${
                botActive 
-               ? 'hover:bg-red-50 hover:border-red-200 text-emerald-500 hover:text-red-500' 
-               : 'hover:bg-emerald-50 hover:border-emerald-200 text-gray-400 hover:text-emerald-600'
+               ? 'hover:bg-red-50 hover:text-red-500' 
+               : 'hover:bg-emerald-50 hover:text-emerald-600'
            }`} 
-           title={botActive ? "Apagar Bot" : "Encender Bot"} 
+           title={botActive ? "Desactivar Bot" : "Activar Bot"} 
            disabled={busy}
         >
-          {botActive ? <Bot size={14} /> : <User size={14} />}
+          {botActive ? <Zap size={14} /> : <Bot size={14} />}
         </button>
       </div>
       
       {busy && (
-        <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-20">
-           <RefreshCw className="w-5 h-5 text-indigo-600 animate-spin" />
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center rounded-3xl z-20">
+           <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" />
         </div>
       )}
     </div>
@@ -314,7 +317,6 @@ export const ConversacionesPage: React.FC = () => {
           source: detail.source !== undefined ? (detail.source || null) : r.source,
           created: detail.created ? parseDateToTimestamp(detail.created) : r.created,
           last_msg: detail.last_msg ? parseDateToTimestamp(detail.last_msg) : r.last_msg,
-          // Normalización en tiempo real
           consentimiento_contacto: detail.consentimiento_contacto !== undefined 
             ? normalizeConsent(detail.consentimiento_contacto) 
             : r.consentimiento_contacto,
@@ -336,7 +338,6 @@ export const ConversacionesPage: React.FC = () => {
     if (!payload.row_number) return false;
     setSavingRowId(payload.row_number);
 
-    // Normalización antes de actualizar el estado local
     const internalPayload: Partial<ChatRow> = {
         nombre: payload.nombre,
         modelo: payload.modelo || null,
@@ -421,12 +422,8 @@ export const ConversacionesPage: React.FC = () => {
 
   const toggleBot = async (row: ChatRow, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    // Si no es false explícito, es true.
     const currentOn = row.consentimiento_contacto === true;
-    
-    if (currentOn && !window.confirm(`¿Pausar el Bot para ${row.nombre}?`)) return;
-
+    if (currentOn && !window.confirm(`¿Quieres desactivar el Bot para ${row.nombre}?`)) return;
     await handleUpdateClient({ 
         row_number: row.row_number, 
         consentimiento_contacto: !currentOn 
@@ -434,105 +431,113 @@ export const ConversacionesPage: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] bg-gray-50 flex flex-col lg:flex-row overflow-hidden font-sans text-gray-900">
-      <aside className="w-full lg:w-[400px] xl:w-[450px] flex flex-col border-r border-gray-200 bg-[#F8F9FC] z-10 shadow-xl lg:shadow-none h-full relative">
-        <div className="px-5 py-4 flex flex-col gap-4 bg-white/80 backdrop-blur-md z-20 sticky top-0 border-b border-gray-100">
+    <div className="h-[100dvh] bg-slate-50 flex flex-col lg:flex-row overflow-hidden font-sans text-slate-900 relative">
+      
+      {/* Background Decorations */}
+      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none" />
+
+      {/* SIDEBAR LIST */}
+      <aside className="w-full lg:w-[420px] xl:w-[480px] flex flex-col border-r border-slate-200/50 bg-white/40 backdrop-blur-3xl z-10 h-full relative">
+        <div className="px-6 py-5 flex flex-col gap-5 bg-white/60 backdrop-blur-xl sticky top-0 border-b border-slate-100 z-20">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2.5 tracking-tight">
-              <MessageSquare className="w-6 h-6 text-indigo-600" />
-              Conversaciones 
-              <span className="text-xs font-bold bg-indigo-50 text-indigo-600 px-2.5 py-0.5 rounded-full border border-indigo-100">
-                  {filteredAndSorted.length}
-              </span>
-            </h2>
+            <div className="flex items-center gap-3">
+               <div className="w-10 h-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-xl">
+                  <MessageSquare size={20} />
+               </div>
+               <div>
+                  <h2 className="text-xl font-black text-slate-900 tracking-tight">Chats</h2>
+                  <div className="flex items-center gap-1.5">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredAndSorted.length} Activos</span>
+                  </div>
+               </div>
+            </div>
+            
             <div className="flex items-center gap-2">
-                {isBackgroundUpdating && (
-                   <span className="text-[10px] font-medium text-gray-400 animate-pulse flex items-center gap-1">
-                      <Radio className="w-3 h-3" /> LIVE
-                   </span>
-                )}
                 <button 
                   onClick={() => fetchList(false)} 
                   disabled={loading} 
-                  className={`p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-all active:scale-95 ${loading ? 'opacity-50' : ''}`} 
-                  title="Sincronizar ahora"
+                  className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 shadow-xl transition-all active:scale-95 disabled:opacity-50"
+                  title="Sincronizar"
                 >
-                  <RefreshCw className={`w-5 h-5 ${loading || isBackgroundUpdating ? 'animate-spin' : ''}`} />
+                  <RefreshCw size={18} className={loading || isBackgroundUpdating ? 'animate-spin' : ''} />
                 </button>
             </div>
           </div>
 
-          <div className="relative group">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
+          <div className="flex flex-col gap-3">
+            <div className="wt-input-wrap !bg-white/80">
+              <Search className="wt-input-icon !text-slate-400" />
+              <input 
+                  value={searchText} 
+                  onChange={(e) => setSearchText(e.target.value)} 
+                  placeholder="Buscar cliente, nro o modelo..." 
+                  className="bg-transparent border-transparent"
+                  type="search"
+              />
             </div>
-            <input 
-                value={searchText} 
-                onChange={(e) => setSearchText(e.target.value)} 
-                placeholder="Buscar por nombre, wpp, modelo..." 
-                className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none transition-all shadow-sm placeholder:text-gray-400" 
-            />
-          </div>
 
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-            <div className="relative min-w-[130px] shrink-0">
-              <select 
-                  value={sourceFilter} 
-                  onChange={(e) => setSourceFilter(e.target.value)} 
-                  className="w-full appearance-none pl-3 pr-8 py-2 text-xs font-medium bg-white border border-gray-200 rounded-xl hover:border-gray-300 cursor-pointer text-gray-600 outline-none transition-colors shadow-sm"
+            <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+              <div className="relative shrink-0">
+                <select 
+                    value={sourceFilter} 
+                    onChange={(e) => setSourceFilter(e.target.value)} 
+                    className="appearance-none pl-3 pr-8 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:border-indigo-200 cursor-pointer text-slate-600 outline-none transition-all shadow-sm"
+                >
+                  <option value="">Fuentes</option>
+                  {sourceStats.items.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+                <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+              </div>
+              
+              <button 
+                 onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} 
+                 className="flex items-center gap-2 px-4 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 text-slate-600 shadow-sm transition-all"
               >
-                <option value="">Todas las fuentes</option>
-                {sourceStats.items.map(s => <option key={s.value} value={s.value}>{s.label} ({s.count})</option>)}
-              </select>
-              <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
-            </div>
-            
-            <button 
-               onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} 
-               className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-600 whitespace-nowrap shadow-sm transition-all active:scale-95"
-            >
-              <ArrowUpDown className="w-3 h-3" /> {sortOrder === 'desc' ? 'Recientes' : 'Antiguos'}
-            </button>
-            
-            <div className="relative shrink-0">
-                 <select 
-                    value={sortKey} 
-                    onChange={(e) => setSortKey(e.target.value as SortKey)} 
-                    className="appearance-none pl-8 pr-3 py-2 text-xs font-medium bg-white border border-gray-200 rounded-xl hover:bg-gray-50 text-gray-600 cursor-pointer outline-none shadow-sm"
-                 >
-                    <option value="last_msg">Por Mensaje</option>
-                    <option value="created">Por Creación</option>
-                 </select>
-                 <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                <ArrowUpDown className="w-3 h-3 text-indigo-500" /> {sortOrder === 'desc' ? 'Nuevos' : 'Viejos'}
+              </button>
+              
+              <div className="relative shrink-0">
+                   <select 
+                      value={sortKey} 
+                      onChange={(e) => setSortKey(e.target.value as SortKey)} 
+                      className="appearance-none pl-8 pr-3 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 text-slate-600 cursor-pointer outline-none shadow-sm"
+                   >
+                      <option value="last_msg">Mensaje</option>
+                      <option value="created">Creación</option>
+                   </select>
+                   <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+              </div>
             </div>
           </div>
         </div>
 
-        <div ref={listRef} className="flex-1 overflow-y-auto p-3 space-y-2 bg-[#F8F9FC] scrollbar-thin scrollbar-thumb-gray-200 hover:scrollbar-thumb-gray-300">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-50/30">
           {error && (
-            <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3 text-red-800 text-sm animate-in fade-in slide-in-from-top-2">
+            <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3 text-red-800 text-xs font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-2 mb-4">
               <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
-              <p className="font-medium">{error}</p>
+              <p>{error}</p>
             </div>
           )}
 
           {loading && allRows.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-3">
-              <RefreshCw className="w-8 h-8 animate-spin text-indigo-300" />
-              <span className="text-xs font-medium uppercase tracking-widest opacity-60">Sincronizando...</span>
+            <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
+              <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Sincronizando...</span>
             </div>
           ) : displayRows.length === 0 ? (
-            <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-4 text-center px-6">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-                  <Search className="w-8 h-8 text-gray-300" />
+            <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-6 text-center px-10">
+              <div className="w-20 h-20 bg-white rounded-[32px] shadow-xl flex items-center justify-center border border-slate-100">
+                  <Search size={32} className="text-slate-200" />
               </div>
               <div>
-                  <p className="text-gray-900 font-semibold">Sin resultados</p>
-                  <p className="text-xs mt-1">Intenta ajustar los filtros de búsqueda.</p>
+                  <p className="text-slate-900 font-black text-lg">Sin resultados</p>
+                  <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">Prueba con otros filtros</p>
               </div>
             </div>
           ) : (
-            <>
+            <div className="space-y-1">
               {displayRows.map(row => (
                 <RowItem
                   key={row.row_number}
@@ -549,31 +554,31 @@ export const ConversacionesPage: React.FC = () => {
               {hasMore && (
                 <button 
                   onClick={() => setPage(p => p + 1)} 
-                  className="w-full py-4 text-xs font-bold text-indigo-600 hover:bg-indigo-50/50 rounded-2xl transition-all flex items-center justify-center gap-2 mt-2 opacity-80 hover:opacity-100"
+                  className="w-full py-6 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 hover:bg-white rounded-3xl transition-all border border-transparent hover:border-indigo-100 hover:shadow-xl mt-4"
                 >
-                  <MoreHorizontal className="w-4 h-4" /> Cargar más contactos
+                  <MoreHorizontal className="w-4 h-4 mx-auto mb-1" /> Cargar más
                 </button>
               )}
-              
-              <div className="h-8"></div>
-            </>
+            </div>
           )}
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-w-0 bg-white relative z-0">
+      {/* CHAT MAIN AREA */}
+      <main className="flex-1 flex flex-col min-w-0 bg-white relative">
         {!selectedRow ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 bg-gray-50/30 p-8 text-center animate-in fade-in duration-500">
-             <div className="w-24 h-24 bg-gradient-to-br from-indigo-50 to-white border border-indigo-50 rounded-[2rem] shadow-sm flex items-center justify-center mb-6">
-                <MessageSquare className="w-10 h-10 text-indigo-300" />
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500">
+             <div className="w-32 h-32 bg-slate-50 border border-white rounded-[40px] shadow-2xl flex items-center justify-center mb-10 relative group">
+                <div className="absolute inset-0 bg-blue-500 blur-3xl opacity-5 group-hover:opacity-10 transition-opacity" />
+                <MessageSquare className="w-12 h-12 text-slate-300 relative z-10" />
              </div>
-             <h3 className="text-gray-900 font-bold text-lg mb-2">Selecciona una conversación</h3>
-             <p className="text-sm text-gray-500 max-w-xs mx-auto leading-relaxed">
-                Elige un contacto del listado para visualizar el historial de mensajes, gestionar el bot y más.
+             <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Centro de Conversaciones</h3>
+             <p className="text-slate-500 max-w-sm mx-auto font-bold text-sm leading-relaxed">
+                Selecciona un contacto del panel izquierdo para gestionar mensajes, ver auditorías y controlar el flujo del bot.
              </p>
           </div>
         ) : (
-          <div className="absolute inset-0 flex flex-col bg-white shadow-2xl lg:shadow-none animate-in fade-in zoom-in-[0.99] duration-200">
+          <div className="absolute inset-0 flex flex-col bg-white animate-in fade-in zoom-in-[0.99] duration-300">
              <ChatPanel key={selectedRow.row_number} client={rowToClient(selectedRow)} source={selectedRow.source || ''} />
           </div>
         )}

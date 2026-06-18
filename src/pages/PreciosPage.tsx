@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Smartphone,
   Watch,
@@ -14,6 +14,7 @@ import {
   Database,
   RefreshCw,
   Sparkles,
+  AlertCircle,
 } from "lucide-react";
 import { PreciosService } from "../services/preciosService";
 import { ApiService } from "../services/apiService";
@@ -63,7 +64,7 @@ const categories = [
       "https://images.pexels.com/photos/163100/circuit-circuit-board-resistor-computer-163100.jpeg?auto=compress&cs=tinysrgb&w=600",
   },
   {
-    name: "PELICULAS",
+    name: "PELICULAS DE SEGURIDAD",
     icon: Shield,
     color: "bg-cyan-600",
     gradient: "from-slate-900 via-cyan-900 to-slate-900",
@@ -102,11 +103,11 @@ const formatCell = (key: string, value: any) => {
     );
   }
 
-  return <span className="text-slate-600">{String(value)}</span>;
+  return <span className="font-medium text-slate-600">{String(value)}</span>;
 };
 
 export const PreciosPage: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>(categories[0].name);
   const [precios, setPrecios] = useState<PrecioItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalItem, setModalItem] = useState<PrecioItem | null>(null);
@@ -133,7 +134,12 @@ export const PreciosPage: React.FC = () => {
       setPrecios([]);
       try {
         const data = await PreciosService.getPrecios(category as any);
-        setPrecios(data);
+        // Aseguramos que data sea un array para evitar crashes
+        setPrecios(Array.isArray(data) ? data : []);
+        if (!Array.isArray(data)) {
+          console.error("API did not return an array:", data);
+          showError("La respuesta del servidor no es válida.");
+        }
       } catch (error) {
         console.error("Error fetching precios:", error);
         showError(error instanceof Error ? error.message : "Error cargando precios");
@@ -152,6 +158,11 @@ export const PreciosPage: React.FC = () => {
     },
     [fetchPrecios]
   );
+
+  // Load initial category on mount
+  useEffect(() => {
+    fetchPrecios(categories[0].name);
+  }, [fetchPrecios]);
 
   // ✅ Acción GLOBAL: Actualizar precios dentro del agente (una vez)
   const handleSyncAgentPrices = useCallback(async () => {
@@ -174,9 +185,10 @@ export const PreciosPage: React.FC = () => {
   }, [showError, showSuccess]);
 
   const columns = useMemo(() => {
-    if (precios.length === 0) return [];
+    if (!Array.isArray(precios) || precios.length === 0) return [];
     const allKeys = new Set<string>();
     precios.forEach((item) => {
+      if (!item) return;
       Object.keys(item).forEach((key) => {
         if (key !== "row_number") allKeys.add(key);
       });
@@ -193,6 +205,7 @@ export const PreciosPage: React.FC = () => {
   }, [precios]);
 
   const filteredPrecios = useMemo(() => {
+    if (!Array.isArray(precios)) return [];
     if (!searchTerm) return precios;
     const lowerQ = searchTerm.toLowerCase();
     return precios.filter((item) =>
@@ -201,303 +214,228 @@ export const PreciosPage: React.FC = () => {
   }, [precios, searchTerm]);
 
   return (
-    <div className="min-h-full w-full relative">
+    <div className="page-container relative overflow-hidden flex flex-col space-y-8 min-h-[calc(100vh-100px)]">
+      
+      {/* Background Decorations */}
+      <div className="absolute top-[-10%] right-[-5%] w-[45%] h-[45%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] left-[-5%] w-[35%] h-[35%] bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none" />
+
       {/* Toasts (global) */}
-      <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
+      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
         {toastError && (
-          <div className="pointer-events-auto p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl shadow-xl flex justify-between animate-in slide-in-from-top-2">
-            <span className="text-sm font-medium">{toastError}</span>
-            <button onClick={() => setToastError(null)}>✕</button>
+          <div className="wt-toast-error flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl shadow-xl pointer-events-auto animate-in fade-in slide-in-from-top-4">
+            <AlertCircle className="w-5 h-5 shrink-0" />
+            <span className="text-sm font-bold flex-1">{toastError}</span>
+            <button onClick={() => setToastError(null)} className="opacity-70 hover:opacity-100 font-bold">✕</button>
           </div>
         )}
         {toastSuccess && (
-          <div className="pointer-events-auto px-4 py-3 bg-emerald-600 text-white rounded-xl shadow-xl animate-in slide-in-from-top-2 flex items-center gap-3">
-            <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center">
-              <Sparkles className="w-3 h-3 text-white" />
-            </div>
-            <span className="font-medium text-sm">{toastSuccess}</span>
+          <div className="wt-toast-success flex items-center gap-3 p-4 bg-emerald-600 text-white rounded-2xl shadow-xl pointer-events-auto animate-in fade-in slide-in-from-top-4">
+            <Sparkles className="w-5 h-5 shrink-0" />
+            <span className="font-bold text-sm flex-1">{toastSuccess}</span>
+            <button onClick={() => setToastSuccess(null)} className="opacity-70 hover:opacity-100 font-bold">✕</button>
           </div>
         )}
       </div>
 
-      {/* ✅ BOTÓN GLOBAL (FUERA, UNO SOLO) */}
-      <div className="fixed bottom-6 right-6 z-40">
-        <button
-          onClick={handleSyncAgentPrices}
-          disabled={syncingAgent}
-          className="group inline-flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-emerald-600 text-white font-semibold shadow-2xl shadow-slate-900/10 hover:shadow-emerald-900/15 transition-all active:scale-[0.98] disabled:opacity-60 disabled:active:scale-100"
-          title="Actualizar precios del agente (después de cambiar Google Sheets)"
-        >
-          {syncingAgent ? (
-            <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-          ) : (
-            <Sparkles className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          )}
-          <div className="flex flex-col leading-tight text-left">
-            <span className="text-sm">
-              {syncingAgent ? "Actualizando..." : "Actualizar precios del agente"}
-            </span>
-            <span className="text-[11px] opacity-80 hidden sm:block">
-              Úsalo una vez tras cambios en Sheets
-            </span>
-          </div>
-        </button>
-      </div>
-
-      {/* --- VISTA: SELECCIÓN DE CATEGORÍA --- */}
-      {!selectedCategory ? (
-        <div className="min-h-full w-full p-6 animate-in fade-in duration-500">
-          <div className="max-w-7xl mx-auto space-y-10">
-            {/* Hero Header */}
-            <div className="text-center space-y-4 py-8">
-              <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight">
-                Catálogo de{" "}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-violet-600">
-                  Servicios y Repuestos
-                </span>
-              </h1>
-              <p className="text-slate-500 text-lg max-w-2xl mx-auto font-light leading-relaxed">
-                Selecciona una categoría para acceder a la base de datos actualizada de precios,
-                diagnósticos y disponibilidad.
-              </p>
+      {/* HEADER DASHBOARD */}
+      <div className="relative z-10 flex flex-col gap-8">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="relative">
+               <div className="absolute inset-0 bg-blue-400 blur-xl opacity-20 animate-pulse" />
+               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white flex items-center justify-center shadow-xl shadow-blue-200/40 relative z-10 border border-white/20">
+                 <Tag className="w-7 h-7" />
+               </div>
             </div>
+            <div>
+              <h1 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">Catálogo de Precios</h1>
+              <div className="flex items-center gap-2 mt-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">Sincronizado con Google Sheets</p>
+              </div>
+            </div>
+          </div>
 
-            {/* Grid de Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {categories.map((category) => {
-                const IconComponent = category.icon;
+          <div className="flex items-center gap-3">
+             <button
+                onClick={handleSyncAgentPrices}
+                disabled={syncingAgent}
+                className="group flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-emerald-600 text-white font-bold shadow-xl hover:shadow-emerald-200 transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                {syncingAgent ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                )}
+                <span className="text-xs uppercase tracking-widest">{syncingAgent ? "Actualizando Agente..." : "Sincronizar Agente"}</span>
+              </button>
+          </div>
+        </div>
+
+        {/* CATEGORY TABS & SEARCH */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1 flex items-center gap-1.5 bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/30 backdrop-blur-sm overflow-x-auto no-scrollbar">
+             {categories.map((cat) => {
+                const Icon = cat.icon;
+                const isActive = selectedCategory === cat.name;
                 return (
                   <button
-                    key={category.name}
-                    onClick={() => handleCategorySelect(category.name)}
-                    className="group relative h-60 w-full rounded-3xl overflow-hidden shadow-md hover:shadow-2xl hover:shadow-slate-200 transition-all duration-300 transform hover:-translate-y-1 text-left"
+                    key={cat.name}
+                    onClick={() => handleCategorySelect(cat.name)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap
+                      ${isActive 
+                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200 ring-1 ring-slate-100' 
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}
+                    `}
                   >
-                    {/* Background Image & Overlay */}
-                    <div className="absolute inset-0">
-                      <img
-                        src={category.image}
-                        alt={category.name}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      />
-                      <div
-                        className={`absolute inset-0 bg-gradient-to-t ${category.gradient} opacity-80 group-hover:opacity-90 transition-opacity duration-300`}
-                      />
-                    </div>
-
-                    {/* Content */}
-                    <div className="absolute inset-0 p-6 flex flex-col justify-between z-10">
-                      <div className="flex justify-between items-start">
-                        <div className="p-3 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-lg group-hover:bg-white/20 transition-colors">
-                          <IconComponent className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white/20 p-2 rounded-full backdrop-blur-sm">
-                          <ChevronRight className="w-5 h-5 text-white" />
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-2xl font-bold text-white tracking-wide">
-                          {category.name.replace(/_/g, " ")}
-                        </h3>
-                        <div className="h-0 group-hover:h-6 overflow-hidden transition-all duration-300">
-                          <span className="text-slate-200 text-sm font-medium mt-2 flex items-center gap-2">
-                            Ver inventario <ArrowLeft className="w-3 h-3 rotate-180" />
-                          </span>
-                        </div>
-                      </div>
-                    </div>
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600' : 'opacity-60'}`} />
+                    {cat.name.replace(/_/g, " ")}
                   </button>
                 );
-              })}
+             })}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="wt-input-wrap w-full md:w-[300px]">
+              <Search className="wt-input-icon" />
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar modelo o referencia..."
+                className="bg-white/60 backdrop-blur-sm border-white/40 shadow-sm"
+                type="search"
+              />
             </div>
+            <button 
+              onClick={() => fetchPrecios(selectedCategory)} 
+              disabled={loading} 
+              className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-blue-600 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
-      ) : (
-        // --- VISTA: TABLA DE DATOS ---
-        <div className="h-[calc(100vh-100px)] flex flex-col p-4 md:p-6 animate-in slide-in-from-right-4 duration-500">
-          {/* Header flotante */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0 z-20">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setSelectedCategory(null)}
-                className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-all"
-                title="Volver"
-              >
-                <ArrowLeft className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
-              </button>
+      </div>
 
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 border border-slate-200">
-                    Categoría
-                  </span>
-                </div>
-                <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                  {selectedCategory.replace(/_/g, " ")}
-                </h2>
-              </div>
+      {/* MAIN DATA TABLE */}
+      <div className="flex-1 flex flex-col min-h-0 bg-white/70 backdrop-blur-xl rounded-[32px] border border-white/40 shadow-2xl shadow-slate-200/50 overflow-hidden relative animate-in fade-in slide-in-from-bottom-6 duration-700">
+        {loading ? (
+          <div className="absolute inset-0 bg-white/40 backdrop-blur-md z-30 flex flex-col items-center justify-center space-y-6">
+            <div className="relative">
+               <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
+               <Database className="absolute inset-0 m-auto w-6 h-6 text-indigo-500/50" />
             </div>
-
-            {/* Barra de búsqueda mejorada + acciones */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="relative w-full md:w-80 group">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-4 w-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                </div>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="block w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm
-                         placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  placeholder="Buscar por modelo, ref, precio..."
-                  autoFocus
-                />
-                {searchTerm && (
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-slate-400">
-                    {filteredPrecios.length} res.
-                  </div>
-                )}
+            <div className="flex flex-col items-center gap-2">
+              <span className="text-sm font-black text-slate-800 uppercase tracking-widest">Cargando Precios</span>
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
               </div>
-
-              <button
-                className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
-                title="Filtros avanzados (Próximamente)"
-              >
-                <Filter className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => fetchPrecios(selectedCategory)}
-                disabled={loading}
-                className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors disabled:opacity-50"
-                title="Recargar datos de la categoría"
-              >
-                <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-              </button>
             </div>
           </div>
+        ) : (
+          <div className="overflow-auto flex-1 custom-scrollbar">
+            {filteredPrecios.length > 0 ? (
+              <table className="w-full text-left border-collapse">
+                <thead className="sticky top-0 z-30">
+                  <tr className="bg-slate-900 text-white">
+                    {columns.map((column, colIndex) => (
+                      <th
+                        key={column}
+                        scope="col"
+                        className={`
+                          px-8 py-5 text-[10px] font-black uppercase tracking-[0.2em] whitespace-nowrap
+                          ${colIndex === 0 ? "sticky left-0 z-40 bg-slate-900" : ""}
+                        `}
+                      >
+                        <div className="flex items-center gap-2">
+                          {column.replace(/[_\n]/g, " ")}
+                          {column.toLowerCase().includes("precio") && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
 
-          {/* Contenedor de la Tabla (Card Principal) */}
-          <div className="flex-1 bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden relative flex flex-col">
-            {loading ? (
-              <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center">
-                <div className="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-4" />
-                <p className="text-slate-500 font-medium animate-pulse">
-                  Obteniendo datos en tiempo real...
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-auto flex-1 custom-scrollbar">
-                {filteredPrecios.length > 0 ? (
-                  <table className="min-w-full divide-y divide-slate-100 border-separate border-spacing-0">
-                    <thead className="bg-slate-50 sticky top-0 z-30">
-                      <tr>
-                        {columns.map((column, colIndex) => (
-                          <th
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPrecios.map((item, index) => (
+                    <tr
+                      key={item.row_number || index}
+                      onClick={() => setModalItem(item)}
+                      className="cursor-pointer group hover:bg-indigo-50/50 transition-colors"
+                    >
+                      {columns.map((column, colIndex) => {
+                        const val = item[column as keyof PrecioItem];
+                        const isPrice =
+                          column.toLowerCase().includes("precio") ||
+                          column.toLowerCase().includes("valor") ||
+                           column.toLowerCase().includes("costo");
+                        
+                        return (
+                          <td
                             key={column}
-                            scope="col"
                             className={`
-                              px-6 py-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap border-b border-slate-200
-                              ${
-                                colIndex === 0
-                                  ? "sticky left-0 z-40 bg-slate-50 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.1)]"
-                                  : ""
-                              }
+                              px-8 py-5 whitespace-nowrap transition-colors
+                              ${colIndex === 0 ? "font-black text-slate-900 sticky left-0 z-20 bg-white group-hover:bg-indigo-50/80 shadow-[1px_0_0_0_#f1f5f9]" : "text-slate-600 font-medium text-sm"}
                             `}
                           >
-                            <div className="flex items-center gap-1">
-                              {column.replace(/[_\n]/g, " ")}
-                              {column.toLowerCase().includes("precio") && (
-                                <Tag className="w-3 h-3 text-emerald-500 ml-1" />
-                              )}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-
-                    <tbody className="bg-white divide-y divide-slate-50">
-                      {filteredPrecios.map((item, index) => (
-                        <tr
-                          key={item.row_number || index}
-                          onClick={() => setModalItem(item)}
-                          className="group hover:bg-blue-50/40 transition-colors duration-150 cursor-pointer"
-                        >
-                          {columns.map((column, colIndex) => {
-                            const isPrice =
-                              column.toLowerCase().includes("precio") ||
-                              column.toLowerCase().includes("valor");
-                            return (
-                              <td
-                                key={column}
-                                className={`
-                                  px-6 py-3.5 whitespace-nowrap text-sm
-                                  ${
-                                    colIndex === 0
-                                      ? "sticky left-0 z-20 bg-white group-hover:bg-blue-50/60 shadow-[4px_0_12px_-4px_rgba(0,0,0,0.05)] font-semibold text-slate-800"
-                                      : ""
-                                  }
-                                  ${isPrice ? "bg-slate-50/30" : ""}
-                                `}
-                              >
-                                {isPrice ? (
-                                  <div className="px-2.5 py-1 rounded-md bg-emerald-50/80 border border-emerald-100/50 inline-block">
-                                    {formatCell(column, item[column as keyof PrecioItem])}
-                                  </div>
-                                ) : (
-                                  formatCell(column, item[column as keyof PrecioItem])
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full p-12 text-center">
-                    <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                      <Database className="w-10 h-10 text-slate-300" />
-                    </div>
-                    <h3 className="text-lg font-bold text-slate-900">Sin resultados</h3>
-                    <p className="text-slate-500 max-w-xs mx-auto">
-                      No encontramos "{searchTerm}" en la categoría {selectedCategory}.
-                    </p>
-                    <button
-                      onClick={() => setSearchTerm("")}
-                      className="mt-6 text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
-                    >
-                      Limpiar búsqueda
-                    </button>
-                  </div>
-                )}
+                            {isPrice ? (
+                              <div className="inline-flex items-center px-4 py-2 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100/50 font-black text-xs tracking-tight shadow-sm">
+                                {formatCell(column, val)}
+                              </div>
+                            ) : (
+                              formatCell(column, val)
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-24 text-center">
+                <div className="w-24 h-24 rounded-[40px] bg-slate-50 flex items-center justify-center mb-8 border border-white shadow-xl shadow-slate-200/50 relative group">
+                  <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-5 group-hover:opacity-10 transition-opacity" />
+                  <Database className="w-10 h-10 text-slate-200 relative z-10" />
+                </div>
+                <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Sin Resultados</h3>
+                <p className="text-slate-500 max-w-xs font-semibold leading-relaxed">
+                  No pudimos encontrar nada que coincida con "{searchTerm}" en {selectedCategory}.
+                </p>
+                <button
+                  onClick={() => setSearchTerm("")}
+                  className="mt-10 px-8 py-3 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 hover:bg-black hover:shadow-2xl hover:-translate-y-1 transition-all active:scale-95"
+                >
+                  Limpiar Búsqueda
+                </button>
               </div>
             )}
-
-            {/* Footer pequeño de la tabla */}
-            <div className="bg-slate-50 border-t border-slate-200 px-6 py-2 text-xs text-slate-400 flex justify-between items-center">
-              <span>Mostrando {filteredPrecios.length} registros</span>
-              <span>{syncingAgent ? "Actualizando agente..." : "Actualizado recientemente"}</span>
-            </div>
           </div>
+        )}
 
-          {/* Modal Detalle */}
-          <PrecioModal
-            isOpen={!!modalItem}
-            onClose={() => setModalItem(null)}
-            item={modalItem}
-            categoryName={selectedCategory || ""}
-          />
+        {/* Footer de la tabla */}
+        <div className="bg-slate-50/80 backdrop-blur-sm border-t border-slate-100 px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1.5">
+               <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+               {filteredPrecios.length} Productos
+            </span>
+          </div>
+          <span className="opacity-60">{syncingAgent ? "Actualizando agente..." : "Catálogo actualizado"}</span>
         </div>
-      )}
+      </div>
 
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
-      `}</style>
+      <PrecioModal
+        isOpen={!!modalItem}
+        onClose={() => setModalItem(null)}
+        item={modalItem}
+        categoryName={selectedCategory || ""}
+      />
     </div>
   );
 };

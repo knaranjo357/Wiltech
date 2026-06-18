@@ -173,43 +173,44 @@ export const UsuariosPage: React.FC = () => {
   }, [users, searchTerm]);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 p-6 font-sans">
-      <div className="max-w-6xl mx-auto space-y-6">
-
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-3">
-              <div className="p-2 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-200">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              Administración de Usuarios
-            </h1>
-            <p className="text-slate-500 text-sm mt-1 ml-1">
-              Gestiona accesos y roles del sistema
-            </p>
+    <div className="page-container flex flex-col space-y-6">
+      
+      {/* HEADER */}
+      <div className="header-bar rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-200/50">
+              <Shield className="w-6 h-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Administración de Usuarios</h1>
+              <p className="text-xs text-indigo-500 font-bold uppercase tracking-wider mt-1.5">
+                {filteredUsers.length} usuarios registrados
+              </p>
+            </div>
           </div>
 
           <div className="flex gap-3">
-            <div className="relative group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+            <div className="wt-input-wrap">
+              <Search className="wt-input-icon" />
               <input
                 type="text"
                 placeholder="Buscar por email..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full md:w-64 transition-all shadow-sm"
+                className="pl-9 pr-4 py-2.5 bg-slate-50 border-none rounded-xl text-sm font-semibold text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 w-full md:w-64 transition-all"
               />
             </div>
             <button
               onClick={() => setIsCreating(true)}
-              className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl hover:bg-slate-800 transition-all shadow-md hover:shadow-lg active:scale-95"
+              className="btn-primary"
             >
               <Plus className="w-4 h-4" />
-              <span className="font-medium text-sm">Nuevo Usuario</span>
+              <span className="text-sm">Nuevo Usuario</span>
             </button>
           </div>
         </div>
+
+      <div className="w-full max-w-6xl mx-auto space-y-6 animate-in fade-in duration-500">
 
         {error && (
           <div className="p-4 bg-rose-50 border border-rose-100 text-rose-700 rounded-xl flex items-center gap-2">
@@ -219,7 +220,7 @@ export const UsuariosPage: React.FC = () => {
         )}
 
         {/* TABLA */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden min-h-[400px]">
+        <div className="bg-white rounded-2xl shadow-[var(--wt-shadow-sm)] border border-slate-200/60 overflow-hidden min-h-[400px]">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-400">
               <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mb-2" />
@@ -227,12 +228,12 @@ export const UsuariosPage: React.FC = () => {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50/80 border-b border-slate-100">
+              <table className="wt-table">
+                <thead>
                   <tr>
-                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Usuario</th>
-                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Roles Asignados</th>
-                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs text-right">Acciones</th>
+                    <th className="px-6 py-4">Usuario</th>
+                    <th className="px-6 py-4">Roles Asignados</th>
+                    <th className="px-6 py-4 text-right">Acciones</th>
                   </tr>
                 </thead>
 
@@ -317,9 +318,9 @@ export const UsuariosPage: React.FC = () => {
 
       {/* --- MODAL CREAR --- */}
       {isCreating && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="wt-overlay">
+          <div className="wt-modal max-w-xl">
+            <div className="wt-modal-header">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <div className="p-1.5 bg-indigo-100 rounded-md">
                   <Plus className="w-4 h-4 text-indigo-600" />
@@ -431,9 +432,9 @@ export const UsuariosPage: React.FC = () => {
 
       {/* --- MODAL EDITAR --- */}
       {editingUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="wt-overlay">
+          <div className="wt-modal max-w-xl">
+            <div className="wt-modal-header">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <div className="p-1.5 bg-blue-100 rounded-md">
                   <Edit3 className="w-4 h-4 text-blue-600" />
@@ -524,8 +525,8 @@ export const UsuariosPage: React.FC = () => {
 
       {/* --- MODAL PASSWORD --- */}
       {passwordUser && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+        <div className="wt-overlay">
+          <div className="wt-modal max-w-md">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-amber-50/50">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <div className="p-1.5 bg-amber-100 rounded-md">
