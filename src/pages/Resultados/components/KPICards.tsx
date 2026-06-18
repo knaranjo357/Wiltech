@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+﻿import React, { memo } from 'react';
 import { PieChart, Calendar, Truck } from 'lucide-react';
 
 interface KPICardProps {
@@ -89,8 +89,8 @@ export const KPICards: React.FC<KPICardsProps> = ({
         value={totalAgendas}
         sub={`${uniqueAgendas.toLocaleString()} únicos`}
         icon={Calendar}
-        color="text-purple-500"
-        bgClass="bg-purple-500"
+        color="text-slate-600"
+        bgClass="bg-slate-600"
       />
       <KPICard
         title="Envíos Generados"

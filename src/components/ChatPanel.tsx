@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint, MessageSquare, RefreshCw } from 'lucide-react';
 import { Client } from '../types/client';
 import { ApiService } from '../services/apiService';
@@ -209,7 +209,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       <div className="relative z-10 px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-white/70 backdrop-blur-xl">
         <div className="flex items-center gap-4 min-w-0">
           <div className="relative">
-             <div className="absolute inset-0 bg-indigo-500 blur-xl opacity-20" />
+             <div className="absolute inset-0 bg-slate-800 blur-xl opacity-20" />
              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 text-white flex items-center justify-center font-black shadow-xl shadow-indigo-100 relative z-10 border border-white/20">
                <span>{client?.nombre?.trim()?.[0]?.toUpperCase() || 'C'}</span>
              </div>
@@ -226,7 +226,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
                  <MessageCircle className="w-3 h-3 text-emerald-500" />
                  <span className="font-mono">{phone || '—'}</span>
                  {phone && (
-                    <button onClick={copyPhone} className="ml-1 hover:text-indigo-600 transition-colors" title="Copiar">
+                    <button onClick={copyPhone} className="ml-1 hover:text-slate-800 transition-colors" title="Copiar">
                        {copiedPhone ? <Check className="w-3 h-3 text-emerald-600"/> : <Copy className="w-3 h-3"/>}
                     </button>
                  )}
@@ -234,11 +234,11 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
 
               {/* Sub ID Badge */}
               <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
-                 <Fingerprint className="w-3 h-3 text-purple-500" />
+                 <Fingerprint className="w-3 h-3 text-slate-600" />
                  <span className="font-mono max-w-[100px] truncate" title={subscriberIdDisplay}>{subscriberIdDisplay}</span>
                  <button 
                     onClick={copySubscriberId} 
-                    className="ml-1 hover:text-indigo-600 transition-colors disabled:opacity-30" 
+                    className="ml-1 hover:text-slate-800 transition-colors disabled:opacity-30" 
                     title="Copiar ID"
                     disabled={subscriberIdDisplay === '—'}
                  >
@@ -252,7 +252,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
         <button
           onClick={loadConversation}
           disabled={!hasContactMethod || loading}
-          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-slate-800 hover:border-slate-200 shadow-sm transition-all active:scale-95 disabled:opacity-50"
           title="Actualizar conversación"
         >
           <Repeat2 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -280,8 +280,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
           {loading && msgs.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
                <div className="relative">
-                  <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
-                  <MessageCircle className="absolute inset-0 m-auto w-5 h-5 text-indigo-500/50" />
+                  <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
+                  <MessageCircle className="absolute inset-0 m-auto w-5 h-5 text-slate-700/50" />
                </div>
                <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Cargando Conversación</span>
             </div>
@@ -296,7 +296,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
           {!loading && !error && msgs.length === 0 && hasContactMethod && (
              <div className="flex flex-col items-center justify-center h-full text-slate-300 gap-4 py-20">
                 <div className="w-20 h-20 rounded-[40px] bg-slate-100 flex items-center justify-center border border-white shadow-xl relative group">
-                   <div className="absolute inset-0 bg-indigo-500 blur-3xl opacity-0 group-hover:opacity-10 transition-opacity" />
+                   <div className="absolute inset-0 bg-slate-800 blur-3xl opacity-0 group-hover:opacity-10 transition-opacity" />
                    <MessageSquare className="w-8 h-8 text-slate-200" />
                 </div>
                 <p className="text-xs font-black uppercase tracking-[0.2em]">No hay mensajes aún</p>
@@ -315,7 +315,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
           <div className="absolute bottom-6 right-6 z-20 animate-in fade-in slide-in-from-bottom-2">
             <button
               onClick={() => scrollToBottom(true)}
-              className="w-11 h-11 flex items-center justify-center bg-slate-900 text-white rounded-2xl shadow-2xl hover:bg-indigo-600 transition-all hover:-translate-y-1 active:scale-95 group"
+              className="w-11 h-11 flex items-center justify-center bg-slate-900 text-white rounded-2xl shadow-2xl hover:bg-slate-900 transition-all hover:-translate-y-1 active:scale-95 group"
             >
               <ArrowDown className="w-5 h-5 group-hover:animate-bounce" />
             </button>
@@ -333,7 +333,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!hasContactMethod ? 'Canal de comunicación inactivo...' : 'Escribe tu respuesta aquí...'}
                 disabled={!hasContactMethod}
-                className={`w-full bg-slate-50 border rounded-3xl px-6 py-5 pr-20 text-[14px] leading-relaxed focus:outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white focus:border-indigo-400 transition-all resize-none max-h-[180px] font-medium
+                className={`w-full bg-slate-50 border rounded-3xl px-6 py-5 pr-20 text-[14px] leading-relaxed focus:outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white focus:border-slate-600 transition-all resize-none max-h-[180px] font-medium
                    ${!hasContactMethod
                       ? 'border-slate-100 text-slate-300 cursor-not-allowed opacity-50' 
                       : 'border-slate-200 text-slate-900 placeholder-slate-400 shadow-sm'
@@ -353,7 +353,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
                     type="button"
                     onClick={sendMessage}
                     disabled={!canSend}
-                    className="w-12 h-12 flex items-center justify-center bg-slate-900 text-white hover:bg-indigo-600 rounded-2xl transition-all duration-300 shadow-xl hover:shadow-indigo-200 disabled:opacity-20 disabled:shadow-none active:scale-90"
+                    className="w-12 h-12 flex items-center justify-center bg-slate-900 text-white hover:bg-slate-900 rounded-2xl transition-all duration-300 shadow-xl hover:shadow-slate-900/20 disabled:opacity-20 disabled:shadow-none active:scale-90"
                  >
                     {sending ? (
                        <RefreshCw className="w-5 h-5 animate-spin" />
@@ -369,7 +369,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
               <div className="flex items-center gap-3">
                  <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fuente:</span>
-                    <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100 shadow-sm">
+                    <span className="text-[10px] font-black text-slate-800 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                        {source || 'Autodetección'}
                     </span>
                  </div>

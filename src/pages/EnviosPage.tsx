@@ -190,9 +190,16 @@ export const EnviosPage: React.FC = () => {
   };
 
   const sedesList = useMemo(() => {
-    const s = new Set<string>();
-    clients.forEach(c => { if(safeText(c.agenda_ciudad_sede)) s.add(safeText(c.agenda_ciudad_sede)); });
-    return Array.from(s).sort();
+    const map = new Map<string, string>();
+    clients.forEach(c => {
+      const raw = safeText(c.agenda_ciudad_sede);
+      if (!raw) return;
+      const key = normalize(raw);
+      if (key && !map.has(key)) {
+        map.set(key, raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase());
+      }
+    });
+    return Array.from(map.values()).sort();
   }, [clients]);
 
   const filtered = useMemo(() => {
@@ -207,7 +214,8 @@ export const EnviosPage: React.FC = () => {
 
     // 2. Filtro Sede
     if (sedeFilter !== 'Todas') {
-      data = data.filter(c => safeText(c.agenda_ciudad_sede) === sedeFilter);
+      const normSedeFilter = normalize(sedeFilter);
+      data = data.filter(c => normalize(safeText(c.agenda_ciudad_sede)) === normSedeFilter);
     }
 
     // 3. Búsqueda Segura
@@ -263,16 +271,16 @@ export const EnviosPage: React.FC = () => {
     <div className="page-container relative flex flex-col space-y-8 min-h-[calc(100vh-100px)] overflow-hidden">
       
       {/* Background Decorations */}
-      <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-purple-500/5 blur-[100px] rounded-full pointer-events-none" />
+      <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-slate-800/5 blur-[120px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-slate-600/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* === Header Dashboard === */}
       <div className="relative z-10 flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="relative">
-              <div className="absolute inset-0 bg-indigo-400 blur-xl opacity-20 animate-pulse" />
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-indigo-600 to-purple-700 text-white flex items-center justify-center shadow-xl shadow-indigo-200/40 relative z-10 border border-white/20">
+              <div className="absolute inset-0 bg-slate-700 blur-xl opacity-20 animate-pulse" />
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-slate-800 to-purple-700 text-white flex items-center justify-center shadow-xl shadow-slate-900/20 relative z-10 border border-white/20">
                 <Truck className="w-7 h-7" />
               </div>
             </div>
@@ -280,7 +288,7 @@ export const EnviosPage: React.FC = () => {
               <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Logística de Envíos</h1>
               <div className="flex items-center gap-2 mt-1.5">
                 <div className="flex -space-x-1">
-                   <div className="w-2 h-2 rounded-full bg-indigo-500 border-2 border-white" />
+                   <div className="w-2 h-2 rounded-full bg-slate-800 border-2 border-white" />
                    <div className="w-2 h-2 rounded-full bg-indigo-300 border-2 border-white animate-ping" />
                 </div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.15em]">Gestión de Guías y Recogidas</p>
@@ -289,7 +297,7 @@ export const EnviosPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-             <div className="flex bg-white/50 backdrop-blur-xl p-1.5 rounded-[22px] border border-white/60 shadow-xl shadow-slate-100 hover:shadow-indigo-200/20 transition-all duration-500">
+             <div className="flex bg-white/50 backdrop-blur-xl p-1.5 rounded-[22px] border border-white/60 shadow-xl shadow-slate-100 hover:shadow-slate-900/20/20 transition-all duration-500">
                 <button 
                   onClick={() => setCurrentTab('PENDIENTES')}
                   className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2
@@ -324,7 +332,7 @@ export const EnviosPage: React.FC = () => {
 
              <button 
                onClick={fetchClients}
-               className="p-3.5 bg-white shadow-lg border border-white rounded-[20px] text-indigo-500 hover:text-indigo-700 hover:scale-110 active:scale-95 transition-all duration-300 group"
+               className="p-3.5 bg-white shadow-lg border border-white rounded-[20px] text-slate-700 hover:text-slate-800 hover:scale-110 active:scale-95 transition-all duration-300 group"
              >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
              </button>
@@ -334,14 +342,14 @@ export const EnviosPage: React.FC = () => {
         {/* Filters Row */}
         <div className="bg-white/40 backdrop-blur-md border border-white/40 rounded-[28px] p-2.5 flex flex-col md:flex-row gap-3 shadow-xl shadow-slate-200/20">
           <div className="relative group flex-1">
-             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+             <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-700 transition-colors">
                 <Search size={16} />
              </div>
              <input 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nombre, guía, whatsapp o cédula..."
-                className="w-full pl-12 pr-6 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-xs font-bold text-slate-700 placeholder-slate-400 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white transition-all"
+                className="w-full pl-12 pr-6 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-xs font-bold text-slate-700 placeholder-slate-400 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white transition-all"
              />
           </div>
 
@@ -353,7 +361,7 @@ export const EnviosPage: React.FC = () => {
                 <select 
                    value={sedeFilter} 
                    onChange={(e) => setSedeFilter(e.target.value)} 
-                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all min-w-[160px]"
+                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white cursor-pointer transition-all min-w-[160px]"
                 >
                   <option value="Todas">Todas las Sedes</option>
                   {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
@@ -362,13 +370,13 @@ export const EnviosPage: React.FC = () => {
              </div>
 
              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-700 transition-colors">
                   <ArrowUpDown size={14} />
                 </div>
                 <select 
                    value={sortOption} 
                    onChange={(e) => setSortOption(e.target.value as SortOption)} 
-                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all"
+                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white cursor-pointer transition-all"
                 >
                   <option value="priority">Prioridad (Datos)</option>
                   <option value="last_msg_desc">Última Actividad</option>
@@ -384,7 +392,7 @@ export const EnviosPage: React.FC = () => {
       <div className="w-full max-w-7xl mx-auto space-y-4 pb-20 relative z-10">
          {loading && clients.length === 0 ? (
            <div className="flex flex-col items-center justify-center py-32 space-y-4 opacity-50">
-              <RefreshCw className="w-10 h-10 animate-spin text-indigo-500" />
+              <RefreshCw className="w-10 h-10 animate-spin text-slate-700" />
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Sincronizando Logística...</p>
            </div>
          ) : filtered.length > 0 ? (
@@ -404,14 +412,14 @@ export const EnviosPage: React.FC = () => {
                    className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[28px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.995] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
                  >
                    {/* Status Strip */}
-                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-500 ${isGestionado ? 'bg-emerald-500' : 'bg-indigo-500'} ${!isGestionado && !isComplete ? 'bg-amber-400' : ''}`} />
+                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-500 ${isGestionado ? 'bg-emerald-500' : 'bg-slate-800'} ${!isGestionado && !isComplete ? 'bg-amber-400' : ''}`} />
 
                    <div className="flex flex-col lg:flex-row items-stretch">
                      
                      {/* LEFT: Origin-Destination Path */}
                      <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-4 p-5 lg:w-[180px] lg:bg-slate-50/40 lg:border-r border-white/20">
                         <div className="flex flex-col items-center gap-2">
-                           <div className="w-9 h-9 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-indigo-500">
+                           <div className="w-9 h-9 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-700">
                              <MapPin size={16} />
                            </div>
                            <span className="text-[9px] font-black uppercase tracking-tight text-slate-500 text-center truncate max-w-[120px]">
@@ -425,7 +433,7 @@ export const EnviosPage: React.FC = () => {
                         <ArrowRight size={14} className="text-slate-300 lg:hidden" />
 
                         <div className="flex flex-col items-center gap-2">
-                           <div className={`w-9 h-9 rounded-xl bg-white shadow-sm border flex items-center justify-center ${safeText(client.guia_ciudad) ? 'text-indigo-600 border-indigo-100' : 'text-rose-400 border-rose-100'}`}>
+                           <div className={`w-9 h-9 rounded-xl bg-white shadow-sm border flex items-center justify-center ${safeText(client.guia_ciudad) ? 'text-slate-800 border-slate-200' : 'text-rose-400 border-rose-100'}`}>
                              <MapPin size={16} />
                            </div>
                            <span className={`text-[9px] font-black uppercase tracking-tight text-center truncate max-w-[120px] ${safeText(client.guia_ciudad) ? 'text-slate-700' : 'text-rose-500 italic'}`}>
@@ -439,13 +447,13 @@ export const EnviosPage: React.FC = () => {
                         <div className="flex items-start justify-between gap-4 mb-4">
                            <div className="min-w-0 flex-1">
                                <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                  <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-indigo-600 transition-colors truncate">
+                                  <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-slate-800 transition-colors truncate">
                                      {safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}
                                   </h3>
                                   <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm border flex items-center gap-1.5
                                      ${isGestionado 
                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-                                       : 'bg-indigo-50 text-indigo-600 border-indigo-100'}
+                                       : 'bg-slate-50 text-slate-800 border-slate-200'}
                                   `}>
                                      {isGestionado ? 'Gestionado' : 'Pendiente'}
                                   </span>
@@ -474,15 +482,15 @@ export const EnviosPage: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                            <div className={`p-4 rounded-2xl border transition-all relative group/box
                               ${safeText(client.guia_numero_ida) 
-                                ? 'bg-indigo-50/30 border-indigo-100/50' 
+                                ? 'bg-slate-50 border-slate-200/50' 
                                 : 'bg-slate-50/50 border-slate-200/50 opacity-60'}
                            `}>
-                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-indigo-500 text-[8px] font-black uppercase tracking-widest rounded-lg border border-indigo-100 shadow-sm">
+                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-slate-700 text-[8px] font-black uppercase tracking-widest rounded-lg border border-slate-200 shadow-sm">
                                  Guía de Ida
                               </span>
                               <div className="flex items-center justify-between">
                                  <div className="flex items-center gap-3">
-                                    <Package className="w-4 h-4 text-indigo-300" />
+                                    <Package className="w-4 h-4 text-slate-400" />
                                     <p className="font-mono text-sm font-black text-indigo-900 tracking-wider">
                                        {safeText(client.guia_numero_ida) || 'POR ASIGNAR'}
                                     </p>
@@ -493,10 +501,10 @@ export const EnviosPage: React.FC = () => {
 
                            <div className={`p-4 rounded-2xl border transition-all relative group/box
                               ${safeText(client.guia_numero_retorno) 
-                                ? 'bg-purple-50/30 border-purple-100/50' 
+                                ? 'bg-slate-50/30 border-purple-100/50' 
                                 : 'bg-slate-50/50 border-slate-200/50 opacity-60'}
                            `}>
-                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-purple-500 text-[8px] font-black uppercase tracking-widest rounded-lg border border-purple-100 shadow-sm">
+                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-slate-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-purple-100 shadow-sm">
                                  Guía de Retorno
                               </span>
                               <div className="flex items-center justify-between">
@@ -513,7 +521,7 @@ export const EnviosPage: React.FC = () => {
                      </div>
 
                      {/* RIGHT: Meta info & Actions */}
-                     <div className={`w-full lg:w-[280px] p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6 ${isGestionado ? 'bg-emerald-50/10' : 'bg-indigo-50/10'}`}>
+                     <div className={`w-full lg:w-[280px] p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6 ${isGestionado ? 'bg-emerald-50/10' : 'bg-slate-50/10'}`}>
                         <div className="space-y-3">
                            <div className="flex flex-col gap-2">
                               <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
@@ -538,7 +546,7 @@ export const EnviosPage: React.FC = () => {
                              <button
                                onClick={(e) => { e.stopPropagation(); handleGenerarGuia(client); }}
                                disabled={!!webhookLoading}
-                               className="flex items-center justify-center gap-2 w-full py-3 bg-indigo-600 text-white rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all hover:bg-indigo-700 hover:-translate-y-0.5 border border-indigo-500 shadow-lg shadow-indigo-200/40 active:scale-95 disabled:opacity-50"
+                               className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all hover:bg-slate-800 hover:-translate-y-0.5 border border-indigo-500 shadow-lg shadow-slate-900/20 active:scale-95 disabled:opacity-50"
                              >
                                {webhookLoading === client.whatsapp ? <RefreshCw className="w-4 h-4 animate-spin text-white/50" /> : <Send className="w-4 h-4" />}
                                GENERAR GUÍA RECOGIDA
@@ -573,11 +581,11 @@ export const EnviosPage: React.FC = () => {
                                  onClick={(e) => handleToggleBot(client, e)} 
                                  className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
                                     ${botActive 
-                                       ? 'bg-white text-indigo-600 border-indigo-100 hover:shadow-sm' 
+                                       ? 'bg-white text-slate-800 border-slate-200 hover:shadow-sm' 
                                        : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
                                  `}
                               >
-                                 <Bot size={12} className={botActive ? 'text-indigo-500' : 'text-rose-400'} /> 
+                                 <Bot size={12} className={botActive ? 'text-slate-700' : 'text-rose-400'} /> 
                                  {botActive ? 'Bot ON' : 'Bot OFF'}
                               </button>
                               
@@ -598,7 +606,7 @@ export const EnviosPage: React.FC = () => {
          ) : (
            <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in duration-700 relative">
               <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">
-                 <div className="absolute inset-0 bg-indigo-500 blur-3xl opacity-10 group-hover:opacity-20 transition-opacity" />
+                 <div className="absolute inset-0 bg-slate-800 blur-3xl opacity-10 group-hover:opacity-20 transition-opacity" />
                  <Truck className={`w-10 h-10 ${currentTab === 'PENDIENTES' ? 'text-indigo-400' : 'text-slate-300'} relative z-10`} />
               </div>
               <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">

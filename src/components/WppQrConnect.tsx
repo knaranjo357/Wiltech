@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { MapPin, RefreshCcw, CheckCircle2, QrCode } from "lucide-react";
 
 // Definimos los IDs de las 8 conexiones
@@ -136,7 +136,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
   return (
     <div className="bg-white/70 backdrop-blur-xl border border-white shadow-2xl rounded-[40px] p-8 sm:p-10 max-w-5xl mx-auto overflow-hidden relative group/card">
       {/* Decorative Blur */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2" />
+      <div className="absolute top-0 right-0 w-64 h-64 bg-slate-800/5 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2" />
       
       <div className="flex flex-col gap-6 mb-8 relative z-10">
         <div className="flex items-center justify-between">
@@ -149,7 +149,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
           <button
             onClick={fetchQR}
             disabled={loading}
-            className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:text-indigo-600 hover:bg-white hover:shadow-md transition-all active:scale-95 disabled:opacity-50"
+            className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-white hover:shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
             <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
           </button>
@@ -186,7 +186,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
              style={{ backgroundImage: "radial-gradient(#4f46e5 1px, transparent 1px)", backgroundSize: "24px 24px" }} />
 
         <div className="mb-8 flex items-center gap-2.5 px-6 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-full text-xs font-black uppercase tracking-[0.15em] shadow-sm relative z-10 transition-transform hover:scale-105">
-          <MapPin className="w-4 h-4 text-indigo-500" />
+          <MapPin className="w-4 h-4 text-slate-700" />
           {sourceName}
         </div>
 
@@ -218,7 +218,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
               <div className="space-y-2">
                 <h3 className="text-2xl font-black text-slate-900 tracking-tight">Conectado</h3>
                 <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                  Línea <span className="text-indigo-600 font-bold">{sourceName}</span> activa.
+                  Línea <span className="text-slate-800 font-bold">{sourceName}</span> activa.
                 </p>
               </div>
 
@@ -233,7 +233,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
         ) : (
           <div className="flex flex-col items-center gap-4 relative z-10">
             <div className="relative">
-               <div className="w-16 h-16 border-[6px] border-indigo-100 rounded-full shadow-inner" />
+               <div className="w-16 h-16 border-[6px] border-slate-200 rounded-full shadow-inner" />
                <div className="absolute inset-0 w-16 h-16 border-[6px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
             </div>
             <div className="text-center">

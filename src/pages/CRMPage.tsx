@@ -56,7 +56,7 @@ const getInitials = (name: string) => {
 };
 
 const getRandomColor = (str: string) => {
-  const colors = ['bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-purple-100 text-purple-700', 'bg-orange-100 text-orange-700', 'bg-pink-100 text-pink-700'];
+  const colors = ['bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-purple-100 text-slate-700', 'bg-orange-100 text-orange-700', 'bg-pink-100 text-pink-700'];
   let hash = 0;
   for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
   return colors[Math.abs(hash) % colors.length];
@@ -119,37 +119,55 @@ export const CRMPage: React.FC = () => {
   useEffect(() => { loadData(); }, []);
 
   // 2. Generación de Opciones de Filtro Dinámicas
+  // sedeMap: normalizedKey -> display (primer valor canónico)
   const metaOptions = useMemo(() => {
-    const sedes = new Set<string>();
-    const sources = new Set<string>();
-    const etapas = new Set<string>();
-    
+    const sedeMap = new Map<string, string>();
+    const sourceSet = new Set<string>();
+    const etapaMap = new Map<string, string>();
+
     rawData.forEach(c => {
-      if (c.agenda_ciudad_sede && c._normSede !== 'no aplica') sedes.add(c.agenda_ciudad_sede);
-      if (c._normSource) sources.add(c._normSource);
-      if (c.estado_etapa) etapas.add(c.estado_etapa);
+      // Sedes: agrupamos variantes normalizadas
+      if (c.agenda_ciudad_sede) {
+        const raw = c.agenda_ciudad_sede.trim();
+        const key = normalize(raw);
+        if (key && key !== 'no aplica' && !sedeMap.has(key)) {
+          // Capitalizar la versión canónica
+          sedeMap.set(key, raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase());
+        }
+      }
+      if (c._normSource) sourceSet.add(c._normSource);
+      // Etapas: agrupamos por normalized (por si hay variantes)
+      if (c.estado_etapa) {
+        const raw = c.estado_etapa.trim();
+        const key = normalize(raw);
+        if (key && !etapaMap.has(key)) etapaMap.set(key, raw);
+      }
     });
 
     return {
-      sedes: ['ALL', ...Array.from(sedes).sort()],
-      sources: ['ALL', ...Array.from(sources).sort()],
-      etapas: ['ALL', ...Array.from(etapas).sort()]
+      sedes: ['ALL', ...Array.from(sedeMap.values()).sort()],
+      sedeKeys: Array.from(sedeMap.keys()),
+      sources: ['ALL', ...Array.from(sourceSet).sort()],
+      etapas: ['ALL', ...Array.from(etapaMap.values()).sort()],
+      etapaKeys: Array.from(etapaMap.keys()),
     };
   }, [rawData]);
 
-  // 3. Filtrado (Optimizado)
+  // 3. Filtrado (Optimizado, con matching normalizado para sede y etapa)
   const filteredData = useMemo(() => {
     const tsFrom = dateRange.from ? parseToTimestamp(dateRange.from) : 0;
     const tsTo = dateRange.to ? parseToTimestamp(dateRange.to) + ONE_DAY - 1 : Infinity;
     const normSearch = normalize(searchText);
-    const normSede = normalize(sedeFilter);
+    const normSedeFilter = normalize(sedeFilter);
+    const normEtapaFilter = normalize(etapaFilter);
     const useDate = !!(dateRange.from || dateRange.to);
 
     return rawData.filter(c => {
-      // Filtros rápidos
-      if (sedeFilter !== 'ALL' && c._normSede !== normSede) return false;
+      // Sede: comparamos normalizados para unificar variantes
+      if (sedeFilter !== 'ALL' && normalize(c._normSede) !== normSedeFilter) return false;
       if (sourceFilter !== 'ALL' && c._normSource !== sourceFilter) return false;
-      if (etapaFilter !== 'ALL' && c.estado_etapa !== etapaFilter) return false;
+      // Etapa: comparamos normalizados
+      if (etapaFilter !== 'ALL' && normalize(c._normEtapa) !== normEtapaFilter) return false;
       
       // Buscador texto
       if (normSearch && !c._normSearch.includes(normSearch)) return false;
@@ -203,12 +221,12 @@ export const CRMPage: React.FC = () => {
           {/* Fila Superior: Título y Totales */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-200/50">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black text-white flex items-center justify-center shadow-lg shadow-slate-900/30">
                 <Users className="w-6 h-6" />
               </div>
               <div>
                 <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Base de Contactos</h1>
-                <p className="text-xs text-indigo-500 font-bold uppercase tracking-wider mt-1.5 flex items-center gap-1">
+                <p className="text-xs text-slate-700 font-bold uppercase tracking-wider mt-1.5 flex items-center gap-1">
                   {filteredData.length} contactos filtrados
                 </p>
               </div>
@@ -250,15 +268,15 @@ export const CRMPage: React.FC = () => {
               {/* Filtro Sede */}
               <select 
                 value={sedeFilter} onChange={e => setSedeFilter(e.target.value)}
-                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-indigo-500 cursor-pointer min-w-[140px]"
+                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-slate-600 cursor-pointer min-w-[140px]"
               >
-                {metaOptions.sedes.map(s => <option key={s} value={s}>{s === 'ALL' ? 'Todas las Sedes' : s}</option>)}
+                {metaOptions.sedes.map(s => <option key={s} value={s === 'ALL' ? 'ALL' : s}>{s === 'ALL' ? 'Todas las Sedes' : s}</option>)}
               </select>
 
               {/* Filtro Etapa */}
               <select 
                 value={etapaFilter} onChange={e => setEtapaFilter(e.target.value)}
-                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-indigo-500 cursor-pointer min-w-[160px]"
+                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-slate-600 cursor-pointer min-w-[160px]"
               >
                 <option value="ALL">Todas las Etapas</option>
                 {metaOptions.etapas.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
@@ -267,7 +285,7 @@ export const CRMPage: React.FC = () => {
               {/* Filtro Source */}
               <select 
                 value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
-                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-indigo-500 cursor-pointer min-w-[140px]"
+                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 outline-none focus:border-slate-600 cursor-pointer min-w-[140px]"
               >
                 <option value="ALL">Todos los Canales</option>
                 {metaOptions.sources.map(s => <option key={s} value={s}>{s === SOURCE_EMPTY ? 'Directo' : s}</option>)}
@@ -291,7 +309,7 @@ export const CRMPage: React.FC = () => {
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
           {isProcessing && filteredData.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 p-10">
-               <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+               <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
                <span className="text-gray-400 font-medium">Sincronizando clientes...</span>
             </div>
           ) : filteredData.length === 0 ? (
@@ -299,7 +317,7 @@ export const CRMPage: React.FC = () => {
                <div className="p-4 bg-gray-50 rounded-full text-gray-300 mb-2"><Search size={32}/></div>
                <h3 className="text-lg font-bold text-gray-800">No se encontraron clientes</h3>
                <p className="text-gray-500 max-w-xs">Intenta ajustar los filtros o el término de búsqueda.</p>
-               <button onClick={() => { setSearchText(''); setSedeFilter('ALL'); setSourceFilter('ALL'); setEtapaFilter('ALL'); setDateRange({from:'', to:''}); }} className="mt-4 text-indigo-600 font-medium hover:underline">Limpiar filtros</button>
+               <button onClick={() => { setSearchText(''); setSedeFilter('ALL'); setSourceFilter('ALL'); setEtapaFilter('ALL'); setDateRange({from:'', to:''}); }} className="mt-4 text-slate-800 font-medium hover:underline">Limpiar filtros</button>
             </div>
           ) : (
             <>
@@ -340,7 +358,7 @@ export const CRMPage: React.FC = () => {
                                     {client.modelo || 'N/A'}
                                   </span>
                                   {client._normSource && (
-                                    <span className="text-indigo-600 font-medium truncate max-w-[80px]">{client._normSource}</span>
+                                    <span className="text-slate-800 font-medium truncate max-w-[80px]">{client._normSource}</span>
                                   )}
                                 </div>
                               </div>
@@ -398,7 +416,7 @@ export const CRMPage: React.FC = () => {
 
                           {/* Acciones */}
                           <td className="px-6 py-4 text-center">
-                             <button className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+                             <button className="p-2 text-gray-400 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors">
                                <Edit3 size={16} />
                              </button>
                           </td>
@@ -419,7 +437,7 @@ export const CRMPage: React.FC = () => {
                     <select 
                       value={pageSize} 
                       onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                      className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-indigo-500"
+                      className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-slate-700"
                     >
                       <option value={20}>20 / pág</option>
                       <option value={50}>50 / pág</option>

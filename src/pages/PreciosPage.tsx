@@ -218,7 +218,7 @@ export const PreciosPage: React.FC = () => {
       
       {/* Background Decorations */}
       <div className="absolute top-[-10%] right-[-5%] w-[45%] h-[45%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] left-[-5%] w-[35%] h-[35%] bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] left-[-5%] w-[35%] h-[35%] bg-slate-800/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Toasts (global) */}
       <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
@@ -243,8 +243,8 @@ export const PreciosPage: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
             <div className="relative">
-               <div className="absolute inset-0 bg-blue-400 blur-xl opacity-20 animate-pulse" />
-               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white flex items-center justify-center shadow-xl shadow-blue-200/40 relative z-10 border border-white/20">
+               <div className="absolute inset-0 bg-slate-900 blur-xl opacity-15 animate-pulse" />
+               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-800 to-black text-white flex items-center justify-center shadow-xl shadow-slate-900/30 relative z-10 border border-white/20">
                  <Tag className="w-7 h-7" />
                </div>
             </div>
@@ -323,15 +323,15 @@ export const PreciosPage: React.FC = () => {
         {loading ? (
           <div className="absolute inset-0 bg-white/40 backdrop-blur-md z-30 flex flex-col items-center justify-center space-y-6">
             <div className="relative">
-               <div className="w-16 h-16 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
-               <Database className="absolute inset-0 m-auto w-6 h-6 text-indigo-500/50" />
+               <div className="w-16 h-16 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
+               <Database className="absolute inset-0 m-auto w-6 h-6 text-slate-700/50" />
             </div>
             <div className="flex flex-col items-center gap-2">
               <span className="text-sm font-black text-slate-800 uppercase tracking-widest">Cargando Precios</span>
               <div className="flex gap-1">
-                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" />
+                <div className="w-1.5 h-1.5 bg-slate-800 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-1.5 h-1.5 bg-slate-800 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-1.5 h-1.5 bg-slate-800 rounded-full animate-bounce" />
               </div>
             </div>
           </div>
@@ -366,7 +366,7 @@ export const PreciosPage: React.FC = () => {
                     <tr
                       key={item.row_number || index}
                       onClick={() => setModalItem(item)}
-                      className="cursor-pointer group hover:bg-indigo-50/50 transition-colors"
+                      className="cursor-pointer group hover:bg-slate-50 transition-colors"
                     >
                       {columns.map((column, colIndex) => {
                         const val = item[column as keyof PrecioItem];
@@ -380,7 +380,7 @@ export const PreciosPage: React.FC = () => {
                             key={column}
                             className={`
                               px-8 py-5 whitespace-nowrap transition-colors
-                              ${colIndex === 0 ? "font-black text-slate-900 sticky left-0 z-20 bg-white group-hover:bg-indigo-50/80 shadow-[1px_0_0_0_#f1f5f9]" : "text-slate-600 font-medium text-sm"}
+                              ${colIndex === 0 ? "font-black text-slate-900 sticky left-0 z-20 bg-white group-hover:bg-slate-50/80 shadow-[1px_0_0_0_#f1f5f9]" : "text-slate-600 font-medium text-sm"}
                             `}
                           >
                             {isPrice ? (
@@ -422,7 +422,7 @@ export const PreciosPage: React.FC = () => {
         <div className="bg-slate-50/80 backdrop-blur-sm border-t border-slate-100 px-8 py-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex justify-between items-center shrink-0">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
-               <div className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+               <div className="w-1.5 h-1.5 rounded-full bg-slate-700" />
                {filteredPrecios.length} Productos
             </span>
           </div>

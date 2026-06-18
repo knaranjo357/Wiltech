@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useState } from 'react';
+﻿import React, { memo, useMemo, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell
 } from 'recharts';
@@ -90,7 +90,7 @@ export const EffectivenessCharts: React.FC<Props> = ({ data, colorMap }) => {
       {/* Header */}
       <div className="px-6 py-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><TrendingUp size={20} /></div>
+          <div className="p-2 bg-slate-50 text-slate-800 rounded-lg"><TrendingUp size={20} /></div>
           <div>
             <h3 className="font-bold text-gray-900">Efectividad por Canal</h3>
             <p className="text-xs text-gray-500">
@@ -113,13 +113,13 @@ export const EffectivenessCharts: React.FC<Props> = ({ data, colorMap }) => {
           <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
             <button
               onClick={() => setViewMode('conversion')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'conversion' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-800'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'conversion' ? 'bg-white shadow text-slate-800' : 'text-gray-500 hover:text-gray-800'}`}
             >
               <Percent size={12} /> Conversión
             </button>
             <button
               onClick={() => setViewMode('volume')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'volume' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-800'}`}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${viewMode === 'volume' ? 'bg-white shadow text-slate-800' : 'text-gray-500 hover:text-gray-800'}`}
             >
               <BarChart2 size={12} /> Volumen
             </button>
@@ -131,7 +131,7 @@ export const EffectivenessCharts: React.FC<Props> = ({ data, colorMap }) => {
               <button
                 key={key}
                 onClick={() => setSortMode(key)}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${sortMode === key ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-800'}`}
+                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${sortMode === key ? 'bg-white shadow text-slate-800' : 'text-gray-500 hover:text-gray-800'}`}
               >
                 {label}
               </button>

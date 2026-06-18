@@ -151,7 +151,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     {
       title: 'Dispositivo y Detalle',
       icon: Smartphone,
-      iconColor: 'text-indigo-600 bg-indigo-50',
+      iconColor: 'text-slate-800 bg-slate-50',
       fields: [
         { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
         { label: 'Intención', key: 'intencion', icon: Settings, type: 'text' },
@@ -280,10 +280,12 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
         <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <button
             onClick={() => setOpen(true)}
-            className="group flex items-center gap-2 bg-blue-600 text-white px-5 py-3.5 rounded-full shadow-lg shadow-blue-600/30 hover:bg-blue-700 hover:shadow-blue-600/50 transition-all active:scale-95 border border-blue-500"
+            className="group flex items-center gap-2.5 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl shadow-slate-900/40 hover:bg-black hover:shadow-slate-900/60 hover:-translate-y-0.5 transition-all duration-200 active:scale-95 border border-slate-700"
             title="Crear Nuevo Cliente"
           >
-            <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+            <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center">
+              <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
+            </span>
             <span className="font-bold text-sm tracking-wide">Nuevo Cliente</span>
           </button>
         </div>
@@ -390,7 +392,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    rows={3}
-                                   className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
+                                   className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
                                    placeholder="Escribe aquí..."
                                  />
                                ) : field.type === 'boolean' ? (
@@ -398,7 +400,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                     <select
                                       value={val === true ? 'true' : 'false'}
                                       onChange={(e) => setVal(field.key, e.target.value === 'true')}
-                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 appearance-none"
+                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 appearance-none"
                                     >
                                       <option value="true">Sí</option>
                                       <option value="false">No</option>
@@ -423,7 +425,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                    placeholder={field.placeholder || '-'}
-                                   className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
+                                   className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
                                  />
                                )}
                                

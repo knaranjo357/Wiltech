@@ -1,4 +1,4 @@
-// src/pages/ConversacionesPage.tsx
+﻿// src/pages/ConversacionesPage.tsx
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue, useCallback, memo } from 'react';
 import { 
     RefreshCw, Search, MessageSquare, ArrowUpDown, Bot, User, Filter, 
@@ -144,7 +144,7 @@ const RowItem = memo(({
   
   const source = row.source || '';
   let sourceBadgeClass = 'bg-slate-100/50 text-slate-500 border-slate-200/50';
-  if (normalizeText(source).includes('wiltech')) sourceBadgeClass = 'bg-indigo-50 text-indigo-700 border-indigo-100';
+  if (normalizeText(source).includes('wiltech')) sourceBadgeClass = 'bg-slate-50 text-slate-800 border-slate-200';
   else if (source) sourceBadgeClass = 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-100';
 
   const botActive = row.consentimiento_contacto === true; 
@@ -163,7 +163,7 @@ const RowItem = memo(({
     >
       <div className="relative shrink-0">
          <div className={`w-12 h-12 rounded-[18px] flex items-center justify-center text-sm font-black border shadow-sm transition-all duration-300 ${
-            active ? 'bg-slate-900 text-white border-slate-900 rotate-3' : 'bg-white text-slate-400 border-slate-100 group-hover:bg-indigo-50 group-hover:text-indigo-600'
+            active ? 'bg-slate-900 text-white border-slate-900 rotate-3' : 'bg-white text-slate-400 border-slate-100 group-hover:bg-slate-50 group-hover:text-slate-800'
          }`}>
             {(row.nombre || '?').charAt(0).toUpperCase()}
          </div>
@@ -183,7 +183,7 @@ const RowItem = memo(({
           <h3 className={`truncate text-[15px] font-black leading-tight tracking-tight ${active ? 'text-slate-900' : 'text-slate-700'}`}>
             {row.nombre}
           </h3>
-          <span className={`text-[10px] whitespace-nowrap font-black uppercase tracking-widest ${active ? 'text-indigo-600' : 'text-slate-400'}`}>
+          <span className={`text-[10px] whitespace-nowrap font-black uppercase tracking-widest ${active ? 'text-slate-800' : 'text-slate-400'}`}>
             {timeDisplay}
           </span>
         </div>
@@ -225,7 +225,7 @@ const RowItem = memo(({
       
       {busy && (
         <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center rounded-3xl z-20">
-           <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" />
+           <RefreshCw className="w-6 h-6 text-slate-800 animate-spin" />
         </div>
       )}
     </div>
@@ -435,7 +435,7 @@ export const ConversacionesPage: React.FC = () => {
       
       {/* Background Decorations */}
       <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-indigo-500/5 blur-[100px] rounded-full pointer-events-none" />
+      <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-slate-800/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* SIDEBAR LIST */}
       <aside className="w-full lg:w-[420px] xl:w-[480px] flex flex-col border-r border-slate-200/50 bg-white/40 backdrop-blur-3xl z-10 h-full relative">
@@ -458,7 +458,7 @@ export const ConversacionesPage: React.FC = () => {
                 <button 
                   onClick={() => fetchList(false)} 
                   disabled={loading} 
-                  className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-indigo-600 hover:border-indigo-100 shadow-xl transition-all active:scale-95 disabled:opacity-50"
+                  className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-slate-800 hover:border-slate-200 shadow-xl transition-all active:scale-95 disabled:opacity-50"
                   title="Sincronizar"
                 >
                   <RefreshCw size={18} className={loading || isBackgroundUpdating ? 'animate-spin' : ''} />
@@ -483,7 +483,7 @@ export const ConversacionesPage: React.FC = () => {
                 <select 
                     value={sourceFilter} 
                     onChange={(e) => setSourceFilter(e.target.value)} 
-                    className="appearance-none pl-3 pr-8 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:border-indigo-200 cursor-pointer text-slate-600 outline-none transition-all shadow-sm"
+                    className="appearance-none pl-3 pr-8 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:border-slate-300 cursor-pointer text-slate-600 outline-none transition-all shadow-sm"
                 >
                   <option value="">Fuentes</option>
                   {sourceStats.items.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -495,7 +495,7 @@ export const ConversacionesPage: React.FC = () => {
                  onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} 
                  className="flex items-center gap-2 px-4 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 text-slate-600 shadow-sm transition-all"
               >
-                <ArrowUpDown className="w-3 h-3 text-indigo-500" /> {sortOrder === 'desc' ? 'Nuevos' : 'Viejos'}
+                <ArrowUpDown className="w-3 h-3 text-slate-700" /> {sortOrder === 'desc' ? 'Nuevos' : 'Viejos'}
               </button>
               
               <div className="relative shrink-0">
@@ -523,7 +523,7 @@ export const ConversacionesPage: React.FC = () => {
 
           {loading && allRows.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
-              <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
+              <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Sincronizando...</span>
             </div>
           ) : displayRows.length === 0 ? (
@@ -554,7 +554,7 @@ export const ConversacionesPage: React.FC = () => {
               {hasMore && (
                 <button 
                   onClick={() => setPage(p => p + 1)} 
-                  className="w-full py-6 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600 hover:bg-white rounded-3xl transition-all border border-transparent hover:border-indigo-100 hover:shadow-xl mt-4"
+                  className="w-full py-6 text-[10px] font-black uppercase tracking-[0.2em] text-slate-800 hover:bg-white rounded-3xl transition-all border border-transparent hover:border-slate-200 hover:shadow-xl mt-4"
                 >
                   <MoreHorizontal className="w-4 h-4 mx-auto mb-1" /> Cargar más
                 </button>

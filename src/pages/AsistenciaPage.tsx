@@ -149,9 +149,16 @@ export const AsistenciaPage: React.FC = () => {
 
   /** --- Listas y Filtros --- */
   const sedesList = useMemo(() => {
-    const s = new Set<string>();
-    clients.forEach(c => { if(safeText(c.agenda_ciudad_sede)) s.add(safeText(c.agenda_ciudad_sede)); });
-    return Array.from(s).sort();
+    const map = new Map<string, string>();
+    clients.forEach(c => {
+      const raw = safeText(c.agenda_ciudad_sede);
+      if (!raw) return;
+      const key = normalize(raw);
+      if (key && !map.has(key)) {
+        map.set(key, raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase());
+      }
+    });
+    return Array.from(map.values()).sort();
   }, [clients]);
 
   const stats = useMemo(() => {
@@ -172,7 +179,8 @@ export const AsistenciaPage: React.FC = () => {
     }
 
     if (sedeFilter !== 'Todas') {
-      data = data.filter(c => safeText(c.agenda_ciudad_sede) === sedeFilter);
+      const normSedeFilter = normalize(sedeFilter);
+      data = data.filter(c => normalize(safeText(c.agenda_ciudad_sede)) === normSedeFilter);
     }
 
     if (search.trim()) {
@@ -294,13 +302,13 @@ export const AsistenciaPage: React.FC = () => {
              
              {/* Sede Select */}
              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-700 transition-colors">
                   <MapPin size={14} />
                 </div>
                 <select 
                    value={sedeFilter} 
                    onChange={(e) => setSedeFilter(e.target.value)} 
-                   className="appearance-none pl-9 pr-10 py-2.5 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all"
+                   className="appearance-none pl-9 pr-10 py-2.5 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white cursor-pointer transition-all"
                 >
                    <option value="Todas">Todas las Sedes</option>
                    {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
@@ -310,13 +318,13 @@ export const AsistenciaPage: React.FC = () => {
 
              {/* Sort Select */}
              <div className="relative group">
-                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-indigo-500 transition-colors">
+                <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-700 transition-colors">
                   <ArrowUpDown size={14} />
                 </div>
                 <select 
                    value={sortOption} 
                    onChange={(e) => setSortOption(e.target.value as SortOption)} 
-                   className="appearance-none pl-9 pr-10 py-2.5 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-indigo-500/5 focus:bg-white cursor-pointer transition-all"
+                   className="appearance-none pl-9 pr-10 py-2.5 bg-white/60 backdrop-blur-sm border border-white/40 rounded-2xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white cursor-pointer transition-all"
                 >
                   <option value="last_msg_desc">Más Recientes</option>
                   <option value="priority">Prioridad</option>
@@ -480,11 +488,11 @@ export const AsistenciaPage: React.FC = () => {
                                  onClick={(e) => handleToggleBot(client, e)} 
                                  className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
                                     ${botActive 
-                                       ? 'bg-white text-indigo-600 border-indigo-100 hover:shadow-sm' 
+                                       ? 'bg-white text-slate-800 border-slate-200 hover:shadow-sm' 
                                        : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
                                  `}
                               >
-                                 <Bot size={12} className={botActive ? 'text-indigo-500' : 'text-rose-400'} /> 
+                                 <Bot size={12} className={botActive ? 'text-slate-700' : 'text-rose-400'} /> 
                                  {botActive ? 'Bot ON' : 'Bot OFF'}
                               </button>
                               

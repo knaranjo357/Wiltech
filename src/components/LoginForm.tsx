@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { AuthService } from '../services/authService';
@@ -46,7 +46,7 @@ export const LoginForm: React.FC = () => {
               className="w-full h-full object-contain"
             />
           </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-700 to-purple-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-700 to-slate-900 bg-clip-text text-transparent">
             Wiltech
           </h1>
           <p className="text-slate-500 mt-2 text-sm font-medium">Inicia sesión en tu cuenta</p>
@@ -69,13 +69,13 @@ export const LoginForm: React.FC = () => {
               Email
             </label>
             <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-700 transition-colors" />
               <input
                 type="email"
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-400 font-medium"
+                className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:border-slate-600 focus:ring-2 focus:ring-slate-700/10 outline-none transition-all placeholder:text-slate-400 font-medium"
                 placeholder="tu@email.com"
                 required
               />
@@ -88,13 +88,13 @@ export const LoginForm: React.FC = () => {
               Contraseña
             </label>
             <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-slate-700 transition-colors" />
               <input
                 type={showPassword ? 'text' : 'password'}
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-11 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-400 font-medium"
+                className="w-full pl-11 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:border-slate-600 focus:ring-2 focus:ring-slate-700/10 outline-none transition-all placeholder:text-slate-400 font-medium"
                 placeholder="••••••••"
                 required
               />
@@ -112,7 +112,7 @@ export const LoginForm: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full relative bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3.5 px-6 rounded-2xl font-semibold hover:from-indigo-700 hover:to-purple-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-all duration-200 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-indigo-200/50 hover:shadow-xl hover:shadow-indigo-300/50 flex items-center justify-center gap-3 group overflow-hidden"
+            className="w-full relative bg-gradient-to-r from-slate-800 to-slate-900 text-white py-3.5 px-6 rounded-2xl font-semibold hover:from-indigo-700 hover:to-purple-700 focus:ring-2 focus:ring-slate-700 focus:ring-offset-2 transition-all duration-200 transform hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none shadow-lg shadow-slate-900/20 hover:shadow-xl hover:shadow-indigo-300/50 flex items-center justify-center gap-3 group overflow-hidden"
           >
             {loading ? (
               <div className="flex items-center gap-3">

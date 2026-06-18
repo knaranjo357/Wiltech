@@ -83,7 +83,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   }, [filteredNavItems]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+    <div className="min-h-screen bg-slate-50">
 
       {/* === Mobile Overlay === */}
       <div
@@ -96,8 +96,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
       {/* === Sidebar === */}
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 bg-white/95 backdrop-blur-2xl shadow-2xl
-          border-r border-slate-200/50
+          fixed inset-y-0 left-0 z-50 bg-white shadow-2xl
+          border-r border-slate-200/60
           transform transition-all duration-300 ease-in-out
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0
@@ -107,15 +107,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
         <div className="flex flex-col h-full">
 
           {/* Sidebar Header */}
-          <div className={`flex items-center p-5 ${isCollapsed ? "justify-center" : "justify-between"}`}>
+          <div className={`flex items-center p-5 border-b border-slate-100 ${isCollapsed ? "justify-center" : "justify-between"}`}>
             <div className="flex items-center gap-3">
-              <div className="bg-black p-2 rounded-xl flex items-center justify-center shadow-lg shrink-0 ring-2 ring-indigo-50 overflow-hidden">
+              <div className={`bg-black rounded-xl flex items-center justify-center shadow-md shrink-0 overflow-hidden ${isCollapsed ? "w-10 h-10 p-1.5" : "w-10 h-10 p-1.5"}`}>
                 <img
                   src="/images/logowiltech.png"
                   alt="Wiltech"
-                  className={`${isCollapsed ? "w-6 h-6" : "h-6 w-auto"} object-contain`}
+                  className="w-full h-full object-contain"
                 />
               </div>
+              {!isCollapsed && (
+                <div>
+                  <span className="font-extrabold text-slate-900 text-base tracking-tight leading-none">Wiltech</span>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">Panel de Control</p>
+                </div>
+              )}
             </div>
 
             {/* Collapse toggle (Desktop) */}
@@ -165,7 +171,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                         group relative flex items-center w-full rounded-xl transition-all duration-200
                         ${isCollapsed ? "justify-center px-2 py-3" : "justify-start px-3 py-2.5 gap-3"}
                         ${isActive
-                          ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-200/50"
+                          ? "bg-slate-900 text-white shadow-[0_4px_14px_rgb(0,0,0,0.25)]"
                           : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                         }
                       `}
@@ -185,7 +191,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
                               px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0
                               ${isActive
                                 ? 'bg-white/20 text-white'
-                                : 'bg-indigo-100/50 text-indigo-700 group-hover:bg-indigo-100'}
+                                : 'bg-slate-100 text-slate-600 group-hover:bg-slate-200'}
                             `}>
                               {item.badge}
                             </span>

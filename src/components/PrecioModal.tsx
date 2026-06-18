@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { X } from 'lucide-react';
 import { PrecioItem } from '../types/precios';
 
@@ -41,7 +41,7 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/40 w-full max-w-5xl max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 text-white">
+        <div className="bg-gradient-to-r from-blue-600 to-slate-900 px-6 py-4 text-white">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <h2 className="text-xl font-bold truncate">{title}</h2>

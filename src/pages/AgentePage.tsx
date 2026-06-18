@@ -281,7 +281,7 @@ export const AgentePage: React.FC = () => {
         <div className="w-full max-w-5xl mx-auto flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-4 min-w-0">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center shadow-lg shadow-indigo-200/50">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black text-white flex items-center justify-center shadow-lg shadow-slate-900/30">
                 <Bot className="w-6 h-6" />
               </div>
 
@@ -299,7 +299,7 @@ export const AgentePage: React.FC = () => {
                   )}
                 </div>
 
-                <p className="text-xs text-indigo-500 font-bold uppercase tracking-wider mt-1.5">{tabMeta.subtitle}</p>
+                <p className="text-xs text-slate-700 font-bold uppercase tracking-wider mt-1.5">{tabMeta.subtitle}</p>
               </div>
             </div>
 
@@ -345,7 +345,7 @@ export const AgentePage: React.FC = () => {
                       className={`wt-filter-pill ${isActive ? "wt-filter-pill-active" : ""} flex items-center gap-2`}
                       title={t.subtitle}
                     >
-                      <span className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isActive ? "bg-indigo-50 text-indigo-600" : "bg-slate-100 text-slate-400"}`}>
+                      <span className={`w-6 h-6 rounded-lg flex items-center justify-center transition-colors ${isActive ? "bg-slate-50 text-slate-800" : "bg-slate-100 text-slate-400"}`}>
                         {t.icon}
                       </span>
                       <span>{t.label}</span>
@@ -404,9 +404,9 @@ export const AgentePage: React.FC = () => {
 
               <button
                 onClick={addSection}
-                className="group w-full py-10 border-2 border-dashed border-slate-200/80 rounded-2xl text-slate-400 hover:border-indigo-400 hover:text-indigo-600 hover:bg-indigo-50/50 transition-all flex flex-col items-center justify-center gap-3 active:scale-[0.99]"
+                className="group w-full py-10 border-2 border-dashed border-slate-200/80 rounded-2xl text-slate-400 hover:border-indigo-400 hover:text-slate-800 hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-3 active:scale-[0.99]"
               >
-                <div className="w-12 h-12 rounded-2xl bg-slate-50 group-hover:bg-indigo-100 flex items-center justify-center transition-all group-hover:scale-110 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-slate-50 group-hover:bg-slate-100 flex items-center justify-center transition-all group-hover:scale-110 shadow-sm">
                   <Plus className="w-6 h-6" />
                 </div>
                 <span className="font-bold text-sm uppercase tracking-widest">Añadir nueva sección</span>
@@ -437,7 +437,7 @@ const SectionCard: React.FC<{
   const level = headerMatch ? headerMatch[1].length : 0;
 
   const isMainTitle = level === 1;
-  const accentColor = isMainTitle ? "bg-blue-600" : level === 2 ? "bg-indigo-500" : "bg-slate-400";
+  const accentColor = isMainTitle ? "bg-blue-600" : level === 2 ? "bg-slate-800" : "bg-slate-400";
 
   return (
     <div
@@ -445,7 +445,7 @@ const SectionCard: React.FC<{
         card transition-all duration-300 overflow-hidden
         ${
           isOpen
-            ? "shadow-[var(--wt-shadow-md)] border-indigo-200 ring-4 ring-indigo-500/5 translate-y-[-2px]"
+            ? "shadow-[var(--wt-shadow-md)] border-slate-200 ring-4 ring-indigo-500/5 translate-y-[-2px]"
             : "border-slate-200/60 hover:border-slate-300 hover:shadow-[var(--wt-shadow-sm)]"
         }
       `}

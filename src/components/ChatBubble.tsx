@@ -1,4 +1,4 @@
-// src/components/ChatBubble.tsx
+﻿// src/components/ChatBubble.tsx
 import React, { useMemo, useState } from 'react';
 import { Copy, Check, Bot, User, CheckCheck } from 'lucide-react';
 
@@ -117,7 +117,7 @@ export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
 
             {/* Hora y Status dentro de la burbuja */}
             <div className={`flex items-center justify-end gap-1.5 mt-2 text-[10px] font-bold uppercase tracking-wider select-none
-               ${isAgent ? 'text-indigo-300/80' : 'text-slate-400'}
+               ${isAgent ? 'text-slate-400/80' : 'text-slate-400'}
             `}>
                <span>{timeStr}</span>
                {isAgent && (
@@ -129,7 +129,7 @@ export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
           {/* BOTÓN COPIAR (Aparece al hacer hover) */}
           <button
             onClick={handleCopy}
-            className={`absolute top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-xl text-slate-400 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:text-indigo-600 hover:scale-110 active:scale-95 z-10
+            className={`absolute top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-2xl bg-white border border-slate-200 shadow-xl text-slate-400 opacity-0 group-hover:opacity-100 transition-all duration-300 hover:text-slate-800 hover:scale-110 active:scale-95 z-10
               ${isAgent ? '-left-12' : '-right-12'}
             `}
             title="Copiar texto"

@@ -1,4 +1,4 @@
-// src/components/ClientModal.tsx
+﻿// src/components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -218,7 +218,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
       { label: 'Subscriber ID', key: 'subscriber_id', icon: Fingerprint, type: 'text' },
     ]},
-    { tab: 'general', title: 'Estado y Tiempos', icon: Clock, iconColor: 'text-purple-600 bg-purple-50', fields: [
+    { tab: 'general', title: 'Estado y Tiempos', icon: Clock, iconColor: 'text-slate-700 bg-slate-50', fields: [
       { label: 'Source (origen)', key: 'source', icon: Settings, type: 'text' },
       { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
       { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
@@ -226,7 +226,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
       { label: 'Creado', key: 'created', icon: Clock, type: 'datetime' },
       { label: 'Último Mensaje', key: 'last_msg', icon: MessageCircle, type: 'datetime' },
     ]},
-    { tab: 'general', title: 'Dispositivo', icon: Smartphone, iconColor: 'text-indigo-600 bg-indigo-50', fields: [
+    { tab: 'general', title: 'Dispositivo', icon: Smartphone, iconColor: 'text-slate-800 bg-slate-50', fields: [
       { label: 'Modelo', key: 'modelo', icon: Smartphone, type: 'text' },
       { label: 'Intención', key: 'intencion', icon: Settings, type: 'text' },
       { label: 'Detalles', key: 'detalles', icon: FileText, type: 'textarea' },
@@ -316,7 +316,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             {/* Cliente Info */}
             <div className="flex items-center gap-4 min-w-0">
               <div className="relative shrink-0">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-indigo-200/50 border-2 border-white ring-1 ring-slate-200">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-slate-900 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-slate-900/20 border-2 border-white ring-1 ring-slate-200">
                   {initials}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></div>
@@ -406,7 +406,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                    onClick={toggleAsistio}
                    className={`group inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] font-bold border transition-all active:scale-95 shadow-sm uppercase tracking-wider
                      ${asistio 
-                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100' 
+                        ? 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100' 
                         : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'}`}
                  >
                    {asistio ? <CheckCircle className="w-3.5 h-3.5" /> : <Calendar className="w-3.5 h-3.5" />}
@@ -446,13 +446,13 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                   onClick={() => setActiveTab(tab.id)}
                   className={`wt-filter-pill ${isActive ? 'wt-filter-pill-active' : ''} flex items-center gap-2`}
                 >
-                  <tab.icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  <tab.icon className={`w-4 h-4 ${isActive ? 'text-slate-800' : 'text-slate-400'}`} />
                   <span>{tab.label}</span>
                   
                   {counts && (
                     <span className={`ml-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md transition-colors
                       ${isActive 
-                        ? 'bg-indigo-100 text-indigo-700' 
+                        ? 'bg-slate-100 text-slate-800' 
                         : 'bg-slate-100 text-slate-500 group-hover:bg-slate-200'}`}>
                       {counts.filled}/{counts.total}
                     </span>
@@ -504,7 +504,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest pl-0.5 mb-1 flex items-center justify-between">
                                {field.label}
                                {!isEditing && !isEmpty && field.type !== 'boolean' && (
-                                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-400/50" />
+                                 <div className="w-1.5 h-1.5 rounded-full bg-slate-700/50" />
                                )}
                             </label>
 
@@ -533,7 +533,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                     <textarea
                                       value={value ?? ''}
                                       onChange={(e) => setVal(field.key, e.target.value)}
-                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
+                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
                                     />
                                   ) : field.type === 'boolean' ? (
                                     <div className="relative">
@@ -560,7 +560,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                       value={displayValue}
                                       onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                       placeholder="-"
-                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
+                                      className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
                                     />
                                   )}
                                 </div>
@@ -574,8 +574,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   ) : isEmpty ? (
                                      <span className="text-slate-300 text-xs select-none font-medium italic">Sin definir</span>
                                   ) : field.key === 'agenda_ciudad_sede' ? (
-                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 shadow-sm">
-                                        <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-slate-50 text-slate-800 border border-slate-200 shadow-sm">
+                                        <Building2 className="w-3.5 h-3.5 text-slate-700" />
                                         {value}
                                      </span>
                                   ) : field.key === 'whatsapp' ? (
