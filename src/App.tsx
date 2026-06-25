@@ -15,6 +15,8 @@ import ConversacionesPage from "./pages/ConversacionesPage";
 import Web1ConversacionesPage from "./pages/Web1ConversacionesPage";
 import { AsistenciaPage } from "./pages/AsistenciaPage";
 import { UsuariosPage } from "./pages/UsuariosPage";
+import Diagnosticador from "./pages/Diagnosticador";
+import DiagnosticadorAdmin from "./pages/DiagnosticadorAdmin";
 
 // 1. DEFINICIÓN DE CLAVES (Deben coincidir con los roles del Backend)
 type PageKey = 
@@ -28,7 +30,9 @@ type PageKey =
   | "conversaciones"
   | "web1" 
   | "asistencia"
-  | "usuarios";
+  | "usuarios"
+  | "diagnosticador"
+  | "diagnosticador_admin";
 
 function App() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -47,6 +51,8 @@ function App() {
       "/web1": "web1",
       "/asistencia": "asistencia",
       "/usuarios": "usuarios",
+      "/diagnosticador": "diagnosticador",
+      "/diagnosticador-admin": "diagnosticador_admin",
     }),
     []
   );
@@ -65,6 +71,8 @@ function App() {
       web1: "/web1",
       asistencia: "/asistencia",
       usuarios: "/usuarios",
+      diagnosticador: "/diagnosticador",
+      diagnosticador_admin: "/diagnosticador-admin",
     }),
     []
   );
@@ -192,6 +200,8 @@ function App() {
       case "web1": return <Web1ConversacionesPage />;
       case "asistencia": return <AsistenciaPage />;
       case "usuarios": return <UsuariosPage />;
+      case "diagnosticador": return <Diagnosticador />;
+      case "diagnosticador_admin": return <DiagnosticadorAdmin />;
       default: 
         // En lugar de Agenda, retornamos null o redirección visual si algo falla
         return null;

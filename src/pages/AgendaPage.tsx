@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, 
   ChevronRight, Search, CalendarDays, History, ArrowRightCircle,
@@ -230,7 +230,7 @@ export const AgendaPage: React.FC = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const data = await ClientService.getClients();
+      const data = await ClientService.getAgendaClients();
       const withValidDate = (Array.isArray(data) ? data : []).filter((c) => Boolean(parseAgendaDate((c as any).fecha_agenda)));
       setClients(withValidDate);
       setError(null);
@@ -413,6 +413,15 @@ export const AgendaPage: React.FC = () => {
     future: filteredClientsBase.filter((c) => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))).length,
   }), [filteredClientsBase]);
 
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedSede, dateFilter, customDate]);
+
   const finalDisplayClients = useMemo(() => {
     let filtered = [...filteredClientsBase];
     switch (dateFilter) {
@@ -436,18 +445,24 @@ export const AgendaPage: React.FC = () => {
     return filtered;
   }, [filteredClientsBase, dateFilter, customDate]);
 
+  const totalPages = Math.ceil(finalDisplayClients.length / ITEMS_PER_PAGE);
+  const paginatedClients = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return finalDisplayClients.slice(start, start + ITEMS_PER_PAGE);
+  }, [finalDisplayClients, currentPage]);
+
   const FilterTab = ({ id, label, count, icon: Icon }: any) => {
     const isActive = dateFilter === id;
     return (
       <button
         onClick={() => setDateFilter(id)}
-        className={`flex items-center gap-1.5 ${isActive ? 'wt-filter-pill-active' : 'wt-filter-pill'}`}
+        className={`wt-filter-pill ${isActive ? 'wt-filter-pill-active' : ''} flex items-center gap-1.5`}
       >
-        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-slate-700' : 'opacity-60'}`} />
+        <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'opacity-60'}`} />
         <span>{label}</span>
         {count > 0 && (
           <span className={`ml-1 px-1.5 py-0.5 text-[9px] rounded-full font-bold
-            ${isActive ? 'bg-slate-100 text-slate-800' : 'bg-slate-200/50 text-slate-500'}`}>
+            ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200/50 text-slate-500'}`}>
             {count}
           </span>
         )}
@@ -549,173 +564,269 @@ export const AgendaPage: React.FC = () => {
              ))}
           </div>
         ) : finalDisplayClients.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {finalDisplayClients.map((client) => {
-              const dateObj = parseAgendaDate((client as any).fecha_agenda);
-              const attended = (client as any).asistio_agenda === true;
-              const isSaving = savingRow === client.row_number;
-              const isEtapaReagendar = safeText(client.estado_etapa).toLowerCase() === 'reagendar';
+          <>
+            <div className="grid grid-cols-1 gap-4">
+              {paginatedClients.map((client) => {
+                const dateObj = parseAgendaDate((client as any).fecha_agenda);
+                const attended = (client as any).asistio_agenda === true;
+                const isSaving = savingRow === client.row_number;
+                const isEtapaReagendar = safeText(client.estado_etapa).toLowerCase() === 'reagendar';
 
-              const lastMsg = (client as any).last_msg;
-              const lastMsgDate = (client as any).created; 
-              
-              const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
-              const contactDisplay = isWeb1 ? (safeText((client as any).asignado_a) || 'Visitante') : formatWhatsApp(safeText(client.whatsapp));
-              
-              return (
-                <div
-                  key={client.row_number}
-                  onClick={() => handleOpenClient(client)}
-                  className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[32px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.98] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
-                >
-                  <div className={`absolute left-0 top-0 bottom-0 w-2 transition-colors duration-300 ${attended ? 'bg-emerald-500' : 'bg-slate-200 group-hover:bg-slate-800'}`} />
-                  
-                  <div className="flex flex-col lg:flex-row items-stretch">
+                const lastMsg = (client as any).last_msg;
+                const lastMsgDate = (client as any).created; 
+                
+                const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
+                const contactDisplay = isWeb1 ? (safeText((client as any).asignado_a) || 'Visitante') : formatWhatsApp(safeText(client.whatsapp));
+                
+                return (
+                  <div
+                    key={client.row_number}
+                    onClick={() => handleOpenClient(client)}
+                    className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[32px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.98] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
+                  >
+                    <div className={`absolute left-0 top-0 bottom-0 w-2 transition-colors duration-300 ${attended ? 'bg-emerald-500' : 'bg-slate-200 group-hover:bg-slate-800'}`} />
                     
-                    {/* TIME & ACTIONS */}
-                    <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-6 p-6 lg:w-[160px] lg:bg-slate-50/40 lg:border-r border-white/20">
-                      <div className="text-center">
-                        <span className={`block text-3xl font-black tracking-tighter transition-colors ${attended ? 'text-emerald-600' : 'text-slate-900 group-hover:text-slate-800'}`}>
-                          {dateObj ? getDisplayTime(dateObj) : '--:--'}
-                        </span>
-                        <div className="flex items-center justify-center gap-1.5 mt-1">
-                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
-                            {dateObj ? getDisplayFullDate(dateObj) : ''}
-                          </span>
-                        </div>
-                      </div>
+                    <div className="flex flex-col lg:flex-row items-stretch">
                       
-                      <div className="flex flex-col gap-2 w-full max-w-[120px]">
-                        <button
-                          onClick={(e) => handleToggleAsistencia(client, e)}
-                          disabled={isSaving}
-                          className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
-                            ${attended 
-                              ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-200/50' 
-                              : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50'
-                            } ${isSaving ? 'opacity-50' : ''}`}
-                        >
-                          {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : attended ? <Check className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border-2 border-current" />}
-                          {attended ? 'Asistió' : 'Marcar'}
-                        </button>
-
-                        {!attended && (
+                      {/* TIME & ACTIONS */}
+                      <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-6 p-6 lg:w-[160px] lg:bg-slate-50/40 lg:border-r border-white/20">
+                        <div className="text-center">
+                          <span className={`block text-3xl font-black tracking-tighter transition-colors ${attended ? 'text-emerald-600' : 'text-slate-900 group-hover:text-slate-800'}`}>
+                            {dateObj ? getDisplayTime(dateObj) : '--:--'}
+                          </span>
+                          <div className="flex items-center justify-center gap-1.5 mt-1">
+                            <span className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">
+                              {dateObj ? getDisplayFullDate(dateObj) : ''}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2 w-full max-w-[120px]">
                           <button
-                            onClick={(e) => handleOpenReagendarModal(client, e)}
-                            disabled={isEtapaReagendar}
+                            onClick={(e) => handleToggleAsistencia(client, e)}
+                            disabled={isSaving}
                             className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
-                              ${isEtapaReagendar 
-                                ? 'bg-amber-100 text-amber-600 border-amber-200 opacity-60' 
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-white hover:shadow-md'
-                              }`}
+                              ${attended 
+                                ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-200/50' 
+                                : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50'
+                              } ${isSaving ? 'opacity-50' : ''}`}
                           >
-                            <CalendarClock className="w-3.5 h-3.5" />
-                            {isEtapaReagendar ? 'Pend.' : 'Reagend.'}
+                            {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : attended ? <Check className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border-2 border-current" />}
+                            {attended ? 'Asistió' : 'Marcar'}
                           </button>
-                        )}
-                      </div>
-                    </div>
 
-                    {/* MAIN CONTENT */}
-                    <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                             <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight truncate max-w-[300px]">
-                               {safeText(client.nombre) || 'Sin Nombre'}
-                             </h3>
-                             {isWeb1 && (
-                                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-blue-100 text-blue-600 border border-blue-200 uppercase tracking-widest shadow-sm">
-                                  WEB
-                                </span>
-                             )}
-                             <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-widest shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}>
-                                {safeText(client.estado_etapa).replace(/_/g, ' ')}
-                             </span>
-                          </div>
-                          
-                          <div className="flex flex-wrap items-center gap-3 mt-4">
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
-                              <Smartphone className="w-3.5 h-3.5 text-slate-400" />
-                              <span className="truncate max-w-[120px]">{safeText(client.modelo) || 'Modelo no esp.'}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{getClientSede(client)}</span>
-                            </div>
-                            {safeText(client.source) && (
-                              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
-                                 <Layers className="w-3.5 h-3.5 text-slate-400" />
-                                 <span className="truncate max-w-[100px]">{safeText(client.source)}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {(safeText(client.intencion) || safeText(client.notas)) && (
-                        <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                           <FileText className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
-                           <p className="text-xs text-slate-600 leading-relaxed italic line-clamp-2">
-                             {safeText(client.intencion || client.notas)}
-                           </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* MESSAGES & MANUAL ACTIONS */}
-                    <div className="w-full lg:w-[320px] bg-slate-50/50 p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6">
-                      <div className="space-y-3">
-                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block ml-1">Último Mensaje</span>
-                         {lastMsg ? (
-                            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative group/msg">
-                               <div className="flex justify-between items-center mb-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-slate-800 animate-pulse" />
-                                  <span className="text-[9px] font-bold text-slate-400 uppercase">{formatMsgTime(lastMsgDate)}</span>
-                               </div>
-                               <p className="text-[11px] text-slate-700 font-medium leading-relaxed line-clamp-3">"{lastMsg}"</p>
-                            </div>
-                         ) : (
-                            <div className="h-20 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl">
-                               <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Sin actividad</span>
-                            </div>
-                         )}
-                      </div>
-
-                      <div className="flex items-center gap-2 justify-end">
-                        {!attended && (
+                          {!attended && (
                             <button
-                                onClick={(e) => handleManualSetReagendar(client, e)}
-                                disabled={isEtapaReagendar}
-                                className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border
-                                    ${isEtapaReagendar
-                                        ? 'bg-amber-50 text-amber-500 border-amber-100 opacity-50'
-                                        : 'bg-white text-slate-400 border-slate-100 hover:text-slate-800 hover:border-slate-300 hover:shadow-md'
-                                    }`}
-                                title="Editar manualmente"
+                              onClick={(e) => handleOpenReagendarModal(client, e)}
+                              disabled={isEtapaReagendar}
+                              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
+                                ${isEtapaReagendar 
+                                  ? 'bg-amber-100 text-amber-600 border-amber-200 opacity-60' 
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-white hover:shadow-md'
+                                }`}
                             >
-                                <PenBox className="w-4 h-4" />
+                              <CalendarClock className="w-3.5 h-3.5" />
+                              {isEtapaReagendar ? 'Pend.' : 'Reagend.'}
                             </button>
-                        )}
+                          )}
+                        </div>
+                      </div>
 
-                        <button
-                          onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp), e, client)}
-                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all border tracking-wide
-                              ${isWeb1 
-                              ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-200/50 hover:bg-blue-700'
-                              : 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-200/50 hover:bg-emerald-700'
-                              }`}
-                        >
-                          {isWeb1 ? <Globe className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
-                          {contactDisplay}
-                        </button>
+                      {/* MAIN CONTENT */}
+                      <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-3 mb-2 flex-wrap">
+                               <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight truncate max-w-[300px]">
+                                 {safeText(client.nombre) || 'Sin Nombre'}
+                               </h3>
+                               {isWeb1 && (
+                                  <span className="px-2 py-0.5 rounded-lg text-[9px] font-black bg-blue-100 text-blue-600 border border-blue-200 uppercase tracking-widest shadow-sm">
+                                    WEB
+                                  </span>
+                               )}
+                               <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-widest shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}>
+                                  {safeText(client.estado_etapa).replace(/_/g, ' ')}
+                               </span>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-3 mt-4">
+                              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                                <Smartphone className="w-3.5 h-3.5 text-slate-400" />
+                                <span className="truncate max-w-[120px]">{safeText(client.modelo) || 'Modelo no esp.'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{getClientSede(client)}</span>
+                              </div>
+                              {safeText(client.source) && (
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                                   <Layers className="w-3.5 h-3.5 text-slate-400" />
+                                   <span className="truncate max-w-[100px]">{safeText(client.source)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {(safeText(client.intencion) || safeText(client.notas)) && (
+                          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                             <FileText className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+                             <p className="text-xs text-slate-600 leading-relaxed italic line-clamp-2">
+                               {safeText(client.intencion || client.notas)}
+                             </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* MESSAGES & MANUAL ACTIONS */}
+                      <div className="w-full lg:w-[320px] bg-slate-50/50 p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6">
+                        <div className="space-y-3">
+                           <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block ml-1">Último Mensaje</span>
+                           {lastMsg ? (
+                              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative group/msg">
+                                 <div className="flex justify-between items-center mb-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-800 animate-pulse" />
+                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{formatMsgTime(lastMsgDate)}</span>
+                                 </div>
+                                 <p className="text-[11px] text-slate-700 font-medium leading-relaxed line-clamp-3">"{lastMsg}"</p>
+                              </div>
+                           ) : (
+                              <div className="h-20 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl">
+                                 <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Sin actividad</span>
+                              </div>
+                           )}
+                        </div>
+
+                        <div className="flex items-center gap-2 justify-end">
+                          {!attended && (
+                              <button
+                                  onClick={(e) => handleManualSetReagendar(client, e)}
+                                  disabled={isEtapaReagendar}
+                                  className={`flex items-center justify-center w-10 h-10 rounded-xl transition-all border
+                                      ${isEtapaReagendar
+                                          ? 'bg-amber-50 text-amber-500 border-amber-100 opacity-50'
+                                          : 'bg-white text-slate-400 border-slate-100 hover:text-slate-800 hover:border-slate-300 hover:shadow-md'
+                                      }`}
+                                  title="Editar manualmente"
+                              >
+                                  <PenBox className="w-4 h-4" />
+                              </button>
+                          )}
+
+                          <button
+                            onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp), e, client)}
+                            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all border tracking-wide
+                                ${isWeb1 
+                                ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-200/50 hover:bg-blue-700'
+                                : 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-200/50 hover:bg-emerald-700'
+                                }`}
+                          >
+                            {isWeb1 ? <Globe className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+                            {contactDisplay}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+            {/* PAGINACIÓN */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 px-5 py-4 bg-white/60 backdrop-blur-md border border-white/40 rounded-[24px] shadow-lg">
+                <div className="text-xs font-black uppercase text-slate-500 tracking-wider">
+                  Mostrando <span className="text-slate-800 font-bold">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, finalDisplayClients.length)}</span> a{' '}
+                  <span className="text-slate-800 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, finalDisplayClients.length)}</span> de{' '}
+                  <span className="text-slate-800 font-bold">{finalDisplayClients.length}</span> registros
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
+                  >
+                    &larr;
+                  </button>
+                  
+                  {(() => {
+                    const pages = [];
+                    const maxVisible = 5;
+                    let start = Math.max(1, currentPage - 2);
+                    let end = Math.min(totalPages, start + maxVisible - 1);
+                    
+                    if (end - start + 1 < maxVisible) {
+                      start = Math.max(1, end - maxVisible + 1);
+                    }
+                    
+                    if (start > 1) {
+                      pages.push(
+                        <button
+                          key={1}
+                          onClick={() => setCurrentPage(1)}
+                          className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                            currentPage === 1
+                              ? 'bg-slate-900 text-white shadow-md'
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          1
+                        </button>
+                      );
+                      if (start > 2) {
+                        pages.push(<span key="dots-prev" className="px-2 text-slate-400 font-black text-xs">...</span>);
+                      }
+                    }
+                    
+                    for (let p = start; p <= end; p++) {
+                      pages.push(
+                        <button
+                          key={p}
+                          onClick={() => setCurrentPage(p)}
+                          className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                            currentPage === p
+                              ? 'bg-slate-900 text-white shadow-md'
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      );
+                    }
+                    
+                    if (end < totalPages) {
+                      if (end < totalPages - 1) {
+                        pages.push(<span key="dots-next" className="px-2 text-slate-400 font-black text-xs">...</span>);
+                      }
+                      pages.push(
+                        <button
+                          key={totalPages}
+                          onClick={() => setCurrentPage(totalPages)}
+                          className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                            currentPage === totalPages
+                              ? 'bg-slate-900 text-white shadow-md'
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {totalPages}
+                        </button>
+                      );
+                    }
+                    
+                    return pages;
+                  })()}
+                  
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
+                  >
+                    &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in duration-700 relative z-10">
             <div className="w-24 h-24 rounded-[40px] bg-white shadow-xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">

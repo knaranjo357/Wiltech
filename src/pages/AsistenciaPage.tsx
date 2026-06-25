@@ -51,7 +51,7 @@ export const AsistenciaPage: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await ClientService.getClients();
+      const data = await ClientService.getAsistenciaClients();
       const arr = Array.isArray(data) ? (data as Client[]) : [];
       setClients(arr.filter(isAssistanceTarget));
     } catch (e) {
@@ -208,6 +208,21 @@ export const AsistenciaPage: React.FC = () => {
 
   }, [clients, sedeFilter, search, sortOption, statusFilter]);
 
+  // Paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, sedeFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const paginatedClients = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(start, start + ITEMS_PER_PAGE);
+  }, [filtered, currentPage]);
+
   const handleWhatsAppClick = (whatsapp: string, e: React.MouseEvent) => {
     e.stopPropagation();
     window.open(`https://wa.me/${safeText(whatsapp).replace('@s.whatsapp.net', '')}`, '_blank');
@@ -345,171 +360,253 @@ export const AsistenciaPage: React.FC = () => {
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Sincronizando Ayuda...</p>
            </div>
          ) : filtered.length > 0 ? (
-           <div className="grid grid-cols-1 gap-5">
-             {filtered.map((client) => {
-               const botActive = isBotOn(client.consentimiento_contacto);
-               const isGestionado = String(client.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA;
-               const isSaving = savingRow === client.row_number;
-               
-               return (
-                 <div 
-                   key={client.row_number}
-                   onClick={() => setViewClient(client)}
-                   className="group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[28px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.995] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500"
-                 >
-                   {/* Status Strip */}
-                   <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-500 ${isGestionado ? 'bg-emerald-500' : 'bg-rose-500 animate-pulse'}`} />
+            <>
+              <div className="grid grid-cols-1 gap-5">
+                {paginatedClients.map((client) => {
+                  const botActive = isBotOn(client.consentimiento_contacto);
+                  const isGestionado = String(client.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA;
+                  const isSaving = savingRow === client.row_number;
 
-                   <div className="flex flex-col lg:flex-row items-stretch">
-                     
-                     {/* LEFT: Client Branding & Identity */}
-                     <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-3 p-5 lg:w-[150px] lg:bg-slate-50/40 lg:border-r border-white/20">
-                        <div className="relative">
-                           <div className={`absolute inset-0 blur-lg opacity-20 ${isGestionado ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                           <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black shadow-lg relative z-10 border border-white/20 transition-transform group-hover:rotate-6
-                              ${isGestionado 
-                                ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white' 
-                                : 'bg-gradient-to-br from-rose-500 to-rose-700 text-white'}
-                           `}>
-                              {safeText(client.nombre)?.[0]?.toUpperCase() || '?'}
-                           </div>
-                        </div>
+                  const lastMsg = client.last_msg;
+                  const lastMsgDate = client.created; 
+                  
+                  return (
+                    <div
+                      key={client.row_number}
+                      onClick={() => setViewClient(client)}
+                      className="group relative rounded-[28px] bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.99] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500"
+                    >
+                      {/* Left border strip */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-300
+                         ${isGestionado 
+                            ? 'bg-emerald-500' 
+                            : 'bg-rose-500 animate-pulse-soft'}`} 
+                      />
 
-                        <div className="flex flex-col gap-1.5 w-full max-w-[100px]">
-                           <div className={`px-2 py-1 rounded-lg border text-[8px] font-black uppercase tracking-widest text-center shadow-sm
-                              ${isGestionado 
-                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-                                : 'bg-rose-50 text-rose-600 border-rose-100'}
-                           `}>
-                              {isGestionado ? 'Gestionado' : 'Pendiente'}
-                           </div>
-                           
-                           {isSaving && (
-                             <div className="flex items-center justify-center gap-1 text-[8px] font-black text-rose-500 animate-pulse">
-                                <RefreshCw className="w-2.5 h-2.5 animate-spin"/> AGUARDA
-                             </div>
-                           )}
-                        </div>
-                     </div>
+                      <div className="flex flex-col lg:flex-row items-stretch">
+                         {/* LEFT COLUMN: Avatar / Basic Status */}
+                         <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-4 p-6 lg:w-[150px] lg:bg-slate-50/40 lg:border-r border-white/20">
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm border border-white
+                               ${isGestionado 
+                                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-100' 
+                                  : 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-100'}`}
+                            >
+                               {client.nombre ? client.nombre.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            
+                            <div className="flex lg:flex-col items-center gap-1.5">
+                               <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider shadow-sm border
+                                  ${isGestionado 
+                                     ? 'bg-emerald-500 text-white border-emerald-400' 
+                                     : 'bg-rose-500 text-white border-rose-400 animate-pulse'}`}
+                               >
+                                  {isGestionado ? 'Gestionado' : 'Pendiente'}
+                               </span>
+                               
+                               {isSaving && (
+                                  <span className="text-[9px] font-bold text-slate-400 animate-pulse mt-1">
+                                     Guardando...
+                                  </span>
+                               )}
+                            </div>
+                         </div>
 
-                     {/* CENTER: Main info & Content */}
-                     <div className="flex-1 p-6 flex flex-col justify-center min-w-0">
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                           <div className="min-w-0 flex-1">
-                               <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                                  <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-rose-600 transition-colors truncate">
-                                     {safeText(client.nombre) || 'Usuario sin nombre'}
-                                  </h3>
-                                  {safeText((client as any).source) && (
-                                     <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-100/80 text-slate-500 border border-slate-200 uppercase tracking-widest shadow-sm">
-                                        {safeText((client as any).source)}
-                                     </span>
+                         {/* CENTER COLUMN: Core Ticket info */}
+                         <div className="flex-1 p-6 flex flex-col justify-center gap-3.5">
+                            <div>
+                               <h3 className="text-lg md:text-xl font-black text-slate-900 group-hover:text-rose-500 transition-colors duration-300">
+                                  {client.nombre || 'Sin Nombre'}
+                               </h3>
+                               
+                               <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  <span className="text-xs font-bold text-slate-400">
+                                     {formatWhatsApp(client.whatsapp as any)}
+                                  </span>
+                                  
+                                  {((client as any).subscriber_id) && (
+                                     <>
+                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-slate-400 uppercase">
+                                           <Fingerprint size={10} /> ID: {String((client as any).subscriber_id).substring(0, 12)}...
+                                        </span>
+                                     </>
                                   )}
                                </div>
-                               
-                               <div className="flex flex-wrap items-center gap-3 text-xs">
-                                  <div className="flex items-center gap-1.5 text-slate-500 font-bold group/val" onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}>
-                                     <Phone className="w-3 h-3 text-rose-400 group-hover/val:scale-110 transition-transform" />
-                                     <span className="font-mono tracking-tight group-hover/val:text-rose-600 transition-colors">{formatWhatsApp(client.whatsapp as any)}</span>
+                            </div>
+
+                            {/* Solicitud Description box */}
+                            {client.last_msg && (
+                               <div className="p-4 rounded-2xl bg-rose-50/30 border border-rose-100/50 text-xs leading-relaxed text-slate-700">
+                                  <div className="flex items-center gap-1.5 mb-1.5 text-rose-800 font-bold uppercase text-[9px] tracking-wider">
+                                     <MessageSquare size={12} /> Solicitud / Problema
                                   </div>
-                                  <div className="h-3 w-[1px] bg-slate-200" />
-                                  <div className="flex items-center gap-1.5 text-slate-400 font-bold">
-                                     <Fingerprint className="w-3 h-3 text-slate-300" />
-                                     <span className="font-mono text-[9px]">ID: {client.subscriber_id || 'N/A'}</span>
-                                  </div>
+                                  <p className="font-semibold italic">"{client.last_msg}"</p>
                                </div>
-                           </div>
-                        </div>
+                            )}
 
-                        {/* Problems & Context Boxes */}
-                        <div className="space-y-3">
-                           <div className="bg-rose-50/30 p-4 rounded-2xl border border-rose-100/20 relative group/box">
-                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-rose-100 text-rose-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-rose-200">
-                                 Solicitud / Problema
-                              </span>
-                              <div className="flex items-start gap-3">
-                                 <MessageSquare className="w-4 h-4 text-rose-300 shrink-0 mt-0.5" />
-                                 <p className="text-[12px] text-slate-700 leading-relaxed font-medium line-clamp-2 italic">
-                                    "{safeText(client.last_input_text) || safeText(client.intencion) || safeText(client.notas) || 'Sin mensaje previo...'}"
-                                 </p>
-                              </div>
-                           </div>
+                            {/* Resolution Notes box if it exists */}
+                            {client.notas && (
+                               <div className="p-4 rounded-2xl bg-emerald-50/20 border border-emerald-100/50 text-xs leading-relaxed text-slate-600">
+                                  <div className="flex items-center gap-1.5 mb-1.5 text-emerald-800 font-bold uppercase text-[9px] tracking-wider">
+                                     <ClipboardCheck size={12} /> Notas de Resolución
+                                  </div>
+                                  <p className="font-medium whitespace-pre-wrap max-h-[100px] overflow-y-auto">{client.notas}</p>
+                                </div>
+                            )}
+                         </div>
 
-                           {isGestionado && safeText(client.notas) && (
-                              <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100/20 relative animate-in zoom-in-95 duration-500">
-                                 <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-emerald-100 text-emerald-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-emerald-200">
-                                    Notas de Resolución
-                                 </span>
-                                 <div className="flex items-start gap-3">
-                                    <ClipboardCheck className="w-4 h-4 text-emerald-300 shrink-0 mt-0.5" />
-                                    <p className="text-[12px] text-emerald-800 leading-relaxed font-semibold whitespace-pre-wrap line-clamp-2">
-                                       {safeText(client.notas)}
-                                    </p>
-                                 </div>
-                              </div>
-                           )}
-                        </div>
-                     </div>
+                         {/* RIGHT COLUMN: Metadata & Actions */}
+                         <div className="p-6 lg:w-[260px] lg:bg-slate-50/20 lg:border-l border-white/20 flex flex-col justify-between gap-4">
+                            <div className="space-y-3">
+                               {/* Sede indicator */}
+                               <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[10px] font-bold text-slate-600 w-fit">
+                                  <MapPin size={12} className="text-slate-400" />
+                                  <span>{safeText(client.agenda_ciudad_sede) || 'Sede sin definir'}</span>
+                               </div>
 
-                     {/* RIGHT: Meta info & Actions */}
-                     <div className={`w-full lg:w-[260px] p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6 ${isGestionado ? 'bg-emerald-50/10' : 'bg-rose-50/10'}`}>
-                        <div className="space-y-3">
-                           <div className="flex flex-col gap-2">
-                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
-                                 <MapPin size={12} className="text-rose-400" />
-                                 <span className="text-[9px] font-black uppercase tracking-wider truncate">{safeText(client.agenda_ciudad_sede) || 'Sede sin definir'}</span>
-                              </div>
-                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
-                                 <Clock size={12} className="text-rose-400" />
-                                 <div className="flex flex-col overflow-hidden">
-                                    <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest leading-none mb-0.5">Actividad</span>
-                                    <span className="text-[9px] font-black uppercase tracking-wider truncate">{formatTimeDate(client.last_msg || client.created)}</span>
-                                 </div>
-                              </div>
-                           </div>
-                        </div>
+                               {/* Activity timestamp */}
+                               <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-400">
+                                  <Clock size={12} />
+                                  <span>Activo {lastMsgDate ? formatTimeDate(lastMsgDate) : 'hace tiempo'}</span>
+                               </div>
+                            </div>
 
-                        <div className="flex flex-col gap-2">
-                           <button
-                              onClick={(e) => handleMainActionClick(client, e)}
-                              disabled={isSaving}
-                              className={`flex items-center justify-center gap-2 w-full py-3 rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all border shadow-md active:scale-95
-                                 ${isGestionado 
-                                   ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
-                                   : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
-                              `}
-                           >
-                              {isGestionado ? <RefreshCw className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                              {isGestionado ? 'Reabrir Ticket' : 'Resolver'}
-                           </button>
+                            <div className="space-y-2">
+                               <button 
+                                  onClick={(e) => handleMainActionClick(client, e)}
+                                  disabled={isSaving}
+                                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 shadow-sm
+                                     ${isGestionado 
+                                       ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
+                                       : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
+                                  `}
+                               >
+                                  {isGestionado ? <RefreshCw className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                  {isGestionado ? 'Reabrir Ticket' : 'Resolver'}
+                               </button>
 
-                           <div className="grid grid-cols-2 gap-2">
-                              <button 
-                                 onClick={(e) => handleToggleBot(client, e)} 
-                                 className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
-                                    ${botActive 
-                                       ? 'bg-white text-slate-800 border-slate-200 hover:shadow-sm' 
-                                       : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
-                                 `}
-                              >
-                                 <Bot size={12} className={botActive ? 'text-slate-700' : 'text-rose-400'} /> 
-                                 {botActive ? 'Bot ON' : 'Bot OFF'}
-                              </button>
-                              
-                              <button 
-                                 onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
-                                 className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-[18px] text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
-                              >
-                                 <Phone size={12} /> WhatsApp
-                              </button>
-                           </div>
-                        </div>
-                     </div>
-                   </div>
-                 </div>
-               );
-             })}
-           </div>
+                               <div className="grid grid-cols-2 gap-2">
+                                  <button 
+                                     onClick={(e) => handleToggleBot(client, e)} 
+                                     className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
+                                        ${botActive 
+                                           ? 'bg-white text-slate-800 border-slate-200 hover:shadow-sm' 
+                                           : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
+                                     `}
+                                  >
+                                     <Bot size={12} className={botActive ? 'text-slate-700' : 'text-rose-400'} /> 
+                                     {botActive ? 'Bot ON' : 'Bot OFF'}
+                                  </button>
+                                  
+                                  <button 
+                                     onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
+                                     className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-[18px] text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                                  >
+                                     <Phone size={12} /> WhatsApp
+                                  </button>
+                               </div>
+                            </div>
+                         </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* PAGINACIÓN */}
+              {totalPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 px-5 py-4 bg-white/60 backdrop-blur-md border border-white/40 rounded-[24px] shadow-lg">
+                  <div className="text-xs font-black uppercase text-slate-500 tracking-wider">
+                    Mostrando <span className="text-slate-800 font-bold">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filtered.length)}</span> a{' '}
+                    <span className="text-slate-800 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)}</span> de{' '}
+                    <span className="text-slate-800 font-bold">{filtered.length}</span> registros
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
+                    >
+                      &larr;
+                    </button>
+                    
+                    {(() => {
+                      const pages = [];
+                      const maxVisible = 5;
+                      let start = Math.max(1, currentPage - 2);
+                      let end = Math.min(totalPages, start + maxVisible - 1);
+                      
+                      if (end - start + 1 < maxVisible) {
+                        start = Math.max(1, end - maxVisible + 1);
+                      }
+                      
+                      if (start > 1) {
+                        pages.push(
+                          <button
+                            key={1}
+                            onClick={() => setCurrentPage(1)}
+                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                              currentPage === 1
+                                ? 'bg-slate-900 text-white shadow-md'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            1
+                          </button>
+                        );
+                        if (start > 2) {
+                          pages.push(<span key="dots-prev" className="px-2 text-slate-400 font-black text-xs">...</span>);
+                        }
+                      }
+                      
+                      for (let p = start; p <= end; p++) {
+                        pages.push(
+                          <button
+                            key={p}
+                            onClick={() => setCurrentPage(p)}
+                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                              currentPage === p
+                                ? 'bg-slate-900 text-white shadow-md'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      }
+                      
+                      if (end < totalPages) {
+                        if (end < totalPages - 1) {
+                          pages.push(<span key="dots-next" className="px-2 text-slate-400 font-black text-xs">...</span>);
+                        }
+                        pages.push(
+                          <button
+                            key={totalPages}
+                            onClick={() => setCurrentPage(totalPages)}
+                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
+                              currentPage === totalPages
+                                ? 'bg-slate-900 text-white shadow-md'
+                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            {totalPages}
+                          </button>
+                        );
+                      }
+                      
+                      return pages;
+                    })()}
+                    
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
+                    >
+                      &rarr;
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
          ) : (
            <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in duration-700 relative">
               <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">

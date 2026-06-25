@@ -49,6 +49,26 @@ export class ApiService {
     return this.handle<T>(response);
   }
 
+  static async put<T>(endpoint: string, data: any): Promise<T> {
+    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify(data),
+      mode: 'cors',
+    });
+    return this.handle<T>(response);
+  }
+
+  static async delete<T>(endpoint: string, data?: any): Promise<T> {
+    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
+      method: 'DELETE',
+      headers: this.getHeaders(),
+      ...(data ? { body: JSON.stringify(data) } : {}),
+      mode: 'cors',
+    });
+    return this.handle<T>(response);
+  }
+
   /** Si necesitas subir archivos (FormData) sin 'Content-Type' automático */
   static async postForm<T>(endpoint: string, form: FormData): Promise<T> {
     const token = AuthService.getToken();

@@ -17,7 +17,7 @@ import {
 // Roles disponibles
 const AVAILABLE_ROLES = [
   'admin', 'whatsapp', 'precios', 'crm', 'conversaciones',
-  'web1', 'agenda', 'asistencia', 'envios', 'resultados', 'agente'
+  'web1', 'agenda', 'asistencia', 'envios', 'resultados', 'agente', 'diagnosticador'
 ];
 
 // Helper para colores de roles
@@ -28,6 +28,7 @@ const getRoleStyle = (role: string) => {
     case 'crm': return 'bg-blue-100 text-blue-700 border-blue-200';
     case 'precios': return 'bg-amber-100 text-amber-700 border-amber-200';
     case 'resultados': return 'bg-rose-100 text-rose-700 border-rose-200';
+    case 'diagnosticador': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
     default: return 'bg-slate-100 text-slate-600 border-slate-200';
   }
 };

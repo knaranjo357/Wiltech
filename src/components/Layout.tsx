@@ -17,6 +17,8 @@ import {
   LifeBuoy,
   Globe,
   UserCog,
+  ClipboardCheck,
+  Sliders,
 } from "lucide-react";
 
 interface NavItem {
@@ -52,7 +54,9 @@ const navigationItems: NavItem[] = [
   { id: "asistencia", name: "Asistencia", icon: LifeBuoy, group: "ops" },
   { id: "envios", name: "Envíos", icon: Truck, group: "ops" },
   { id: "resultados", name: "Resultados", icon: BarChart3, group: "ops" },
+  { id: "diagnosticador", name: "Realizar Diagnóstico", icon: ClipboardCheck, group: "ops" },
   { id: "agente", name: "Agente IA", icon: BrainCircuit, group: "config" },
+  { id: "diagnosticador_admin", name: "AI Diagnosticador", icon: Sliders, group: "config" },
   { id: "usuarios", name: "Usuarios", icon: UserCog, group: "config" },
 ];
 
