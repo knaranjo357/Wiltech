@@ -421,6 +421,15 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                ) : (
                  <>
                    <button
+                     onClick={() => repairs[0] ? openRepairDiagnostic(repairs[0]) : void handleCreateRepair()}
+                     disabled={repairLoading}
+                     className="btn-primary px-4"
+                     title={repairs[0] ? 'Continuar reparación existente' : 'Crear ingreso y realizar diagnóstico'}
+                   >
+                     {repairs[0] ? <Play className="w-4 h-4" /> : <Wrench className="w-4 h-4" />}
+                     <span className="hidden md:inline">{repairLoading ? 'Procesando...' : repairs[0] ? 'Continuar diagnóstico' : 'Dar ingreso'}</span>
+                   </button>
+                   <button
                      onClick={() => { setIsEditing(true); setEditData(c); }}
                      className="btn-secondary"
                    >

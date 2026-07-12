@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, RefreshCw, Eye, X, Image as ImageIcon, Play, ClipboardCheck, Smartphone, User, MapPin, Wrench, Clock, ShieldCheck, Hash, Edit3, Save } from 'lucide-react';
+import { Search, RefreshCw, Eye, X, Image as ImageIcon, Play, ClipboardCheck, Smartphone, User, MapPin, Wrench, Clock, ShieldCheck, Hash, Edit3, Save, Bot, Send, Loader } from 'lucide-react';
 import { ReparacionService } from '../services/reparacionService';
 import type { Reparacion } from '../types/reparacion';
-import { flowApi } from '../services/diagnosticadorService';
+import { agenteApi, flowApi } from '../services/diagnosticadorService';
 import type { FlowData } from '../types/diagnosticador';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const labelFor = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
@@ -89,6 +91,22 @@ const getStepTitle = (repair: Reparacion, flows: FlowData[]) => {
   return flow?.configuracion.steps.find(step => step.id === repair.paso_actual)?.title || repair.paso_actual || 'Sin definir';
 };
 
+const parseAgentResponse = (response: any): string => {
+  if (!response) return 'No se recibió respuesta del agente.';
+  const value = Array.isArray(response) ? response[0] : response;
+  const text = typeof value === 'string' ? value : value?.respuesta || value?.response || value?.output || value?.text || JSON.stringify(value);
+  return String(text).replace(/\\n/g, '\n');
+};
+
+const getRepairAgentContext = (repair: Reparacion, flows: FlowData[]) => ({
+  instruccion: 'Responde como asistente técnico de esta reparación. Usa toda la información disponible y no inventes datos.',
+  reparacion: { id: repair.id, numero_orden: repair.numero_orden, id_dispositivo: repair.id_dispositivo, id_diagrama: repair.id_diagrama, diagrama: repair.flow_name, version_diagrama: repair.version_diagrama, estado: repair.estado, estado_diagnostico: repair.estado_diagnostico, paso_actual: getStepTitle(repair, flows), tecnico_asignado: repair.tecnico_asignado, sede: repair.sede, prioridad: repair.prioridad, fecha_ingreso: repair.fecha_ingreso, fecha_promesa: repair.fecha_promesa, fecha_entrega: repair.fecha_entrega },
+  cliente_y_crm: { crm_row_number: repair.crm_row_number, crm_source: repair.crm_source, whatsapp: repair.crm_whatsapp, ...repair.crm_data },
+  equipo: repair.datos_dispositivo || {},
+  recepcion_y_falla: repair.detalle_reparacion || {},
+  diagnostico: Object.fromEntries(getDiagnosisItems(repair, flows).map(item => [item.label, item.visible])),
+  evidencias: (repair.multimedia || []).map(media => ({ pregunta: media.field_key, nombre: media.nombre_archivo, descripcion: media.descripcion, tipo: media.mime_type, url: media.archivo_url })),
+});
 export default function ReparacionesPage() {
   const [rows, setRows] = useState<Reparacion[]>([]);
   const [selected, setSelected] = useState<Reparacion | null>(null);
@@ -99,6 +117,11 @@ export default function ReparacionesPage() {
   const [editingAnswers, setEditingAnswers] = useState(false);
   const [answerDraft, setAnswerDraft] = useState<Record<string, any>>({});
   const [answerSaving, setAnswerSaving] = useState(false);
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [agentMessages, setAgentMessages] = useState<Array<{ sender: 'user' | 'agent'; text: string }>>([]);
+  const [agentInput, setAgentInput] = useState('');
+  const [agentLoading, setAgentLoading] = useState(false);
+  const [agentSessionId, setAgentSessionId] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -125,6 +148,10 @@ export default function ReparacionesPage() {
     if (!selected) return;
     setAnswerDraft(Object.fromEntries(getDiagnosisItems(selected, flows).map(item => [item.key, item.raw])));
     setEditingAnswers(false);
+    setAgentSessionId('reparacion_' + selected.id + '_' + Date.now());
+    setAgentMessages([{ sender: 'agent', text: 'Hola. Ya tengo el contexto completo de esta reparación. Puedes preguntarme por el equipo, la falla, las respuestas del diagnóstico o las evidencias.' }]);
+    setAgentInput('');
+    setAgentOpen(true);
   }, [selected?.id, flows]);
 
   const saveDiagnosticAnswers = async () => {
@@ -158,6 +185,24 @@ export default function ReparacionesPage() {
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
+  const sendAgentMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const message = agentInput.trim();
+    if (!selected || !message || agentLoading) return;
+    const history = agentMessages.map(item => ({ role: item.sender === 'user' ? 'user' : 'assistant', content: item.text }));
+    setAgentInput('');
+    setAgentMessages(current => [...current, { sender: 'user', text: message }]);
+    setAgentLoading(true);
+    try {
+      const response = await agenteApi.chat({ mensaje: message, sessionId: agentSessionId, historial: history, informacion_contexto: getRepairAgentContext(selected, flows) });
+      setAgentMessages(current => [...current, { sender: 'agent', text: parseAgentResponse(response) }]);
+    } catch (cause) {
+      console.error('Error al consultar el agente de reparaciones:', cause);
+      setAgentMessages(current => [...current, { sender: 'agent', text: 'No pude conectarme con el agente en este momento. Intenta nuevamente.' }]);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
   return (
     <div className="page-container flex flex-col gap-6">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -200,8 +245,8 @@ export default function ReparacionesPage() {
       </div>
 
       {selected && createPortal((
-        <div className="fixed inset-0 z-[180] flex items-start justify-center bg-slate-950/70 p-0 backdrop-blur-md sm:items-center sm:p-5" onMouseDown={() => setSelected(null)}>
-          <div className="flex h-full min-h-0 w-full max-w-6xl flex-col overflow-hidden bg-slate-50 shadow-2xl sm:h-[calc(100vh-2.5rem)] sm:max-h-[900px] sm:rounded-[2rem]" onMouseDown={event => event.stopPropagation()}>
+        <div className="fixed inset-0 z-[180] bg-slate-100">
+          <div className="flex h-screen min-h-0 w-screen flex-col overflow-hidden bg-slate-50">
             <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
@@ -212,6 +257,9 @@ export default function ReparacionesPage() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
+                  <button onClick={() => setAgentOpen(current => !current)} className={agentOpen ? 'flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-violet-700' : 'flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-600'}>
+                    <Bot className="h-4 w-4" /><span className="hidden sm:inline">Agente IA</span>
+                  </button>
                   <button onClick={() => openDiagnostic(selected)} className="flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-white sm:px-4">
                     <ClipboardCheck className="h-4 w-4" /><span className="hidden sm:inline">Continuar diagnóstico</span><span className="sm:hidden">Diagnóstico</span>
                   </button>
@@ -238,7 +286,7 @@ export default function ReparacionesPage() {
               ))}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+            <div className="relative flex min-h-0 flex-1 overflow-hidden"><div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
               <div className="grid gap-5 lg:grid-cols-12">
                 <main className="space-y-5 lg:col-span-8">
                   <InfoSection title="Cliente" icon={User} accent="blue" data={{ nombre: selected.crm_data?.nombre, whatsapp: selected.crm_whatsapp || selected.crm_data?.whatsapp, ciudad: selected.crm_data?.ciudad, fecha_agenda: selected.crm_data?.fecha_agenda, asignado_a: selected.crm_data?.asignado_a }} />
@@ -349,6 +397,37 @@ export default function ReparacionesPage() {
                 </aside>
               </div>
             </div>
+            {agentOpen && (
+              <aside className="absolute inset-0 z-30 flex min-h-0 flex-col border-l border-slate-200 bg-white shadow-2xl md:relative md:inset-auto md:w-[410px] md:shrink-0 md:shadow-none">
+                <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-xl bg-violet-100 p-2.5 text-violet-700"><Bot className="h-5 w-5" /></div>
+                    <div><h3 className="text-sm font-black text-slate-900">Agente técnico IA</h3><p className="text-[10px] font-semibold text-emerald-600">Contexto completo de la reparación</p></div>
+                  </div>
+                  <button onClick={() => setAgentOpen(false)} className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"><X className="h-4 w-4" /></button>
+                </header>
+                <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50 p-4">
+                  {agentMessages.map((message, index) => (
+                    <div key={message.sender + '-' + index} className={'flex ' + (message.sender === 'user' ? 'justify-end' : 'justify-start')}>
+                      <div className={'max-w-[88%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ' + (message.sender === 'user' ? 'rounded-br-md bg-slate-950 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-700')}>
+                        {message.sender === 'agent' ? (
+                          <div className="[&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_strong]:font-black [&_ul]:list-disc [&_ul]:pl-5"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.text}</ReactMarkdown></div>
+                        ) : message.text}
+                      </div>
+                    </div>
+                  ))}
+                  {agentLoading && <div className="flex items-center gap-2 text-xs font-semibold text-violet-600"><Loader className="h-4 w-4 animate-spin" /> Analizando la reparación...</div>}
+                </div>
+                <form onSubmit={sendAgentMessage} className="border-t border-slate-200 bg-white p-4">
+                  <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-violet-400">
+                    <textarea value={agentInput} onChange={event => setAgentInput(event.target.value)} placeholder="Pregunta cualquier cosa sobre esta reparación..." rows={2} className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none" />
+                    <button type="submit" disabled={!agentInput.trim() || agentLoading} className="rounded-xl bg-violet-600 p-3 text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" /></button>
+                  </div>
+                  <p className="mt-2 text-center text-[9px] font-medium text-slate-400">El agente recibe cliente, equipo, diagnóstico, seguimiento y evidencias.</p>
+                </form>
+              </aside>
+            )}
+          </div>
           </div>
         </div>
       ), document.body)}

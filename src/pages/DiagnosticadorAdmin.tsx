@@ -1034,9 +1034,37 @@ function AdminInner() {
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center opacity-10">
-              <PlusCircle size={60} strokeWidth={1} />
-              <h2 className="text-xl font-black uppercase tracking-[0.4em] mt-6 italic text-slate-800">Wiltech</h2>
+            <div className="space-y-6">
+              <div className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
+                <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10"><ClipboardList size={21} /></div>
+                <span className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400">Diagrama activo</span>
+                <h2 className="mt-2 text-xl font-black tracking-tight">{activeFlow?.flow_name || activeFlow?.configuracion.name || 'Sin diagrama'}</h2>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">Selecciona un bloque del lienzo para editar sus preguntas, respuestas y conexiones.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Bloques</span><strong className="mt-1 block text-2xl text-slate-900">{nodes.length}</strong></div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4"><span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Conexiones</span><strong className="mt-1 block text-2xl text-slate-900">{edges.length}</strong></div>
+              </div>
+              <div>
+                <div className="mb-3 flex items-center justify-between"><h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Bloques del flujo</h3><span className="text-[9px] font-bold text-slate-300">Clic para editar</span></div>
+                <div className="space-y-2">
+                  {nodes.slice(0, 7).map(node => {
+                    const step = node.data.step as FlowStep;
+                    return (
+                      <button key={node.id} onClick={() => setSelectedNodeId(node.id)} className="group flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 text-left transition hover:border-slate-300 hover:bg-slate-50">
+                        <div className={'h-2.5 w-2.5 shrink-0 rounded-full ' + (step.type === 'end' ? 'bg-emerald-400' : 'bg-blue-400')} />
+                        <div className="min-w-0 flex-1"><strong className="block truncate text-xs text-slate-800">{step.title || 'Bloque sin título'}</strong><span className="text-[8px] font-bold uppercase tracking-widest text-slate-400">{step.type} · {step.fields?.length || 0} campos</span></div>
+                        <Edit3 size={14} className="text-slate-300 group-hover:text-slate-700" />
+                      </button>
+                    );
+                  })}
+                  {nodes.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400">Agrega el primer bloque para comenzar.</div>}
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                <button onClick={addNewStep} className="flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white"><PlusCircle size={15} /> Agregar bloque</button>
+                <button onClick={openTextDiagramModal} disabled={!activeFlow} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-600 disabled:opacity-40"><List size={15} /> Editar JSON del diagrama</button>
+              </div>
             </div>
           )}
         </div>
