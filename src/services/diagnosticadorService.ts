@@ -1,21 +1,22 @@
 import { ApiService } from './apiService';
-import type { FlowData, FlowConfig, EquipoSegunda } from '../types/diagnosticador';
+import type { FlowData, FlowConfig, EquipoSegunda, Diagnostico, DiagnosticoMultimedia } from '../types/diagnosticador';
 
 export const flowApi = {
-  getAll: async (): Promise<FlowData[]> => {
-    return ApiService.get<FlowData[]>('/diagnosticador/diagrama_diagnosticador');
+  getAll: async (flowName?: string): Promise<FlowData[]> => {
+    const query = flowName ? `?flow_name=${encodeURIComponent(flowName)}` : '';
+    return ApiService.get<FlowData[]>(`/diagnosticador/diagrama_diagnosticador${query}`);
   },
 
-  create: async (configuracion: FlowConfig): Promise<FlowData> => {
-    return ApiService.post<FlowData>('/diagnosticador/diagrama_diagnosticador', { configuracion });
+  create: async (flowName: string, configuracion: FlowConfig): Promise<FlowData> => {
+    return ApiService.post<FlowData>('/diagnosticador/diagrama_diagnosticador', { flow_name: flowName, configuracion });
   },
 
-  update: async (id: number, configuracion: FlowConfig): Promise<FlowData> => {
-    return ApiService.put<FlowData>('/diagnosticador/diagrama_diagnosticador', { id, configuracion });
+  update: async (id: number, flowName: string, configuracion: FlowConfig): Promise<FlowData> => {
+    return ApiService.put<FlowData>('/diagnosticador/diagrama_diagnosticador', { id, flow_name: flowName, configuracion });
   },
 
-  delete: async (id: number): Promise<void> => {
-    return ApiService.delete<void>('/diagnosticador/diagrama_diagnosticador', { id });
+  delete: async (id: number, flowName: string): Promise<void> => {
+    return ApiService.delete<void>('/diagnosticador/diagrama_diagnosticador', { id, flow_name: flowName });
   }
 };
 
@@ -45,4 +46,53 @@ export const equiposSegundaApi = {
   delete: async (id: number): Promise<void> => {
     return ApiService.delete<void>('/diagnosticador/equipos_segunda', { id });
   }
+};
+
+export const diagnosticoApi = {
+  create: async (data: { id_reparacion?: number; id_diagrama: number; flow_name: string }): Promise<Diagnostico> => {
+    const payload = {
+      ...(data.id_reparacion ? { id: data.id_reparacion } : {}),
+      id_diagrama: data.id_diagrama,
+      flow_name: data.flow_name,
+      estado: 'diagnostico',
+      estado_diagnostico: 'en_progreso',
+    };
+    const repair = data.id_reparacion
+      ? await ApiService.put<any>('/reparaciones', payload)
+      : await ApiService.post<any>('/reparaciones', payload);
+    const row = Array.isArray(repair) ? repair[0] : repair;
+    if (!row?.id) {
+      throw new Error(data.id_reparacion
+        ? `No existe la reparación #${data.id_reparacion}`
+        : 'El POST /reparaciones no devolvió la fila creada');
+    }
+    return {
+      ...row,
+      id: row.id,
+      id_reparacion: row.id,
+      id_diagrama: row.id_diagrama,
+      flow_name: row.flow_name,
+      estado: row.estado_diagnostico || 'en_progreso',
+      respuestas: row.respuestas || {},
+      multimedia: row.multimedia || [],
+    };
+  },
+
+  update: async (data: Pick<Diagnostico, 'id' | 'respuestas' | 'estado'> & { paso_actual?: string | null }): Promise<Diagnostico> =>
+    ApiService.put<Diagnostico>('/reparaciones', {
+      id: data.id,
+      respuestas: data.respuestas,
+      paso_actual: data.paso_actual,
+      estado_diagnostico: data.estado,
+    }),
+
+  upload: async (file: File, type: string): Promise<{ imagen_url: string }> => {
+    const form = new FormData();
+    form.append('upload_file', file);
+    const safeFilename = file.name.normalize('NFD').replace(/[^\x00-\x7F]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+    return ApiService.postFile<{ imagen_url: string }>('/upload_file', form, { type, filename: safeFilename });
+  },
+
+  saveMedia: async (id: number, multimedia: DiagnosticoMultimedia[]): Promise<Diagnostico> =>
+    ApiService.put<Diagnostico>('/reparaciones', { id, multimedia }),
 };

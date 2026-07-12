@@ -5,7 +5,7 @@ import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
   Copy, MessageCircle, ShieldCheck, ClipboardList, Building2, ClipboardCheck,
   Truck, Edit2, Save, Bot, CheckCircle, AlertCircle, Fingerprint, Clock, Mail, Percent,
-  ShoppingBag, MessageSquare, LayoutDashboard, ExternalLink, ChevronRight
+  ShoppingBag, MessageSquare, LayoutDashboard, ExternalLink, ChevronRight, Wrench, Play
 } from 'lucide-react';
 import { Client } from '../types/client';
 import {
@@ -18,6 +18,8 @@ import {
 import { ChatPanel } from './ChatPanel';
 import { isBotOn, safeBigIntStr, safeText as safeStr } from '../utils/textUtils';
 import { SedeSelect } from './SedeSelect';
+import { ReparacionService } from '../services/reparacionService';
+import type { Reparacion } from '../types/reparacion';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -58,13 +60,14 @@ const parseAgendaDate = (raw?: string | null): Date | null => {
 }
 
 // ========= Definición de Tabs =========
-type TabID = 'general' | 'comercial' | 'logistica' | 'notas' | 'chat';
+type TabID = 'general' | 'comercial' | 'logistica' | 'notas' | 'reparaciones' | 'chat';
 
 const TABS: { id: TabID; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'general', label: 'General', icon: LayoutDashboard },
   { id: 'comercial', label: 'Comercial', icon: DollarSign },
   { id: 'logistica', label: 'Logística', icon: Truck },
   { id: 'notas', label: 'Notas', icon: FileText },
+  { id: 'reparaciones', label: 'Reparaciones', icon: Wrench },
   { id: 'chat', label: 'Chat', icon: MessageCircle },
 ];
 
@@ -78,6 +81,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<Client>>({});
   const [saving, setSaving] = useState(false);
+  const [repairs, setRepairs] = useState<Reparacion[]>([]);
+  const [repairLoading, setRepairLoading] = useState(false);
 
   // Init logic
   useEffect(() => {
@@ -86,6 +91,18 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     setIsEditing(false);
     setEditData(c);
   }, [shouldRender, c]); 
+
+  useEffect(() => {
+    if (!shouldRender || !c.row_number) return;
+    setRepairLoading(true);
+    ReparacionService.getByClient(c.row_number)
+      .then(setRepairs)
+      .catch(error => {
+        console.error('Error loading client repairs:', error);
+        setRepairs([]);
+      })
+      .finally(() => setRepairLoading(false));
+  }, [shouldRender, c.row_number]);
 
   // Close / Esc logic
   useEffect(() => {
@@ -274,7 +291,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   ];
 
   const getTabCounts = (tabId: TabID) => {
-    if (tabId === 'chat') return null;
+    if (tabId === 'chat' || tabId === 'reparaciones') return null;
     const relevantSections = allSections.filter(s => s.tab === tabId);
     let total = 0;
     let filled = 0;
@@ -290,6 +307,48 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     });
 
     return { filled, total };
+  };
+
+  const openRepairDiagnostic = (repair: Reparacion) => {
+    onClose();
+    window.history.pushState(null, '', `/diagnosticador?id_reparacion=${repair.id}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+
+  const handleCreateRepair = async () => {
+    setRepairLoading(true);
+    try {
+      const repair = await ReparacionService.create({
+        crm_row_number: c.row_number,
+        crm_whatsapp: safeStr(c.whatsapp),
+        crm_source: safeStr(c.source),
+        crm_data: {
+          nombre: c.nombre, whatsapp: c.whatsapp, ciudad: c.ciudad, modelo: c.modelo,
+          fecha_agenda: c.fecha_agenda, estado_etapa: c.estado_etapa,
+          categoria_contacto: c.categoria_contacto, asignado_a: c.asignado_a, source: c.source,
+        },
+        sede: safeStr(c.agenda_ciudad_sede) || safeStr(c.ciudad),
+        estado: 'ingresado',
+        prioridad: 'normal',
+        datos_dispositivo: { tipo: 'telefono', modelo: c.modelo },
+        detalle_reparacion: {
+          falla_reportada: c.detalles || c.intencion || '',
+          diagnostico_requerido: c.diagnostico_requerido,
+          equipo_manipulado: c.equipo_manipulado,
+          observaciones_tecnicas: c.observaciones_tecnicas,
+          notas_cliente: c.notas_cliente,
+        },
+        respuestas: {},
+        multimedia: [],
+      });
+      setRepairs(prev => [repair, ...prev]);
+      openRepairDiagnostic(repair);
+    } catch (error) {
+      console.error('Error creating repair:', error);
+      window.alert(error instanceof Error ? error.message : 'No se pudo crear el ingreso');
+    } finally {
+      setRepairLoading(false);
+    }
   };
 
   const sectionsToRender = allSections.filter(s => s.tab === activeTab);
@@ -472,6 +531,52 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               client={c}
               source={(editData.source ?? c.source) as any}
             />
+          ) : activeTab === 'reparaciones' ? (
+            <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 sm:p-8">
+              <div className="mx-auto max-w-5xl space-y-5">
+                <div className="flex flex-col justify-between gap-3 rounded-2xl border border-slate-100 bg-white p-5 sm:flex-row sm:items-center">
+                  <div>
+                    <h3 className="font-black text-slate-900">Equipos e ingresos</h3>
+                    <p className="text-xs text-slate-500">Toda la información técnica queda vinculada al CRM #{c.row_number}.</p>
+                  </div>
+                  <button onClick={() => void handleCreateRepair()} disabled={repairLoading} className="btn-primary">
+                    <Wrench className="h-4 w-4" /> {repairLoading ? 'Creando...' : 'Hacer ingreso'}
+                  </button>
+                </div>
+
+                {repairLoading && repairs.length === 0 && <div className="p-10 text-center text-sm text-slate-400">Consultando reparaciones...</div>}
+                {!repairLoading && repairs.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-400">Este cliente todavía no tiene ingresos.</div>}
+
+                {repairs.map(repair => (
+                  <article key={repair.id} className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+                    <header className="flex flex-col justify-between gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center">
+                      <div>
+                        <div className="flex items-center gap-2"><strong className="text-slate-900">{repair.id_dispositivo}</strong><span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black uppercase">{repair.estado}</span></div>
+                        <p className="mt-1 text-xs text-slate-400">Reparación #{repair.id} · {repair.estado_diagnostico}</p>
+                      </div>
+                      <button onClick={() => openRepairDiagnostic(repair)} className="btn-secondary"><Play className="h-4 w-4" /> Continuar diagnóstico</button>
+                    </header>
+                    <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
+                      {[
+                        ['Modelo', repair.datos_dispositivo?.modelo || c.modelo || 'Sin definir'],
+                        ['Sede', repair.sede || 'Sin definir'],
+                        ['Respuestas', Object.keys(repair.respuestas || {}).length],
+                        ['Evidencias', repair.multimedia?.length || 0],
+                      ].map(([label, value]) => (
+                        <div key={String(label)} className="bg-white p-4">
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+                          <strong className="mt-1 block truncate text-xs text-slate-800">{String(value)}</strong>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4">
+                      <span className="block text-[8px] font-black uppercase tracking-widest text-slate-400">Falla reportada</span>
+                      <p className="mt-1 text-sm font-semibold text-slate-700">{String(repair.detalle_reparacion?.falla_reportada || c.detalles || c.intencion || 'Sin información')}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
           ) : (
             <div className="flex-1 overflow-y-auto p-4 sm:p-8 animate-in fade-in duration-500 bg-slate-50/50">
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">

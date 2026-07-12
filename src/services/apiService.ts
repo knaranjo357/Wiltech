@@ -80,4 +80,19 @@ export class ApiService {
     });
     return this.handle<T>(response);
   }
+
+  /** Carga binaria con cabeceras de negocio para webhooks n8n/S3. */
+  static async postFile<T>(endpoint: string, form: FormData, headers: Record<string, string> = {}): Promise<T> {
+    const token = AuthService.getToken();
+    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      body: form,
+      mode: 'cors',
+    });
+    return this.handle<T>(response);
+  }
 }

@@ -17,6 +17,7 @@ import { AsistenciaPage } from "./pages/AsistenciaPage";
 import { UsuariosPage } from "./pages/UsuariosPage";
 import Diagnosticador from "./pages/Diagnosticador";
 import DiagnosticadorAdmin from "./pages/DiagnosticadorAdmin";
+import ReparacionesPage from "./pages/ReparacionesPage";
 
 // 1. DEFINICIÓN DE CLAVES (Deben coincidir con los roles del Backend)
 type PageKey = 
@@ -31,6 +32,7 @@ type PageKey =
   | "web1" 
   | "asistencia"
   | "usuarios"
+  | "reparaciones"
   | "diagnosticador"
   | "diagnosticador_admin";
 
@@ -51,6 +53,7 @@ function App() {
       "/web1": "web1",
       "/asistencia": "asistencia",
       "/usuarios": "usuarios",
+      "/reparaciones": "reparaciones",
       "/diagnosticador": "diagnosticador",
       "/diagnosticador-admin": "diagnosticador_admin",
     }),
@@ -71,6 +74,7 @@ function App() {
       web1: "/web1",
       asistencia: "/asistencia",
       usuarios: "/usuarios",
+      reparaciones: "/reparaciones",
       diagnosticador: "/diagnosticador",
       diagnosticador_admin: "/diagnosticador-admin",
     }),
@@ -200,6 +204,7 @@ function App() {
       case "web1": return <Web1ConversacionesPage />;
       case "asistencia": return <AsistenciaPage />;
       case "usuarios": return <UsuariosPage />;
+      case "reparaciones": return <ReparacionesPage />;
       case "diagnosticador": return <Diagnosticador />;
       case "diagnosticador_admin": return <DiagnosticadorAdmin />;
       default: 

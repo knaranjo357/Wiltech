@@ -5,7 +5,7 @@ export interface FlowStepFieldOption {
 
 export interface FlowStepField {
   key: string;
-  type: 'text' | 'select' | 'textarea' | 'number' | 'multi_select' | 'seed_value';
+  type: 'text' | 'select' | 'textarea' | 'number' | 'multi_select' | 'seed_value' | 'multimedia';
   label: string;
   options?: FlowStepFieldOption[];
   required?: boolean;
@@ -57,7 +57,32 @@ export interface FlowConfig {
 export interface FlowData {
   id: number;
   created_at?: string;
+  flow_name?: string;
   configuracion: FlowConfig;
+}
+
+export interface Diagnostico {
+  id: number;
+  id_reparacion: number;
+  id_diagrama: number;
+  flow_name: string;
+  estado: 'en_progreso' | 'completado' | 'cancelado';
+  paso_actual?: string | null;
+  respuestas: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  multimedia?: DiagnosticoMultimedia[];
+}
+
+export interface DiagnosticoMultimedia {
+  id: number;
+  id_diagnostico: number;
+  field_key: string;
+  archivo_url: string;
+  nombre_archivo: string;
+  mime_type?: string | null;
+  descripcion?: string | null;
+  created_at?: string;
 }
 
 export interface EquipoSegunda {

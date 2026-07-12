@@ -17,7 +17,7 @@ import {
 // Roles disponibles
 const AVAILABLE_ROLES = [
   'admin', 'whatsapp', 'precios', 'crm', 'conversaciones',
-  'web1', 'agenda', 'asistencia', 'envios', 'resultados', 'agente', 'diagnosticador'
+  'web1', 'agenda', 'asistencia', 'envios', 'resultados', 'agente', 'diagnosticador', 'reparaciones'
 ];
 
 // Helper para colores de roles

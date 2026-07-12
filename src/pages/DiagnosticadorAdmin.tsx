@@ -158,6 +158,7 @@ const nodeTypes = {
 
 function AdminInner() {
   const [activeFlow, setActiveFlow] = useState<FlowData | null>(null);
+  const [flows, setFlows] = useState<FlowData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -270,10 +271,45 @@ function AdminInner() {
   const loadFlows = async () => {
     try {
       const data = await flowApi.getAll();
-      if (data.length > 0) selectFlow(data[0]);
+      setFlows(data || []);
+      if (data.length > 0) {
+        selectFlow(data[0]);
+      }
       else setLoading(false);
     } catch (error) {
       setLoading(false);
+    }
+  };
+
+  const createFlow = async () => {
+    const name = window.prompt('Nombre único del nuevo diagrama');
+    if (!name?.trim()) return;
+    const flowName = slugify(name);
+    try {
+      setSaving(true);
+      const created = await flowApi.create(flowName, {
+        name: name.trim(),
+        flow_id: flowName,
+        version: '1.0',
+        start_step: 'inicio',
+        steps: [
+          {
+            id: 'inicio',
+            type: 'form',
+            title: 'Ingreso del equipo',
+            next: 'fin',
+            fields: [{ key: 'observaciones_iniciales', type: 'textarea', label: 'Observaciones iniciales' }],
+          },
+          { id: 'fin', type: 'end', title: 'Diagnóstico completado' },
+        ],
+      });
+      setFlows(prev => [...prev, created]);
+      selectFlow(created);
+    } catch (error) {
+      console.error('Error creating flow:', error);
+      openModal('Error', 'No se pudo crear el diagrama. Verifica el POST con flow_name.', closeModal, 'alert');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -455,7 +491,7 @@ function AdminInner() {
       }));
 
       let updatedConfig = { ...activeFlow.configuracion, steps: updatedSteps };
-      await flowApi.update(activeFlow.id, updatedConfig);
+      await flowApi.update(activeFlow.id, activeFlow.flow_name || activeFlow.configuracion.name, updatedConfig);
       openModal('¡Publicado!', 'El diagrama y las posiciones se han guardado con éxito.', () => closeModal(), 'alert');
     } catch (error) {
       openModal('Error', 'No se pudieron guardar los cambios.', () => closeModal(), 'alert');
@@ -823,9 +859,21 @@ function AdminInner() {
             <h1 className="text-xl font-black tracking-tighter uppercase italic leading-none text-slate-850">Constructor Wiltech</h1>
             <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mt-1">Diagrama Dinámico</p>
           </div>
+          <select value={activeFlow?.id || ''} onChange={event => {
+            const flow = flows.find(item => item.id === Number(event.target.value));
+            if (flow) selectFlow(flow);
+          }} className="max-w-56 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-xs font-bold outline-none">
+            {flows.map(flow => <option key={flow.id} value={flow.id}>{flow.flow_name || flow.configuracion.name}</option>)}
+          </select>
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
+          <button
+            onClick={() => void createFlow()}
+            className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-sm"
+          >
+            <Plus size={16} /> Nuevo diagrama
+          </button>
           <button
             onClick={() => setIsPricesModalOpen(true)}
             className="flex items-center gap-2 bg-gray-50 text-black px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all shadow-sm border border-gray-100 cursor-pointer"
@@ -934,6 +982,7 @@ function AdminInner() {
                             <option value="number">Numérico</option>
                             <option value="select">Selección Única</option>
                             <option value="multi_select">Selección Múltiple</option>
+                            <option value="multimedia">Multimedia</option>
                           </select>
                         </div>
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { flowApi, agenteApi } from '../services/diagnosticadorService';
-import type { FlowStepField } from '../types/diagnosticador';
-import { ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, Loader, X, Zap } from 'lucide-react';
+import { flowApi, agenteApi, diagnosticoApi } from '../services/diagnosticadorService';
+import type { FlowData, FlowStepField, DiagnosticoMultimedia } from '../types/diagnosticador';
+import { ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, Loader, X, Zap, Upload, Image, Trash2, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -63,7 +63,16 @@ const parseChatResponse = (response: any): string => {
 };
 
 export default function Diagnosticador() {
-  const [activeFlow, setActiveFlow] = useState<any | null>(null);
+  const params = new URLSearchParams(window.location.search);
+  const [flows, setFlows] = useState<FlowData[]>([]);
+  const [activeFlow, setActiveFlow] = useState<FlowData | null>(null);
+  const [selectedFlowId, setSelectedFlowId] = useState('');
+  const [repairId, setRepairId] = useState(params.get('id_reparacion') || '');
+  const [diagnosticId, setDiagnosticId] = useState<number | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [mediaByField, setMediaByField] = useState<Record<string, DiagnosticoMultimedia[]>>({});
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   const [currentFieldIndex, setCurrentFieldIndex] = useState<number>(0);
   const [formData, setFormData] = useState<Record<string, any>>({});
@@ -179,6 +188,47 @@ export default function Diagnosticador() {
     return readable;
   };
 
+  const getFieldMeta = (key: string) => {
+    for (const step of getFlowSteps(activeFlow)) {
+      const field = step.fields?.find((item: FlowStepField) => item.key === key);
+      if (field) return { field, stepId: step.id };
+    }
+    return null;
+  };
+
+  const getVisibleAnswer = (field: FlowStepField | undefined, value: any) => {
+    if (field?.type === 'multimedia') {
+      const count = Array.isArray(value) ? value.length : 0;
+      return `${count} archivo${count === 1 ? '' : 's'} adjunto${count === 1 ? '' : 's'}`;
+    }
+    if (field?.type === 'select' || field?.type === 'multi_select') {
+      const values = Array.isArray(value) ? value : [value];
+      return values.map(item => field.options?.find(option => option.value === item)?.label ?? item).join(', ');
+    }
+    if (value === true || value === 'true') return 'Sí';
+    if (value === false || value === 'false') return 'No';
+    if (Array.isArray(value)) return value.join(', ');
+    return value ?? '';
+  };
+
+  const getDetailedResponses = (data: Record<string, any>) =>
+    Object.fromEntries(Object.entries(data).map(([key, value]) => {
+      const meta = getFieldMeta(key);
+      return [key, {
+        pregunta: meta?.field.label || key,
+        respuesta: getVisibleAnswer(meta?.field, value),
+        valor: value,
+        tipo: meta?.field.type || typeof value,
+        step_id: meta?.stepId || null,
+      }];
+    }));
+
+  const unpackStoredResponses = (stored: Record<string, any>) =>
+    Object.fromEntries(Object.entries(stored).map(([key, value]) => [
+      key,
+      value && typeof value === 'object' && !Array.isArray(value) && 'valor' in value ? value.valor : value,
+    ]));
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || isChatLoading) return;
@@ -252,15 +302,8 @@ export default function Diagnosticador() {
   const loadFlow = async () => {
     try {
       const data = await flowApi.getAll();
-      if (data && data.length > 0) {
-        const flow = data[0];
-        setActiveFlow(flow);
-        const steps = (flow as any).steps || flow.configuracion?.steps || [];
-        if (steps.length > 0) {
-          setCurrentStepId(steps[0].id);
-          setCurrentFieldIndex(0);
-        }
-      }
+      setFlows(data || []);
+      if (data?.length) setSelectedFlowId(String(data[0].id));
     } catch (error) {
       console.error('Error loading flow:', error);
     } finally {
@@ -268,9 +311,49 @@ export default function Diagnosticador() {
     }
   };
 
+  const getFlowSteps = (flow: FlowData | null) =>
+    ((flow as any)?.steps || flow?.configuracion?.steps || []);
+
+  const startDiagnostic = async () => {
+    const flow = flows.find(item => String(item.id) === selectedFlowId);
+    const parsedRepairId = repairId.trim() ? Number(repairId) : undefined;
+    if (!flow || (parsedRepairId !== undefined && (!Number.isInteger(parsedRepairId) || parsedRepairId <= 0))) {
+      openModal('Datos incompletos', 'Selecciona un diagrama. Si escribes un ID, debe ser una reparación válida.', closeModal, 'alert');
+      return;
+    }
+
+    setStarting(true);
+    try {
+      const diagnostic = await diagnosticoApi.create({
+        id_reparacion: parsedRepairId,
+        id_diagrama: flow.id,
+        flow_name: flow.flow_name || flow.configuracion.name,
+      });
+      const steps = getFlowSteps(flow);
+      setDiagnosticId(diagnostic.id);
+      setRepairId(String(diagnostic.id_reparacion));
+      setActiveFlow(flow);
+      setFormData(unpackStoredResponses((diagnostic.respuestas || {}) as Record<string, any>));
+      setMediaByField((diagnostic.multimedia || []).reduce<Record<string, DiagnosticoMultimedia[]>>((grouped, media) => {
+        if (!grouped[media.field_key]) grouped[media.field_key] = [];
+        grouped[media.field_key].push(media);
+        return grouped;
+      }, {}));
+      setCurrentStepId(diagnostic.paso_actual || flow.configuracion.start_step || steps[0]?.id || null);
+      setCurrentFieldIndex(0);
+      setHistory([]);
+    } catch (error) {
+      console.error('Error starting diagnostic:', error);
+      const message = error instanceof Error ? error.message : 'Error desconocido';
+      openModal('No se pudo iniciar', `${message}. Verifica los endpoints POST y PUT /reparaciones en n8n.`, closeModal, 'alert');
+    } finally {
+      setStarting(false);
+    }
+  };
+
   const getStep = (id: string | null) => {
     if (!id || !activeFlow) return null;
-    const steps = activeFlow.steps || activeFlow.configuracion?.steps || [];
+    const steps = (activeFlow as any).steps || activeFlow.configuracion?.steps || [];
     return steps.find((s: any) => s.id === id);
   };
 
@@ -339,6 +422,87 @@ export default function Diagnosticador() {
     }
   };
 
+  useEffect(() => {
+    if (!diagnosticId || !activeFlow) return;
+    setSaveState('saving');
+    const timer = window.setTimeout(async () => {
+      try {
+        await diagnosticoApi.update({
+          id: diagnosticId,
+          respuestas: getDetailedResponses(formData),
+          paso_actual: currentStepId,
+          estado: getStep(currentStepId)?.type === 'end' ? 'completado' : 'en_progreso',
+        });
+        setSaveState('saved');
+      } catch (error) {
+        console.error('Error saving diagnostic:', error);
+        setSaveState('error');
+      }
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, [formData, currentStepId, diagnosticId, activeFlow]);
+
+  const handleMediaUpload = async (field: FlowStepField, files: FileList | null) => {
+    if (!files?.length || !diagnosticId) return;
+    setUploadingField(field.key);
+    try {
+      const added: DiagnosticoMultimedia[] = [];
+      for (const [index, file] of Array.from(files).entries()) {
+        const uploaded: any = await diagnosticoApi.upload(file, `diagnostico_${diagnosticId}_${field.key}`);
+        const archivoUrl = uploaded?.imagen_url || uploaded?.[0]?.imagen_url;
+        if (!archivoUrl) throw new Error('El webhook no devolvió imagen_url');
+        added.push({
+          id: Date.now() + index,
+          id_diagnostico: diagnosticId,
+          field_key: field.key,
+          archivo_url: archivoUrl,
+          nombre_archivo: file.name,
+          mime_type: file.type,
+          descripcion: '',
+          created_at: new Date().toISOString(),
+        });
+      }
+      const nextState = { ...mediaByField, [field.key]: [...(mediaByField[field.key] || []), ...added] };
+      await diagnosticoApi.saveMedia(diagnosticId, Object.values(nextState).flat());
+      setMediaByField(nextState);
+      setFormData(data => ({ ...data, [field.key]: nextState[field.key].map(item => item.archivo_url) }));
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      openModal('No se pudo subir', 'Revisa upload_file y el PUT /reparaciones.', closeModal, 'alert');
+    } finally {
+      setUploadingField(null);
+    }
+  };
+
+  const handleMediaDelete = async (fieldKey: string, media: DiagnosticoMultimedia) => {
+    try {
+      if (!diagnosticId) return;
+      const next = (mediaByField[fieldKey] || []).filter(item => item.id !== media.id);
+      const nextState = { ...mediaByField, [fieldKey]: next };
+      await diagnosticoApi.saveMedia(diagnosticId, Object.values(nextState).flat());
+      setMediaByField(nextState);
+      setFormData(data => ({ ...data, [fieldKey]: next.map(item => item.archivo_url) }));
+    } catch (error) {
+      console.error('Error deleting media:', error);
+      openModal('No se pudo eliminar', 'El archivo no pudo eliminarse de la reparación.', closeModal, 'alert');
+    }
+  };
+
+  const handleMediaEdit = async (fieldKey: string, media: DiagnosticoMultimedia) => {
+    const descripcion = window.prompt('Descripción del archivo', media.descripcion || '');
+    if (descripcion === null) return;
+    try {
+      if (!diagnosticId) return;
+      const next = (mediaByField[fieldKey] || []).map(item => item.id === media.id ? { ...item, descripcion } : item);
+      const nextState = { ...mediaByField, [fieldKey]: next };
+      await diagnosticoApi.saveMedia(diagnosticId, Object.values(nextState).flat());
+      setMediaByField(nextState);
+    } catch (error) {
+      console.error('Error editing media:', error);
+      openModal('No se pudo editar', 'No se guardó la descripción del archivo.', closeModal, 'alert');
+    }
+  };
+
   const renderField = (field: FlowStepField) => {
     const value = formData[field.key];
     switch (field.type) {
@@ -389,13 +553,58 @@ export default function Diagnosticador() {
             })}
           </div>
         );
+      case 'multimedia': {
+        const items = mediaByField[field.key] || [];
+        return (
+          <div className="space-y-4">
+            <label className="flex cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-6 font-bold text-gray-500 transition hover:border-black hover:text-black">
+              {uploadingField === field.key ? <Loader className="animate-spin" size={20} /> : <Upload size={20} />}
+              <span className="text-xs uppercase tracking-widest">
+                {uploadingField === field.key ? 'Subiendo...' : 'Subir fotos, video o audio'}
+              </span>
+              <input
+                type="file"
+                multiple
+                accept="image/*,video/*,audio/*"
+                className="hidden"
+                disabled={uploadingField === field.key || !diagnosticId}
+                onChange={(event) => {
+                  void handleMediaUpload(field, event.target.files);
+                  event.currentTarget.value = '';
+                }}
+              />
+            </label>
+            {items.length > 0 && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {items.map(media => (
+                  <div key={media.id} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                    {media.mime_type?.startsWith('image/') ? (
+                      <img src={media.archivo_url} alt={media.descripcion || media.nombre_archivo} className="h-36 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-36 items-center justify-center bg-gray-50 text-gray-300"><Image size={36} /></div>
+                    )}
+                    <div className="p-3">
+                      <p className="truncate text-[10px] font-black uppercase text-gray-700">{media.nombre_archivo}</p>
+                      {media.descripcion && <p className="mt-1 text-[10px] text-gray-400">{media.descripcion}</p>}
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={() => void handleMediaEdit(field.key, media)} className="flex-1 rounded-lg bg-gray-50 py-2 text-[9px] font-bold uppercase"><Pencil size={12} className="mx-auto" /></button>
+                        <button type="button" onClick={() => void handleMediaDelete(field.key, media)} className="flex-1 rounded-lg bg-red-50 py-2 text-red-500"><Trash2 size={12} className="mx-auto" /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      }
       default:
         return <p className="text-red-500 text-xs font-bold uppercase p-4 bg-red-50 rounded-xl">Formato "{field.type}" no soportado todavía.</p>;
     }
   };
 
   const currentStep = getStep(currentStepId);
-  const flowStepsList = activeFlow ? (activeFlow.steps || activeFlow.configuracion?.steps || []) : [];
+  const flowStepsList = getFlowSteps(activeFlow);
   const currentStepIndex = currentStepId ? flowStepsList.findIndex((s: any) => s.id === currentStepId) : -1;
   const currentStepFieldsCount = currentStep?.fields?.length || 0;
 
@@ -425,6 +634,7 @@ export default function Diagnosticador() {
                 {currentStepFieldsCount > 1 && ` • Pregunta ${currentFieldIndex + 1} de ${currentStepFieldsCount}`}
               </span>
             )}
+            {diagnosticId && <span className="mt-1 block text-[8px] font-bold uppercase text-gray-300">Rep. #{repairId} · {saveState === 'saving' ? 'Guardando' : saveState === 'error' ? 'Error al guardar' : 'Guardado'}</span>}
           </div>
         </div>
 
@@ -464,18 +674,29 @@ export default function Diagnosticador() {
         {/* Form Container */}
         <div className="flex-1 overflow-y-auto flex justify-center px-6 py-12 min-w-0">
           <div className="w-full max-w-xl my-auto">
-            {!currentStep ? (
+            {!activeFlow ? (
               <div className="bg-white p-10 rounded-[2.5rem] shadow-xl max-w-md border border-gray-100 text-center mx-auto">
-                <h2 className="text-2xl font-black uppercase italic mb-4 text-slate-800">Paso no encontrado</h2>
-                <button
-                  onClick={() => {
-                    window.history.pushState(null, "", "/diagnosticador-admin");
-                    window.dispatchEvent(new PopStateEvent('popstate'));
-                  }}
-                  className="inline-block bg-black text-white px-8 py-4 rounded-xl font-bold uppercase text-[10px] tracking-widest hover:scale-105 active:scale-95 transition-all shadow-md cursor-pointer"
-                >
-                  Revisar Administrador
-                </button>
+                <h2 className="text-2xl font-black uppercase italic mb-2 text-slate-800">Iniciar diagnóstico</h2>
+                <p className="mb-6 text-xs font-bold text-gray-400">Asocia el proceso a una reparación y elige su diagrama.</p>
+                <div className="space-y-4 text-left">
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400">ID reparación existente (opcional)</label>
+                  <input type="number" min="1" value={repairId} onChange={event => setRepairId(event.target.value)} placeholder="Vacío = crear ingreso automático" className="w-full rounded-2xl border-2 border-gray-100 p-4 font-bold outline-none focus:border-black" />
+                  <p className="text-[10px] font-semibold text-gray-400">Desde CRM llegará automáticamente. Si entras directo, déjalo vacío.</p>
+                  <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400">Diagrama de diagnóstico</label>
+                  <select value={selectedFlowId} onChange={event => setSelectedFlowId(event.target.value)} className="w-full rounded-2xl border-2 border-gray-100 bg-white p-4 font-bold outline-none focus:border-black">
+                    {flows.map(flow => <option key={flow.id} value={flow.id}>{flow.flow_name || flow.configuracion.name}</option>)}
+                  </select>
+                  {flows.length === 0 && <p className="text-xs font-bold text-amber-600">No hay diagramas publicados.</p>}
+                  <button type="button" onClick={() => void startDiagnostic()} disabled={starting || !flows.length} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-black py-5 text-[10px] font-bold uppercase tracking-widest text-white disabled:opacity-40">
+                    {starting ? <Loader size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                    {starting ? 'Creando ingreso...' : 'Comenzar diagnóstico'}
+                  </button>
+                </div>
+              </div>
+            ) : !currentStep ? (
+              <div className="rounded-[2.5rem] bg-white p-10 text-center shadow-xl">
+                <h2 className="text-xl font-black uppercase">Paso no encontrado</h2>
+                <p className="mt-2 text-xs font-bold text-gray-400">Revisa el start_step y las conexiones del diagrama.</p>
               </div>
             ) : currentStep.type === 'end' ? (
               <div className="bg-white rounded-[3rem] p-10 shadow-2xl border border-gray-100 text-center">
@@ -484,12 +705,27 @@ export default function Diagnosticador() {
                 </div>
                 <h2 className="text-2xl font-black uppercase tracking-tighter italic mb-8 text-slate-800">Diagnóstico Listo</h2>
                 <div className="bg-gray-50 rounded-3xl p-8 text-left space-y-4 mb-8 border border-gray-100 max-h-[300px] overflow-y-auto">
-                  {Object.entries(formData).map(([key, val]) => (
-                    <div key={key} className="border-b border-gray-200 pb-3 last:border-0">
-                      <span className="block text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">{key}</span>
-                      <span className="text-base font-bold text-gray-900 uppercase italic">
-                        {Array.isArray(val) ? val.join(', ') : (val === true ? 'SÍ' : val === false ? 'NO' : String(val))}
-                      </span>
+                  {Object.entries(getDetailedResponses(formData)).map(([key, detail]: [string, any]) => (
+                    <div key={key} className="border-b border-gray-200 pb-4 last:border-0">
+                      <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-gray-400">{detail.pregunta}</span>
+                      {detail.tipo === 'multimedia' ? (
+                        <div className="mt-3 grid grid-cols-2 gap-3">
+                          {(mediaByField[key] || []).map(media => (
+                            <a key={String(media.id)} href={media.archivo_url} target="_blank" rel="noreferrer" className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                              {media.mime_type?.startsWith('image/') ? (
+                                <img src={media.archivo_url} alt={media.descripcion || media.nombre_archivo} className="h-32 w-full object-cover" />
+                              ) : media.mime_type?.startsWith('video/') ? (
+                                <video src={media.archivo_url} controls className="h-32 w-full bg-black object-contain" />
+                              ) : (
+                                <div className="flex h-24 items-center justify-center p-3 text-center text-xs font-bold text-slate-500">{media.nombre_archivo}</div>
+                              )}
+                              <p className="truncate p-2 text-[9px] font-bold text-slate-600">{media.descripcion || media.nombre_archivo}</p>
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-base font-bold text-gray-900">{String(detail.respuesta || 'Sin respuesta')}</span>
+                      )}
                     </div>
                   ))}
                 </div>
