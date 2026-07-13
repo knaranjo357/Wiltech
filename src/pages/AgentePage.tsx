@@ -13,26 +13,28 @@ import {
   Command,
   Layers,
   BadgeDollarSign,
+  ClipboardCheck,
   AlertTriangle,
   Tags,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgenteService, type AgentSource } from "../services/agenteService";
+import { agenteApi } from "../services/diagnosticadorService";
 
 interface Section {
   id: string;
   content: string;
 }
 
-type AgentKey = "wiltech" | "crm" | "precios";
+type AgentKey = "wiltech" | "crm" | "precios" | "diagnosticador";
 
 type AgentTab = {
   key: AgentKey;
   label: string;
   icon: React.ReactNode;
   subtitle: string;
-  source: AgentSource;
+  source?: AgentSource;
 };
 
 type AgentState = {
@@ -43,6 +45,7 @@ type AgentState = {
   success: boolean;
   dirty: boolean;
   lastLoadedText: string;
+  rowNumber?: number;
 };
 
 const uuid = () => crypto.randomUUID();
@@ -87,6 +90,12 @@ const TABS: AgentTab[] = [
     subtitle: "Agente para gestión de precios",
     source: "WiltechPrecios",
   },
+  {
+    key: "diagnosticador",
+    label: "Diagnosticador",
+    icon: <ClipboardCheck className="w-4 h-4" />,
+    subtitle: "Instrucciones del asistente técnico de diagnóstico y reparación",
+  },
 ];
 
 export const AgentePage: React.FC = () => {
@@ -108,6 +117,7 @@ export const AgentePage: React.FC = () => {
     wiltech: { ...initialAgentState },
     crm: { ...initialAgentState },
     precios: { ...initialAgentState },
+    diagnosticador: { ...initialAgentState },
   });
 
   const tabMeta = useMemo(() => TABS.find((t) => t.key === activeTab)!, [activeTab]);
@@ -125,17 +135,21 @@ export const AgentePage: React.FC = () => {
       try {
         setAgentState(key, { loading: true, error: null });
 
-        const source = TABS.find((t) => t.key === key)!.source;
-        const data = await AgenteService.getSystemMessage(source);
+        const tab = TABS.find((t) => t.key === key)!;
+        const data: any = key === 'diagnosticador'
+          ? await agenteApi.getSystemMessage()
+          : await AgenteService.getSystemMessage(tab.source!);
 
-        const fullText =
-          Array.isArray(data) && data.length > 0 ? (data[0] as any)?.system_message ?? "" : "";
+        const fullText = key === 'diagnosticador'
+          ? data?.system_message ?? ""
+          : Array.isArray(data) && data.length > 0 ? data[0]?.system_message ?? "" : "";
 
         const parsed = parseTextToSections(fullText);
 
         setAgentState(key, {
           sections: parsed,
           lastLoadedText: fullText,
+          rowNumber: key === 'diagnosticador' ? Number(data?.row_number || 1) : undefined,
           dirty: false,
           error: null,
         });
@@ -154,10 +168,14 @@ export const AgentePage: React.FC = () => {
       try {
         setAgentState(key, { saving: true, error: null });
 
-        const source = TABS.find((t) => t.key === key)!.source;
+        const tab = TABS.find((t) => t.key === key)!;
         const textToSave = joinSectionsToText(st.sections);
 
-        await AgenteService.updateSystemMessage(textToSave, source);
+        if (key === 'diagnosticador') {
+          await agenteApi.updateSystemMessage({ row_number: st.rowNumber || 1, system_message: textToSave });
+        } else {
+          await AgenteService.updateSystemMessage(textToSave, tab.source!);
+        }
 
         setAgentState(key, {
           success: true,

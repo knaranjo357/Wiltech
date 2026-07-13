@@ -7,6 +7,7 @@ import { agenteApi, flowApi } from '../services/diagnosticadorService';
 import type { FlowData } from '../types/diagnosticador';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Diagnosticador from './Diagnosticador';
 
 const labelFor = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
@@ -122,6 +123,12 @@ export default function ReparacionesPage() {
   const [agentInput, setAgentInput] = useState('');
   const [agentLoading, setAgentLoading] = useState(false);
   const [agentSessionId, setAgentSessionId] = useState('');
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [workspace, setWorkspace] = useState<'ordenes' | 'diagnostico' | 'reparacion'>(() => {
+    const mode = initialParams.get('modo');
+    return mode === 'reparacion' ? 'reparacion' : mode === 'diagnostico' ? 'diagnostico' : 'ordenes';
+  });
+  const [processRepairId, setProcessRepairId] = useState<string>(() => initialParams.get('id_reparacion') || '');
 
   const load = async () => {
     setLoading(true);
@@ -180,11 +187,20 @@ export default function ReparacionesPage() {
     }
   };
 
-  const openDiagnostic = (repair: Reparacion) => {
-    window.history.pushState(null, '', `/diagnosticador?id_reparacion=${repair.id}`);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+  const openProcess = (type: 'diagnostico' | 'reparacion', repair?: Reparacion) => {
+    const nextRepairId = repair ? String(repair.id) : workspace !== 'ordenes' ? processRepairId : '';
+    setProcessRepairId(nextRepairId);
+    setSelected(null);
+    setWorkspace(type);
+    window.history.replaceState(null, '', '/reparaciones?modo=' + type + (nextRepairId ? '&id_reparacion=' + nextRepairId : ''));
   };
 
+  const showOrders = () => {
+    setWorkspace('ordenes');
+    setProcessRepairId('');
+    window.history.replaceState(null, '', '/reparaciones');
+    void load();
+  };
   const sendAgentMessage = async (event: React.FormEvent) => {
     event.preventDefault();
     const message = agentInput.trim();
@@ -203,6 +219,27 @@ export default function ReparacionesPage() {
       setAgentLoading(false);
     }
   };
+  if (workspace !== 'ordenes') {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden bg-slate-50 md:h-screen">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+          <div>
+            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Centro de reparaciones</span>
+            <h1 className="text-lg font-black text-slate-900">{workspace === 'diagnostico' ? 'Realizar diagnóstico' : 'Ejecutar reparación'}</h1>
+          </div>
+          <div className="flex rounded-2xl bg-slate-100 p-1">
+            <button onClick={showOrders} className="rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-white">Órdenes</button>
+            <button onClick={() => openProcess('diagnostico')} className={'rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider ' + (workspace === 'diagnostico' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500')}>Diagnóstico</button>
+            <button onClick={() => openProcess('reparacion')} className={'rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider ' + (workspace === 'reparacion' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500')}>Reparación</button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1">
+          <Diagnosticador key={workspace} embedded processType={workspace} initialRepairId={processRepairId} onExit={showOrders} onSwitchProcess={type => openProcess(type)} onRepairLinked={setProcessRepairId} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-container flex flex-col gap-6">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
@@ -212,6 +249,12 @@ export default function ReparacionesPage() {
         </div>
         <button onClick={() => void load()} className="btn-secondary"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Actualizar</button>
       </header>
+
+      <div className="flex w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        <button className="flex-1 rounded-xl bg-slate-950 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white">Órdenes</button>
+        <button onClick={() => openProcess('diagnostico')} className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-blue-700 transition hover:bg-blue-50"><ClipboardCheck className="h-4 w-4" /> Iniciar diagnóstico</button>
+        <button onClick={() => openProcess('reparacion')} className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-amber-700 transition hover:bg-amber-50"><Wrench className="h-4 w-4" /> Iniciar reparación</button>
+      </div>
 
       <div className="relative">
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -260,8 +303,11 @@ export default function ReparacionesPage() {
                   <button onClick={() => setAgentOpen(current => !current)} className={agentOpen ? 'flex items-center gap-2 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-violet-700' : 'flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-600'}>
                     <Bot className="h-4 w-4" /><span className="hidden sm:inline">Agente IA</span>
                   </button>
-                  <button onClick={() => openDiagnostic(selected)} className="flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-white sm:px-4">
-                    <ClipboardCheck className="h-4 w-4" /><span className="hidden sm:inline">Continuar diagnóstico</span><span className="sm:hidden">Diagnóstico</span>
+                  <button onClick={() => openProcess('diagnostico', selected)} className="flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-white sm:px-4">
+                    <ClipboardCheck className="h-4 w-4" /><span className="hidden sm:inline">Diagnóstico</span><span className="sm:hidden">Diag.</span>
+                  </button>
+                  <button onClick={() => openProcess('reparacion', selected)} className="flex items-center gap-2 rounded-xl bg-amber-500 px-3 py-2.5 text-[10px] font-black uppercase tracking-wider text-white sm:px-4">
+                    <Wrench className="h-4 w-4" /><span className="hidden sm:inline">Reparación</span><span className="sm:hidden">Rep.</span>
                   </button>
                   <button onClick={() => setSelected(null)} className="rounded-xl border border-slate-200 p-2.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"><X className="h-4 w-4" /></button>
                 </div>

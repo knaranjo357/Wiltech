@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { flowApi, agenteApi, diagnosticoApi } from '../services/diagnosticadorService';
 import type { FlowData, FlowStepField, DiagnosticoMultimedia } from '../types/diagnosticador';
-import { ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, Loader, X, Zap, Upload, Image, Trash2, Pencil } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, Loader, X, Zap, Upload, Image, Trash2, Pencil, Wrench } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -62,12 +62,23 @@ const parseChatResponse = (response: any): string => {
   return text.replace(/\\n/g, '\n');
 };
 
-export default function Diagnosticador() {
+type DiagnosticadorProps = {
+  embedded?: boolean;
+  processType?: 'diagnostico' | 'reparacion';
+  initialRepairId?: string | number;
+  onExit?: () => void;
+  onSwitchProcess?: (type: 'diagnostico' | 'reparacion') => void;
+  onRepairLinked?: (id: string) => void;
+};
+
+export default function Diagnosticador({ embedded = false, processType = 'diagnostico', initialRepairId, onExit, onSwitchProcess, onRepairLinked }: DiagnosticadorProps) {
   const params = new URLSearchParams(window.location.search);
+  const targetFlowId = processType === 'reparacion' ? 2 : 1;
+  const processLabel = processType === 'reparacion' ? 'reparación' : 'diagnóstico';
   const [flows, setFlows] = useState<FlowData[]>([]);
   const [activeFlow, setActiveFlow] = useState<FlowData | null>(null);
   const [selectedFlowId, setSelectedFlowId] = useState('');
-  const [repairId, setRepairId] = useState(params.get('id_reparacion') || '');
+  const [repairId, setRepairId] = useState(String(initialRepairId ?? params.get('id_reparacion') ?? ''));
   const [diagnosticId, setDiagnosticId] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -139,7 +150,7 @@ export default function Diagnosticador() {
     if (!activeFlow) return formData;
 
     const steps = (activeFlow as any).steps || activeFlow.configuracion?.steps || [];
-    
+
     Object.entries(formData).forEach(([key, val]) => {
       let foundField: any = null;
 
@@ -156,7 +167,7 @@ export default function Diagnosticador() {
       if (foundField) {
         const questionText = foundField.label || key;
         let answerText = val;
-        
+
         if (foundField.type === 'select' || foundField.type === 'multi_select') {
           if (Array.isArray(val)) {
             answerText = val.map(v => {
@@ -297,13 +308,15 @@ export default function Diagnosticador() {
 
   useEffect(() => {
     loadFlow();
-  }, []);
+  }, [targetFlowId]);
 
   const loadFlow = async () => {
     try {
       const data = await flowApi.getAll();
-      setFlows(data || []);
-      if (data?.length) setSelectedFlowId(String(data[0].id));
+      const availableFlows = data || [];
+      setFlows(availableFlows);
+      const targetFlow = availableFlows.find(flow => Number(flow.id) === targetFlowId);
+      setSelectedFlowId(targetFlow ? String(targetFlow.id) : '');
     } catch (error) {
       console.error('Error loading flow:', error);
     } finally {
@@ -331,7 +344,9 @@ export default function Diagnosticador() {
       });
       const steps = getFlowSteps(flow);
       setDiagnosticId(diagnostic.id);
-      setRepairId(String(diagnostic.id_reparacion));
+      const linkedRepairId = String(diagnostic.id_reparacion);
+      setRepairId(linkedRepairId);
+      onRepairLinked?.(linkedRepairId);
       setActiveFlow(flow);
       setFormData(unpackStoredResponses((diagnostic.respuestas || {}) as Record<string, any>));
       setMediaByField((diagnostic.multimedia || []).reduce<Record<string, DiagnosticoMultimedia[]>>((grouped, media) => {
@@ -363,7 +378,7 @@ export default function Diagnosticador() {
     if (!step) return;
 
     const dataToUse = overriddenFormData || formData;
-    
+
     // Si quedan más campos en el paso actual, avanzamos el índice del campo
     if (step.fields && currentFieldIndex < step.fields.length - 1) {
       setHistory(prev => [...prev, { stepId: currentStepId, fieldIndex: currentFieldIndex }]);
@@ -603,6 +618,18 @@ export default function Diagnosticador() {
     }
   };
 
+  const resetProcess = () => {
+    sessionStorage.removeItem('wiltech_sessionId');
+    setActiveFlow(null);
+    setDiagnosticId(null);
+    setCurrentStepId(null);
+    setCurrentFieldIndex(0);
+    setFormData({});
+    setMediaByField({});
+    setHistory([]);
+    setSaveState('idle');
+  };
+
   const currentStep = getStep(currentStepId);
   const flowStepsList = getFlowSteps(activeFlow);
   const currentStepIndex = currentStepId ? flowStepsList.findIndex((s: any) => s.id === currentStepId) : -1;
@@ -611,7 +638,7 @@ export default function Diagnosticador() {
   if (loading) return <div className="h-screen md:h-[calc(100vh-3.5rem)] flex items-center justify-center font-black text-xl animate-pulse italic">WILTECH...</div>;
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] md:h-screen bg-gray-50 flex flex-col font-sans selection:bg-black selection:text-white overflow-hidden">
+    <div className={(embedded ? "h-full min-h-0" : "h-[calc(100vh-3.5rem)] md:h-screen") + " bg-gray-50 flex flex-col font-sans selection:bg-black selection:text-white overflow-hidden"}>
       <CustomModal
         isOpen={modal.isOpen}
         title={modal.title}
@@ -623,11 +650,16 @@ export default function Diagnosticador() {
 
       <nav className="p-6 flex justify-between items-center bg-white border-b border-gray-100 shrink-0 z-30 shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => openModal('¿Reiniciar?', 'Se perderá el progreso del diagnóstico actual.', () => { sessionStorage.removeItem('wiltech_sessionId'); window.location.reload(); })} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all shadow-sm shrink-0 cursor-pointer">
+          {embedded && onExit && (
+            <button onClick={onExit} title="Volver a reparaciones" className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all shadow-sm shrink-0">
+              <ArrowLeft size={18} />
+            </button>
+          )}
+          <button onClick={() => openModal('¿Reiniciar?', 'Se perderá el progreso del proceso actual.', resetProcess)} className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all shadow-sm shrink-0 cursor-pointer">
             <RotateCcw size={18} />
           </button>
           <div>
-            <h1 className="text-base font-black uppercase tracking-tighter italic leading-none text-slate-800">Diagnosticador</h1>
+            <h1 className="text-base font-black uppercase tracking-tighter italic leading-none text-slate-800">{processType === "reparacion" ? "Proceso de reparación" : "Diagnosticador"}</h1>
             {activeFlow && currentStepId && currentStep?.type !== 'end' && (
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mt-1">
                 Paso {currentStepIndex + 1} de {flowStepsList.length}
@@ -641,8 +673,8 @@ export default function Diagnosticador() {
         <div className="flex items-center gap-3">
           {/* Botones de navegación duplicados en la parte superior derecha fija */}
           {history.length > 0 && currentStep && currentStep.type !== 'end' && (
-            <button 
-              onClick={handleBack} 
+            <button
+              onClick={handleBack}
               className="bg-gray-50 text-gray-500 px-4 py-2.5 rounded-xl font-bold uppercase text-[9px] tracking-widest hover:bg-black hover:text-white border border-gray-100 transition-all shadow-sm cursor-pointer"
             >
               Atrás
@@ -650,15 +682,15 @@ export default function Diagnosticador() {
           )}
 
           {currentStep && currentStep.type !== 'end' && (
-            <button 
-              onClick={() => handleNext()} 
+            <button
+              onClick={() => handleNext()}
               className="bg-black text-white px-5 py-2.5 rounded-xl font-bold uppercase text-[9px] tracking-widest hover:bg-slate-800 transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
             >
               Continuar <ArrowRight size={14} />
             </button>
           )}
 
-          <button 
+          <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg transition-all cursor-pointer ${
               isChatOpen ? 'bg-black text-white scale-110' : 'bg-gray-100 text-black hover:bg-black hover:text-white'
@@ -676,20 +708,23 @@ export default function Diagnosticador() {
           <div className="w-full max-w-xl my-auto">
             {!activeFlow ? (
               <div className="bg-white p-10 rounded-[2.5rem] shadow-xl max-w-md border border-gray-100 text-center mx-auto">
-                <h2 className="text-2xl font-black uppercase italic mb-2 text-slate-800">Iniciar diagnóstico</h2>
-                <p className="mb-6 text-xs font-bold text-gray-400">Asocia el proceso a una reparación y elige su diagrama.</p>
+                <h2 className="text-2xl font-black uppercase italic mb-2 text-slate-800">Iniciar {processLabel}</h2>
+                <p className="mb-6 text-xs font-bold text-gray-400">Asocia el proceso a una orden. El diagrama correspondiente ya está definido.</p>
                 <div className="space-y-4 text-left">
                   <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400">ID reparación existente (opcional)</label>
                   <input type="number" min="1" value={repairId} onChange={event => setRepairId(event.target.value)} placeholder="Vacío = crear ingreso automático" className="w-full rounded-2xl border-2 border-gray-100 p-4 font-bold outline-none focus:border-black" />
                   <p className="text-[10px] font-semibold text-gray-400">Desde CRM llegará automáticamente. Si entras directo, déjalo vacío.</p>
-                  <label className="block text-[9px] font-black uppercase tracking-widest text-gray-400">Diagrama de diagnóstico</label>
-                  <select value={selectedFlowId} onChange={event => setSelectedFlowId(event.target.value)} className="w-full rounded-2xl border-2 border-gray-100 bg-white p-4 font-bold outline-none focus:border-black">
-                    {flows.map(flow => <option key={flow.id} value={flow.id}>{flow.flow_name || flow.configuracion.name}</option>)}
-                  </select>
-                  {flows.length === 0 && <p className="text-xs font-bold text-amber-600">No hay diagramas publicados.</p>}
-                  <button type="button" onClick={() => void startDiagnostic()} disabled={starting || !flows.length} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-black py-5 text-[10px] font-bold uppercase tracking-widest text-white disabled:opacity-40">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <span className="block text-[9px] font-black uppercase tracking-widest text-slate-400">Proceso seleccionado</span>
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="rounded-xl bg-slate-950 p-2 text-white">{processType === 'reparacion' ? <Wrench size={16} /> : <CheckCircle2 size={16} />}</div>
+                      <div><strong className="block text-sm capitalize text-slate-900">{processLabel}</strong><span className="text-[10px] font-semibold text-slate-400">Diagrama fijo #{targetFlowId}</span></div>
+                    </div>
+                  </div>
+                  {!selectedFlowId && <p className="text-xs font-bold text-amber-600">No se encontró el diagrama #{targetFlowId}. Publícalo desde AI Diagnosticador.</p>}
+                  <button type="button" onClick={() => void startDiagnostic()} disabled={starting || !selectedFlowId} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-black py-5 text-[10px] font-bold uppercase tracking-widest text-white disabled:opacity-40">
                     {starting ? <Loader size={16} className="animate-spin" /> : <ArrowRight size={16} />}
-                    {starting ? 'Creando ingreso...' : 'Comenzar diagnóstico'}
+                    {starting ? 'Creando ingreso...' : 'Comenzar ' + processLabel}
                   </button>
                 </div>
               </div>
@@ -729,7 +764,12 @@ export default function Diagnosticador() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => openModal('Nuevo Diagnóstico', '¿Estás seguro de iniciar un nuevo proceso?', () => { sessionStorage.removeItem('wiltech_sessionId'); window.location.reload(); })} className="w-full bg-black text-white py-6 rounded-2xl font-bold uppercase text-[11px] tracking-widest shadow-xl cursor-pointer">Nuevo Diagnóstico</button>
+                {processType === 'diagnostico' && onSwitchProcess && (
+                  <button onClick={() => onSwitchProcess('reparacion')} className="mb-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-500 py-5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg">
+                    <Wrench size={16} /> Continuar con la reparación
+                  </button>
+                )}
+                <button onClick={() => openModal('Nuevo proceso', '¿Estás seguro de iniciar un nuevo proceso?', resetProcess)} className="w-full bg-black text-white py-6 rounded-2xl font-bold uppercase text-[11px] tracking-widest shadow-xl cursor-pointer">Nuevo proceso</button>
               </div>
             ) : (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-6 duration-350">
@@ -737,7 +777,7 @@ export default function Diagnosticador() {
                   <div className="absolute top-0 right-0 p-6 opacity-5 pointer-events-none"><Cpu size={80} strokeWidth={1} /></div>
                   <div className="relative z-10">
                     <h2 className="text-xl font-black uppercase tracking-tighter italic mb-8 leading-tight text-slate-800">{currentStep.title}</h2>
-                    
+
                     <div className="space-y-6">
                       {currentStep.fields && currentStep.fields[currentFieldIndex] && (
                         <div className="space-y-4">
@@ -782,7 +822,7 @@ export default function Diagnosticador() {
                   <span className="text-[8px] font-bold text-gray-300 uppercase tracking-widest">En Línea</span>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setIsChatOpen(false)}
                 className="w-8 h-8 bg-gray-50 hover:bg-black hover:text-white rounded-lg flex items-center justify-center transition-all cursor-pointer"
               >
@@ -795,8 +835,8 @@ export default function Diagnosticador() {
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[85%] p-4 rounded-2xl text-[11px] font-bold leading-relaxed ${
-                    msg.sender === 'user' 
-                      ? 'bg-black text-white rounded-tr-none' 
+                    msg.sender === 'user'
+                      ? 'bg-black text-white rounded-tr-none'
                       : 'bg-white text-gray-700 border border-gray-100 rounded-tl-none shadow-sm'
                   }`}>
                     {msg.sender === 'user' ? (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -17,7 +17,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { flowApi, agenteApi, equiposSegundaApi } from '../services/diagnosticadorService';
 import type { FlowData, FlowStep, EquipoSegunda } from '../types/diagnosticador';
-import { ArrowLeft, Trash2, X, PlusCircle, Hash, Type, List, AlertCircle, Bot, Sparkles, ClipboardList, Search, Edit3, Plus, Loader } from 'lucide-react';
+import { ArrowLeft, Trash2, X, PlusCircle, Hash, Type, List, AlertCircle, Bot, Sparkles, ClipboardList, Search, Edit3, Plus, Loader, PanelRightClose, PanelRightOpen, MousePointer2 } from 'lucide-react';
 
 // --- Helper to slugify labels ---
 const slugify = (text: string) => text.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '_').replace(/^-+|-+$/g, '');
@@ -165,6 +165,12 @@ function AdminInner() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(() => localStorage.getItem('wiltech_diagnosticador_inspector') !== 'closed');
+  const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const selectionOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const selectionBoxRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  const selectionPointerRef = useRef<number | null>(null);
 
   // --- AI Agent States ---
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
@@ -265,15 +271,19 @@ function AdminInner() {
 
   useEffect(() => {
     loadFlows();
-    loadSystemMessage();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('wiltech_diagnosticador_inspector', isInspectorOpen ? 'open' : 'closed');
+  }, [isInspectorOpen]);
 
   const loadFlows = async () => {
     try {
       const data = await flowApi.getAll();
-      setFlows(data || []);
-      if (data.length > 0) {
-        selectFlow(data[0]);
+      const fixedFlows = (data || []).filter(flow => Number(flow.id) === 1 || Number(flow.id) === 2).sort((a, b) => Number(a.id) - Number(b.id));
+      setFlows(fixedFlows);
+      if (fixedFlows.length > 0) {
+        selectFlow(fixedFlows[0]);
       }
       else setLoading(false);
     } catch (error) {
@@ -448,6 +458,70 @@ function AdminInner() {
     );
   };
 
+  const beginRightSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 2) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, .react-flow__controls, .react-flow__panel, .react-flow__handle')) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const origin = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    selectionOriginRef.current = origin;
+    selectionPointerRef.current = event.pointerId;
+    const nextBox = { x: origin.x, y: origin.y, width: 0, height: 0 };
+    selectionBoxRef.current = nextBox;
+    setSelectionBox(nextBox);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const updateRightSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    const origin = selectionOriginRef.current;
+    if (!origin || selectionPointerRef.current !== event.pointerId) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const current = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+    const nextBox = {
+      x: Math.min(origin.x, current.x),
+      y: Math.min(origin.y, current.y),
+      width: Math.abs(current.x - origin.x),
+      height: Math.abs(current.y - origin.y),
+    };
+    selectionBoxRef.current = nextBox;
+    setSelectionBox(nextBox);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const finishRightSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    const box = selectionBoxRef.current;
+    if (!box || selectionPointerRef.current !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+
+    if (box.width >= 4 || box.height >= 4) {
+      const canvasBounds = canvasRef.current?.getBoundingClientRect();
+      const selectedIds = canvasBounds
+        ? Array.from(canvasRef.current?.querySelectorAll<HTMLElement>('.react-flow__node') || [])
+          .filter(element => {
+            const nodeBounds = element.getBoundingClientRect();
+            const left = nodeBounds.left - canvasBounds.left;
+            const top = nodeBounds.top - canvasBounds.top;
+            return left < box.x + box.width && left + nodeBounds.width > box.x && top < box.y + box.height && top + nodeBounds.height > box.y;
+          })
+          .map(element => element.dataset.id)
+          .filter((id): id is string => Boolean(id))
+        : [];
+      const selectedSet = new Set(selectedIds);
+      setNodes(current => current.map(node => ({ ...node, selected: selectedSet.has(node.id) })));
+      setSelectedNodeId(selectedIds.length === 1 ? selectedIds[0] : null);
+    }
+
+    selectionOriginRef.current = null;
+    selectionPointerRef.current = null;
+    selectionBoxRef.current = null;
+    setSelectionBox(null);
+  };
+
   const onNodeClick = (_: any, node: Node) => setSelectedNodeId(node.id);
 
   const addNewStep = () => {
@@ -618,7 +692,7 @@ function AdminInner() {
         <div className="fixed inset-0 z-[90] flex items-center justify-center p-6 animate-in fade-in duration-200">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { if (!isPricesLoading) setIsPricesModalOpen(false); }} />
           <div className="relative w-full max-w-5xl h-[85vh] bg-white rounded-[3rem] p-10 shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] border border-gray-100 animate-in zoom-in-95 duration-200 flex flex-col">
-            
+
             {/* Modal Header */}
             <div className="flex justify-between items-start mb-6">
               <div>
@@ -629,7 +703,7 @@ function AdminInner() {
                   Administración de precios de referencia para componentes de segunda mano
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setIsPricesModalOpen(false);
                   setEditingPrice(null);
@@ -642,10 +716,10 @@ function AdminInner() {
 
             {/* Main Area */}
             <div className="flex-1 flex gap-8 overflow-hidden min-h-0">
-              
+
               {/* Left Column: List and Search */}
               <div className="flex-1 flex flex-col overflow-hidden">
-                
+
                 {/* Search and Add controls */}
                 <div className="flex gap-3 mb-4">
                   <div className="flex-1 relative">
@@ -848,7 +922,7 @@ function AdminInner() {
         <div className="flex items-center gap-6">
           <button
             onClick={() => {
-              window.history.pushState(null, "", "/diagnosticador");
+              window.history.pushState(null, "", "/reparaciones");
               window.dispatchEvent(new PopStateEvent('popstate'));
             }}
             className="w-10 h-10 flex items-center justify-center bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all shadow-sm cursor-pointer"
@@ -863,34 +937,16 @@ function AdminInner() {
             const flow = flows.find(item => item.id === Number(event.target.value));
             if (flow) selectFlow(flow);
           }} className="max-w-56 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-xs font-bold outline-none">
-            {flows.map(flow => <option key={flow.id} value={flow.id}>{flow.flow_name || flow.configuracion.name}</option>)}
+            {flows.map(flow => <option key={flow.id} value={flow.id}>{Number(flow.id) === 1 ? 'Diagnóstico' : Number(flow.id) === 2 ? 'Reparación' : flow.flow_name || flow.configuracion.name}</option>)}
           </select>
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
           <button
-            onClick={() => void createFlow()}
-            className="flex items-center gap-2 bg-black text-white px-5 py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-sm"
-          >
-            <Plus size={16} /> Nuevo diagrama
-          </button>
-          <button
-            onClick={() => setIsPricesModalOpen(true)}
-            className="flex items-center gap-2 bg-gray-50 text-black px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all shadow-sm border border-gray-100 cursor-pointer"
-          >
-            <ClipboardList size={16} /> Precios de Segunda
-          </button>
-          <button
-            onClick={() => setIsAgentModalOpen(true)}
-            className="flex items-center gap-2 bg-gray-50 text-black px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all shadow-sm border border-gray-100 cursor-pointer"
-          >
-            <Sparkles size={16} /> Configurar Agente
-          </button>
-          <button
             onClick={openTextDiagramModal}
-            className="flex items-center gap-2 bg-gray-50 text-black px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all shadow-sm border border-gray-100 cursor-pointer"
+            title="Editar diagrama como JSON" className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-100 bg-white text-gray-400 transition hover:bg-gray-50 hover:text-black"
           >
-            <List size={16} /> Diagrama (Texto)
+            <List size={16} />
           </button>
           <button
             onClick={saveFlow}
@@ -903,7 +959,7 @@ function AdminInner() {
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative bg-white min-w-0">
+        <div ref={canvasRef} onPointerDownCapture={beginRightSelection} onPointerMoveCapture={updateRightSelection} onPointerUpCapture={finishRightSelection} onPointerCancel={finishRightSelection} onContextMenu={event => event.preventDefault()} className="flex-1 relative bg-white min-w-0 select-none">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -914,18 +970,35 @@ function AdminInner() {
             onEdgeClick={onEdgeClick}
             nodeTypes={nodeTypes}
             fitView
+            minZoom={0.05}
+            maxZoom={2}
+            panOnDrag={[0, 1]}
           >
             <Background color="#000" gap={30} size={1} style={{ opacity: 0.02 }} />
             <Controls className="bg-white border-none shadow-xl rounded-xl overflow-hidden p-1" />
-            <Panel position="top-right" className="bg-white/90 backdrop-blur-xl p-2 rounded-2xl border border-gray-100 shadow-xl m-4 z-10">
+            <Panel position="top-right" className="m-4 flex gap-2 rounded-2xl border border-gray-100 bg-white/90 p-2 shadow-xl backdrop-blur-xl z-10">
+              <button onClick={() => setIsInspectorOpen(current => !current)} title={isInspectorOpen ? 'Ocultar panel de edición' : 'Mostrar panel de edición'} className="flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-600 transition hover:bg-slate-950 hover:text-white">
+                {isInspectorOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+                <span className="hidden 2xl:inline">{isInspectorOpen ? 'Ocultar edición' : 'Mostrar edición'}</span>
+              </button>
               <button onClick={addNewStep} className="flex items-center gap-2 bg-black text-white px-4 py-2.5 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-gray-800 transition-all shadow-md cursor-pointer">
                 <PlusCircle size={16} /> Nuevo Paso
               </button>
             </Panel>
+            <Panel position="bottom-left" className="m-4 flex items-center gap-2 rounded-xl border border-blue-100 bg-white/90 px-3 py-2 text-[9px] font-bold uppercase tracking-wider text-slate-500 shadow-lg backdrop-blur">
+              <MousePointer2 size={14} className="text-blue-500" /> Arrastra con clic derecho para seleccionar varios
+            </Panel>
           </ReactFlow>
+          {selectionBox && (
+            <div
+              className="pointer-events-none absolute z-50 border-2 border-blue-500 bg-blue-400/15 shadow-[0_0_0_1px_rgba(255,255,255,0.8)]"
+              style={{ left: selectionBox.x, top: selectionBox.y, width: selectionBox.width, height: selectionBox.height }}
+            />
+          )}
         </div>
 
-        <div className="w-[420px] border-l border-gray-50 bg-white p-8 overflow-y-auto z-30 shadow-[-20px_0_40px_rgba(0,0,0,0.01)] hidden xl:block">
+        {isInspectorOpen && (
+        <aside className="w-[420px] shrink-0 border-l border-gray-100 bg-white p-8 overflow-y-auto z-30 shadow-[-20px_0_40px_rgba(0,0,0,0.03)] hidden lg:block">
           {selectedNode ? (
             <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-300">
               <div className="flex justify-between items-end mb-2">
@@ -1067,7 +1140,8 @@ function AdminInner() {
               </div>
             </div>
           )}
-        </div>
+        </aside>
+        )}
       </div>
     </div>
   );

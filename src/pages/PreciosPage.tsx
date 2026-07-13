@@ -15,11 +15,13 @@ import {
   RefreshCw,
   Sparkles,
   AlertCircle,
+  Wrench,
 } from "lucide-react";
 import { PreciosService } from "../services/preciosService";
 import { ApiService } from "../services/apiService";
 import { PrecioItem } from "../types/precios";
 import { PrecioModal } from "../components/PrecioModal";
+import PreciosSegundaPanel from "../components/PreciosSegundaPanel";
 
 // --- CONFIGURACIÓN VISUAL ---
 const categories = [
@@ -112,6 +114,7 @@ export const PreciosPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [modalItem, setModalItem] = useState<PrecioItem | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [showSecondPrices, setShowSecondPrices] = useState(false);
 
   // ✅ BOTÓN GLOBAL (UNA SOLA ACCIÓN)
   const [syncingAgent, setSyncingAgent] = useState(false);
@@ -213,9 +216,11 @@ export const PreciosPage: React.FC = () => {
     );
   }, [precios, searchTerm]);
 
+  if (showSecondPrices) return <PreciosSegundaPanel onBack={() => setShowSecondPrices(false)} />;
+
   return (
     <div className="page-container relative overflow-hidden flex flex-col space-y-8 min-h-[calc(100vh-100px)]">
-      
+
       {/* Background Decorations */}
       <div className="absolute top-[-10%] right-[-5%] w-[45%] h-[45%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
       <div className="absolute bottom-[-5%] left-[-5%] w-[35%] h-[35%] bg-slate-800/5 blur-[100px] rounded-full pointer-events-none" />
@@ -258,6 +263,9 @@ export const PreciosPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
+             <button onClick={() => setShowSecondPrices(true)} className="group flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 font-bold text-amber-800 transition hover:bg-amber-100">
+               <Wrench className="h-4 w-4" /><span className="text-xs uppercase tracking-widest">Componentes de segunda</span>
+             </button>
              <button
                 onClick={handleSyncAgentPrices}
                 disabled={syncingAgent}
@@ -284,8 +292,8 @@ export const PreciosPage: React.FC = () => {
                     key={cat.name}
                     onClick={() => handleCategorySelect(cat.name)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap
-                      ${isActive 
-                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200 ring-1 ring-slate-100' 
+                      ${isActive
+                        ? 'bg-white text-slate-900 shadow-sm border border-slate-200 ring-1 ring-slate-100'
                         : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}
                     `}
                   >
@@ -307,9 +315,9 @@ export const PreciosPage: React.FC = () => {
                 type="search"
               />
             </div>
-            <button 
-              onClick={() => fetchPrecios(selectedCategory)} 
-              disabled={loading} 
+            <button
+              onClick={() => fetchPrecios(selectedCategory)}
+              disabled={loading}
               className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-blue-600 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
@@ -374,7 +382,7 @@ export const PreciosPage: React.FC = () => {
                           column.toLowerCase().includes("precio") ||
                           column.toLowerCase().includes("valor") ||
                            column.toLowerCase().includes("costo");
-                        
+
                         return (
                           <td
                             key={column}

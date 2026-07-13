@@ -17,7 +17,6 @@ import {
   LifeBuoy,
   Globe,
   UserCog,
-  ClipboardCheck,
   Wrench,
   Sliders,
 } from "lucide-react";
@@ -56,7 +55,6 @@ const navigationItems: NavItem[] = [
   { id: "envios", name: "Envíos", icon: Truck, group: "ops" },
   { id: "resultados", name: "Resultados", icon: BarChart3, group: "ops" },
   { id: "reparaciones", name: "Reparaciones", icon: Wrench, group: "ops" },
-  { id: "diagnosticador", name: "Realizar Diagnóstico", icon: ClipboardCheck, group: "ops" },
   { id: "agente", name: "Agente IA", icon: BrainCircuit, group: "config" },
   { id: "diagnosticador_admin", name: "AI Diagnosticador", icon: Sliders, group: "config" },
   { id: "usuarios", name: "Usuarios", icon: UserCog, group: "config" },
@@ -75,7 +73,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
     if (!user || !user.role) return [];
     const userRoles = user.role.split(",").map((r) => r.trim().toLowerCase());
     if (userRoles.includes("admin")) return navigationItems;
-    return navigationItems.filter((item) => userRoles.includes(item.id));
+    return navigationItems.filter((item) => userRoles.includes(item.id) || (item.id === "reparaciones" && userRoles.includes("diagnosticador")));
   }, [user]);
 
   // Agrupar items por grupo

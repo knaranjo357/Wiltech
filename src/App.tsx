@@ -148,7 +148,7 @@ function App() {
         const pageKeyToCheck = pathToPage[path] || currentPage;
 
         const isAdmin = userRoles.includes('admin');
-        const hasSpecificRole = userRoles.includes(pageKeyToCheck);
+        const hasSpecificRole = userRoles.includes(pageKeyToCheck) || (pageKeyToCheck === "reparaciones" && userRoles.includes("diagnosticador"));
 
         if (!isAdmin && !hasSpecificRole) {
           console.warn(`Acceso denegado a: ${pageKeyToCheck}. Redirigiendo...`);
@@ -187,7 +187,8 @@ function App() {
       
       // Si no es admin y no tiene el rol de la página actual, NO renderizar nada (o un error)
       // Esto evita que se vea la Agenda por milisegundos
-      if (!isAdmin && !userRoles.includes(currentPage)) {
+      const hasPageAccess = userRoles.includes(currentPage) || (currentPage === "reparaciones" && userRoles.includes("diagnosticador"));
+      if (!isAdmin && !hasPageAccess) {
         return <div className="flex h-full items-center justify-center">Verificando permisos...</div>;
       }
     }
