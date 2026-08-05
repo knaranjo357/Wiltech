@@ -3,15 +3,17 @@ import {
   Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, 
   ChevronRight, Search, CalendarDays, History, ArrowRightCircle,
   Smartphone, MessageSquare, FileText, Globe, AlertCircle, Check, User, Clock, ChevronDown,
-  CalendarClock, Send, Edit3, Layers, PenBox // <--- Icono nuevo para edición manual
+  CalendarClock, Send, Edit3, Layers, PenBox, BarChart3 // Icono para edición manual
 } from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { ApiService } from '../services/apiService';
 import { Client } from '../types/client';
 import { getEtapaColor, formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
+import { AgendaReportModal } from '../components/AgendaReportModal';
 import { NuevoCliente } from '../components/NuevoCliente';
 import { safeText, normalize } from '../utils/textUtils';
+import { useAuth } from '../hooks/useAuth';
 
 /** ================== Configuración y Utils ================== */
 const SOURCE_TO_SEDE: Record<string, string> = {
@@ -204,6 +206,11 @@ const ReagendarModal: React.FC<{
 
 /** ================== Componente Principal ================== */
 export const AgendaPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = useMemo(
+    () => user?.role?.split(',').some((role) => role.trim().toLowerCase() === 'admin') ?? false,
+    [user?.role],
+  );
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +225,7 @@ export const AgendaPage: React.FC = () => {
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRow, setSavingRow] = useState<number | null>(null);
   const [showSedeModal, setShowSedeModal] = useState<boolean>(false);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   // Reagendar
   const [reagendarModalOpen, setReagendarModalOpen] = useState(false);
@@ -512,7 +520,7 @@ export const AgendaPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="wt-input-wrap w-full md:w-[300px] lg:w-[400px]">
               <Search className="wt-input-icon" />
               <input
@@ -523,8 +531,18 @@ export const AgendaPage: React.FC = () => {
                 type="search"
               />
             </div>
+            {isAdmin && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex h-11 items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-slate-900/20 transition-all hover:-translate-y-0.5 hover:bg-slate-800 active:scale-95"
+              type="button"
+            >
+              <BarChart3 className="h-4 w-4" />
+              <span className="hidden sm:inline">Reportes</span>
+            </button>
+            )}
             <button 
-              onClick={fetchClients} 
+               onClick={fetchClients} 
               disabled={loading} 
               className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-slate-800 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
@@ -852,6 +870,14 @@ export const AgendaPage: React.FC = () => {
       </div>
       </div>
 
+      {isAdmin && (
+      <AgendaReportModal
+        clients={clients}
+        selectedSede={selectedSede || 'Todas'}
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+      />
+      )}
       <ClientModal
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}

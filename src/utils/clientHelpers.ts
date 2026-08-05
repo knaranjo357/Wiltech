@@ -101,6 +101,20 @@ export { isInvalid, safeText, normalize, formatTimeDate, isBotOn };
 const norm = (v: unknown) => safeText(v).toLowerCase();
 const provided = (v: unknown) => !isInvalid(v);
 
+/** Estados de envío usados por la plataforma. */
+export const ETAPA_ENVIO_GESTIONADO = 'ENVIO_GESTIONADO';
+export const ETAPA_ENVIO_GESTIONADO_SERVIENTREGA = 'ENVIO_GESTIONADO_SERVIENTREGA';
+
+/** Incluye la marca histórica y la nueva marca automática de Servientrega. */
+export const isEnvioGestionado = (client: Partial<Client>): boolean => {
+  const etapa = norm(client.estado_etapa).toUpperCase();
+  return etapa === ETAPA_ENVIO_GESTIONADO || etapa === ETAPA_ENVIO_GESTIONADO_SERVIENTREGA;
+};
+
+/** Marca exacta generada por la gestión de envíos en la plataforma. */
+export const isEnvioGestionadoServientrega = (client: Partial<Client>): boolean =>
+  norm(client.estado_etapa).toUpperCase() === ETAPA_ENVIO_GESTIONADO_SERVIENTREGA;
+
 /* ======================= Estado de envío (Logística) ======================= */
 
 // Campos requeridos para poder crear la guía
@@ -151,10 +165,8 @@ export const deriveEnvioUI = (c: Partial<Client>): {
   classes: string;
   isGreen: boolean;
 } => {
-  const estado = norm((c as any).estado_etapa).toLowerCase(); // Usamos estado_etapa o estado_envio según tu DB
-  
   // Prioridad 1: Gestionado explícito
-  if (estado === 'envio_gestionado') {
+  if (isEnvioGestionado(c)) {
     return { key: 'envio_gestionado', label: ENVIO_LABELS.envio_gestionado, classes: ENVIO_CLASSES.envio_gestionado, isGreen: true };
   }
   

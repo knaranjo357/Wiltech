@@ -4,14 +4,16 @@ import {
   Truck, RefreshCw, Phone, MapPin, Search, ArrowRight, 
   Package, ShieldCheck, AlertTriangle, CheckCircle2, X,
   ArrowUpDown, Clock, MessageCircle, Bot, AlertCircle,
-  Send, ClipboardCheck, User, ChevronDown
+  Send, ClipboardCheck, User, ChevronDown, BarChart3
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
-import { formatWhatsApp, deriveEnvioUI, ENVIO_LABELS } from '../utils/clientHelpers';
+import { ETAPA_ENVIO_GESTIONADO, formatWhatsApp, deriveEnvioUI, ENVIO_LABELS, isEnvioGestionado, isEnvioGestionadoServientrega } from '../utils/clientHelpers';
 import type { EnvioUIKey } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
+import { EnviosReportModal } from '../components/EnviosReportModal';
 import { safeText, normalize, formatTimeDate, isBotOn } from '../utils/textUtils';
+import { useAuth } from '../hooks/useAuth';
 
 // --- VALIDACIÓN DE CAMPOS OBLIGATORIOS PARA RECOGIDA ---
 const checkGuiaDataComplete = (c: Client) => {
@@ -39,12 +41,13 @@ const hasLogisticsData = (c: Client): boolean => {
     safeText(c.guia_numero_ida) || 
     safeText(c.guia_nombre_completo) ||
     safeText(c.guia_cedula_id) ||
-    safeText(c.guia_numero_retorno)
+    safeText(c.guia_numero_retorno) ||
+    isEnvioGestionado(c)
   );
 };
 
 // Constantes
-const ETAPA_GESTIONADO = 'ENVIO_GESTIONADO';
+const ETAPA_GESTIONADO = ETAPA_ENVIO_GESTIONADO;
 const CAT_PENDIENTE = 'SOLICITUD_AYUDA';
 const CAT_GESTIONADA = 'SOLICITUD_AYUDA_GESTIONADA';
 
@@ -53,6 +56,11 @@ type TabOption = 'PENDIENTES' | 'GESTIONADOS' | 'TODOS';
 
 /** ================== Componente Principal ================== */
 export const EnviosPage: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = useMemo(
+    () => user?.role?.split(',').some((role) => role.trim().toLowerCase() === 'admin') ?? false,
+    [user?.role],
+  );
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +75,7 @@ export const EnviosPage: React.FC = () => {
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRow, setSavingRow] = useState<number | null>(null);
   const [webhookLoading, setWebhookLoading] = useState<string | null>(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const fetchClients = async () => {
     try {
@@ -207,9 +216,9 @@ export const EnviosPage: React.FC = () => {
 
     // 1. Filtro Tabs (Etapa)
     if (currentTab === 'PENDIENTES') {
-      data = data.filter(c => c.estado_etapa !== ETAPA_GESTIONADO);
+      data = data.filter(c => !isEnvioGestionado(c));
     } else if (currentTab === 'GESTIONADOS') {
-      data = data.filter(c => c.estado_etapa === ETAPA_GESTIONADO);
+      data = data.filter(c => isEnvioGestionado(c));
     }
 
     // 2. Filtro Sede
@@ -330,6 +339,16 @@ export const EnviosPage: React.FC = () => {
                 </button>
              </div>
 
+             {isAdmin && (
+            <button
+               onClick={() => setShowReportModal(true)}
+               className="flex items-center gap-2 rounded-[20px] border border-slate-900 bg-slate-900 px-4 py-3.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-slate-900/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-xl active:scale-95"
+               type="button"
+             >
+                <BarChart3 className="w-4 h-4" />
+                <span className="hidden sm:inline">Reportes</span>
+             </button>
+            )}
              <button 
                onClick={fetchClients}
                className="p-3.5 bg-white shadow-lg border border-white rounded-[20px] text-slate-700 hover:text-slate-800 hover:scale-110 active:scale-95 transition-all duration-300 group"
@@ -401,7 +420,8 @@ export const EnviosPage: React.FC = () => {
                const ui = deriveEnvioUI(client);
                const { isComplete, missingFields } = checkGuiaDataComplete(client);
                const botActive = isBotOn(client.consentimiento_contacto);
-               const isGestionado = client.estado_etapa === ETAPA_GESTIONADO;
+               const isGestionado = isEnvioGestionado(client);
+               const isGestionadoDesdePlataforma = isEnvioGestionadoServientrega(client);
                const isSaving = savingRow === client.row_number;
                const canGenerateIda = isComplete && !safeText(client.guia_numero_ida);
                
@@ -564,17 +584,19 @@ export const EnviosPage: React.FC = () => {
                            ) : null}
 
                            <button
-                              onClick={(e) => toggleGestionado(client, e)}
-                              disabled={isSaving}
-                              className={`flex items-center justify-center gap-2 w-full py-3 rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all border shadow-md active:scale-95
-                                 ${isGestionado 
-                                   ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
-                                   : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
-                              `}
-                           >
-                              {isGestionado ? <RefreshCw className="w-3.5 h-3.5" /> : <ClipboardCheck className="w-3.5 h-3.5" />}
-                              {isGestionado ? 'Reabrir Envío' : 'Marcar Gestionado'}
-                           </button>
+                               onClick={isGestionadoDesdePlataforma ? undefined : (e) => toggleGestionado(client, e)}
+                               disabled={isSaving || isGestionadoDesdePlataforma}
+                               className={`flex items-center justify-center gap-2 w-full py-3 rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all border shadow-md active:scale-95
+                                  ${isGestionadoDesdePlataforma
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100 cursor-default'
+                                    : isGestionado 
+                                    ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
+                                    : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
+                               `}
+                            >
+                               {isGestionadoDesdePlataforma ? <CheckCircle2 className="w-3.5 h-3.5" /> : isGestionado ? <RefreshCw className="w-3.5 h-3.5" /> : <ClipboardCheck className="w-3.5 h-3.5" />}
+                               {isGestionadoDesdePlataforma ? 'Gestionado plataforma' : isGestionado ? 'Reabrir envío' : 'Marcar gestionado'}
+                            </button>
 
                            <div className="grid grid-cols-2 gap-2">
                               <button 
@@ -627,6 +649,13 @@ export const EnviosPage: React.FC = () => {
          )}
       </div>
 
+      {isAdmin && (
+      <EnviosReportModal
+        clients={clients}
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+      />
+      )}
       <ClientModal
         isOpen={!!viewClient}
         onClose={() => setViewClient(null)}
