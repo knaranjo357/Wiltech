@@ -25,8 +25,15 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { Client } from '../types/client';
 import { normalize, safeText } from '../utils/textUtils';
+import {
+  getReportPeriod,
+  isDateWithinReportRange,
+  REPORT_GROUPING_META,
+  ReportDateFilters,
+  type ReportGrouping,
+} from './ReportDateFilters';
 
-type MonthlyAgenda = {
+type AgendaPeriod = {
   key: string;
   label: string;
   agendas: number;
@@ -82,12 +89,6 @@ const parseAgendaReportDate = (raw: unknown): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getMonthKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-const getMonthLabel = (date: Date) =>
-  date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
-
 const MetricCard = ({ icon: Icon, label, value, detail, iconClassName }: MetricCardProps) => (
   <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
     <div className="flex items-start justify-between gap-3">
@@ -124,6 +125,9 @@ interface AgendaReportModalProps {
 
 export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, isOpen, onClose, selectedSede }) => {
   const [selectedCity, setSelectedCity] = useState('Todas');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [grouping, setGrouping] = useState<ReportGrouping>('month');
   const openedRef = useRef(false);
 
   const cities = useMemo(() => {
@@ -149,23 +153,30 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
     setSelectedCity(matchingCity ?? 'Todas');
   }, [cities, isOpen, selectedSede]);
 
-  const reportClients = useMemo(() => {
+  const cityFilteredClients = useMemo(() => {
     if (selectedCity === 'Todas') return clients;
     const selectedCityKey = normalize(selectedCity);
     return clients.filter((client) => normalize(getAgendaCity(client)) === selectedCityKey);
   }, [clients, selectedCity]);
+
+  const reportClients = useMemo(() => cityFilteredClients.filter((client) => {
+    const agendaDate = parseAgendaReportDate(client.fecha_agenda);
+    return agendaDate ? isDateWithinReportRange(agendaDate, dateFrom, dateTo) : false;
+  }), [cityFilteredClients, dateFrom, dateTo]);
+
   const report = useMemo(() => {
     const now = new Date();
-    const buckets = new Map<string, Omit<MonthlyAgenda, 'porcentajeAsistencia'>>();
+    const buckets = new Map<string, Omit<AgendaPeriod, 'porcentajeAsistencia'>>();
 
     reportClients.forEach((client) => {
       const agendaDate = parseAgendaReportDate(client.fecha_agenda);
       if (!agendaDate) return;
 
-      const key = getMonthKey(agendaDate);
+      const period = getReportPeriod(agendaDate, grouping);
+      const key = period.key;
       const current = buckets.get(key) ?? {
         key,
-        label: getMonthLabel(agendaDate),
+        label: period.label,
         agendas: 0,
         evaluables: 0,
         asistieron: 0,
@@ -187,24 +198,24 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
       buckets.set(key, current);
     });
 
-    const monthly = Array.from(buckets.values())
+    const periods = Array.from(buckets.values())
       .sort((a, b) => a.key.localeCompare(b.key))
-      .map((month) => ({
-        ...month,
-        porcentajeAsistencia: month.evaluables
-          ? (month.asistieron / month.evaluables) * 100
+      .map((period) => ({
+        ...period,
+        porcentajeAsistencia: period.evaluables
+          ? (period.asistieron / period.evaluables) * 100
           : null,
       }));
 
-    const totalAgendas = monthly.reduce((total, month) => total + month.agendas, 0);
-    const evaluables = monthly.reduce((total, month) => total + month.evaluables, 0);
-    const asistieron = monthly.reduce((total, month) => total + month.asistieron, 0);
-    const sinRegistrar = monthly.reduce((total, month) => total + month.sinRegistrar, 0);
-    const proximas = monthly.reduce((total, month) => total + month.proximas, 0);
+    const totalAgendas = periods.reduce((total, period) => total + period.agendas, 0);
+    const evaluables = periods.reduce((total, period) => total + period.evaluables, 0);
+    const asistieron = periods.reduce((total, period) => total + period.asistieron, 0);
+    const sinRegistrar = periods.reduce((total, period) => total + period.sinRegistrar, 0);
+    const proximas = periods.reduce((total, period) => total + period.proximas, 0);
 
     return {
-      monthly,
-      chartData: monthly.slice(-12),
+      periods,
+      chartData: periods.slice(-24),
       totalAgendas,
       evaluables,
       asistieron,
@@ -212,7 +223,9 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
       proximas,
       porcentajeAsistencia: evaluables ? (asistieron / evaluables) * 100 : null,
     };
-  }, [reportClients]);
+  }, [grouping, reportClients]);
+
+  const groupingMeta = REPORT_GROUPING_META[grouping];
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -293,6 +306,20 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
           </div>        </header>
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <ReportDateFilters
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            grouping={grouping}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onGroupingChange={setGrouping}
+            onReset={() => {
+              setDateFrom('');
+              setDateTo('');
+              setGrouping('month');
+            }}
+          />
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               detail="Citas con fecha válida dentro del histórico cargado."
@@ -330,12 +357,16 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
                 <div>
                   <div className="flex items-center gap-2 text-slate-800">
                     <CalendarDays className="h-4 w-4 text-blue-500" />
-                    <h3 className="text-sm font-black">Asistencia por mes</h3>
+                    <h3 className="text-sm font-black">Asistencia {groupingMeta.label.toLowerCase()}</h3>
                   </div>
-                  <p className="mt-1 text-[11px] font-medium text-slate-500">Últimos 12 meses con actividad. Las citas futuras quedan fuera del porcentaje.</p>
+                  <p className="mt-1 text-[11px] font-medium text-slate-500">
+                    {report.periods.length > report.chartData.length
+                      ? `La gráfica muestra las últimas ${report.chartData.length} agrupaciones; el detalle contiene todo el rango.`
+                      : 'Las citas futuras quedan fuera del porcentaje de asistencia.'}
+                  </p>
                 </div>
                 <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  {report.chartData.length} meses
+                  {report.periods.length} {groupingMeta.plural}
                 </span>
               </div>
 
@@ -414,11 +445,11 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
             </aside>
           </div>
 
-          {report.monthly.length > 0 && (
+          {report.periods.length > 0 && (
             <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
                 <div>
-                  <h3 className="text-sm font-black text-slate-800">Detalle mensual</h3>
+                  <h3 className="text-sm font-black text-slate-800">Detalle {groupingMeta.label.toLowerCase()}</h3>
                   <p className="mt-1 text-[11px] font-medium text-slate-500">El porcentaje solo toma las citas que ya ocurrieron.</p>
                 </div>
               </div>
@@ -426,7 +457,7 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
                 <table className="min-w-[760px] w-full text-left">
                   <thead className="sticky top-0 bg-slate-50/95 text-[10px] font-black uppercase tracking-wider text-slate-400 backdrop-blur">
                     <tr>
-                      <th className="px-4 py-3 sm:px-5">Mes</th>
+                      <th className="px-4 py-3 sm:px-5">{groupingMeta.singular}</th>
                       <th className="px-4 py-3 text-right">Agendas</th>
                       <th className="px-4 py-3 text-right">Asistieron</th>
                       <th className="px-4 py-3 text-right">Sin registrar</th>
@@ -434,17 +465,17 @@ export const AgendaReportModal: React.FC<AgendaReportModalProps> = ({ clients, i
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...report.monthly].reverse().map((month) => (
-                      <tr className="transition-colors hover:bg-slate-50/70" key={month.key}>
-                        <td className="px-4 py-3 font-bold capitalize text-slate-700 sm:px-5">{month.label}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-600">{month.agendas.toLocaleString('es-CO')}</td>
-                        <td className="px-4 py-3 text-right font-bold text-emerald-600">{month.asistieron.toLocaleString('es-CO')}</td>
+                    {[...report.periods].reverse().map((period) => (
+                      <tr className="transition-colors hover:bg-slate-50/70" key={period.key}>
+                        <td className="px-4 py-3 font-bold capitalize text-slate-700 sm:px-5">{period.label}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-600">{period.agendas.toLocaleString('es-CO')}</td>
+                        <td className="px-4 py-3 text-right font-bold text-emerald-600">{period.asistieron.toLocaleString('es-CO')}</td>
                         <td className="px-4 py-3 text-right font-semibold text-amber-600">
-                          {month.sinRegistrar.toLocaleString('es-CO')}
-                          {month.proximas > 0 && <span className="ml-1 text-[10px] text-slate-400">+{month.proximas} próxima{month.proximas === 1 ? '' : 's'}</span>}
+                          {period.sinRegistrar.toLocaleString('es-CO')}
+                          {period.proximas > 0 && <span className="ml-1 text-[10px] text-slate-400">+{period.proximas} próxima{period.proximas === 1 ? '' : 's'}</span>}
                         </td>
                         <td className="px-4 py-3 text-right sm:px-5">
-                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-600">{formatPercent(month.porcentajeAsistencia)}</span>
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-600">{formatPercent(period.porcentajeAsistencia)}</span>
                         </td>
                       </tr>
                     ))}

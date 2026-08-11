@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Bar,
@@ -22,8 +22,15 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { Client } from '../types/client';
 import { isEnvioGestionadoServientrega, safeText } from '../utils/clientHelpers';
+import {
+  getReportPeriod,
+  isDateWithinReportRange,
+  REPORT_GROUPING_META,
+  ReportDateFilters,
+  type ReportGrouping,
+} from './ReportDateFilters';
 
-type MonthlyShipment = {
+type ShipmentPeriod = {
   key: string;
   label: string;
   envios: number;
@@ -74,12 +81,6 @@ const parseReportDate = (raw: unknown): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const getMonthKey = (date: Date) =>
-  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-const getMonthLabel = (date: Date) =>
-  date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
-
 const MetricCard = ({ icon: Icon, label, value, detail, iconClassName }: MetricCardProps) => (
   <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
     <div className="flex items-start justify-between gap-3">
@@ -102,26 +103,40 @@ interface EnviosReportModalProps {
 }
 
 export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, isOpen, onClose }) => {
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [grouping, setGrouping] = useState<ReportGrouping>('month');
+
+  const filteredClients = useMemo(() => {
+    const hasDateRange = Boolean(dateFrom || dateTo);
+    return clients.filter((client) => {
+      const createdAt = parseReportDate(client.created);
+      if (!createdAt) return !hasDateRange;
+      return isDateWithinReportRange(createdAt, dateFrom, dateTo);
+    });
+  }, [clients, dateFrom, dateTo]);
+
   const summary = useMemo(() => {
-    const total = clients.length;
-    const managedByPlatform = clients.filter(isEnvioGestionadoServientrega).length;
+    const total = filteredClients.length;
+    const managedByPlatform = filteredClients.filter(isEnvioGestionadoServientrega).length;
     const notManagedByPlatform = total - managedByPlatform;
     const managementRate = total ? (managedByPlatform / total) * 100 : 0;
 
     return { total, managedByPlatform, notManagedByPlatform, managementRate };
-  }, [clients]);
+  }, [filteredClients]);
 
-  const monthlyData = useMemo<MonthlyShipment[]>(() => {
-    const buckets = new Map<string, Omit<MonthlyShipment, 'porcentajeGestionado'>>();
+  const periodData = useMemo<ShipmentPeriod[]>(() => {
+    const buckets = new Map<string, Omit<ShipmentPeriod, 'porcentajeGestionado'>>();
 
-    clients.forEach((client) => {
+    filteredClients.forEach((client) => {
       const createdAt = parseReportDate(client.created);
       if (!createdAt) return;
 
-      const key = getMonthKey(createdAt);
+      const period = getReportPeriod(createdAt, grouping);
+      const key = period.key;
       const current = buckets.get(key) ?? {
         key,
-        label: getMonthLabel(createdAt),
+        label: period.label,
         envios: 0,
         gestionadosPlataforma: 0,
       };
@@ -133,14 +148,16 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
 
     return Array.from(buckets.values())
       .sort((a, b) => a.key.localeCompare(b.key))
-      .slice(-12)
-      .map((month) => ({
-        ...month,
-        porcentajeGestionado: month.envios
-          ? (month.gestionadosPlataforma / month.envios) * 100
+      .map((period) => ({
+        ...period,
+        porcentajeGestionado: period.envios
+          ? (period.gestionadosPlataforma / period.envios) * 100
           : 0,
       }));
-  }, [clients]);
+  }, [filteredClients, grouping]);
+
+  const chartData = periodData.slice(-24);
+  const groupingMeta = REPORT_GROUPING_META[grouping];
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -201,6 +218,20 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
         </header>
 
         <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          <ReportDateFilters
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            grouping={grouping}
+            onDateFromChange={setDateFrom}
+            onDateToChange={setDateTo}
+            onGroupingChange={setGrouping}
+            onReset={() => {
+              setDateFrom('');
+              setDateTo('');
+              setGrouping('month');
+            }}
+          />
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               detail="Registros que hoy pertenecen al flujo de logística."
@@ -238,19 +269,23 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                 <div>
                   <div className="flex items-center gap-2 text-slate-800">
                     <CalendarDays className="h-4 w-4 text-indigo-500" />
-                    <h3 className="text-sm font-black">Evolución mensual</h3>
+                    <h3 className="text-sm font-black">Evolución {groupingMeta.label.toLowerCase()}</h3>
                   </div>
-                  <p className="mt-1 text-[11px] font-medium text-slate-500">Últimos 12 meses con actividad, agrupados por fecha de creación.</p>
+                  <p className="mt-1 text-[11px] font-medium text-slate-500">
+                    {periodData.length > chartData.length
+                      ? `La gráfica muestra las últimas ${chartData.length} agrupaciones; el detalle contiene todo el rango.`
+                      : 'Datos agrupados por fecha de creación dentro del rango seleccionado.'}
+                  </p>
                 </div>
                 <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  {monthlyData.length} meses
+                  {periodData.length} {groupingMeta.plural}
                 </span>
               </div>
 
-              {monthlyData.length ? (
+              {chartData.length ? (
                 <div className="h-[280px] w-full">
                   <ResponsiveContainer height="100%" width="100%">
-                    <BarChart data={monthlyData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
+                    <BarChart data={chartData} margin={{ top: 8, right: 6, left: -22, bottom: 0 }}>
                       <CartesianGrid stroke="#eef2f7" strokeDasharray="3 3" vertical={false} />
                       <XAxis
                         axisLine={false}
@@ -301,11 +336,11 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
             </aside>
           </div>
 
-          {monthlyData.length > 0 && (
+          {periodData.length > 0 && (
             <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
                 <div>
-                  <h3 className="text-sm font-black text-slate-800">Detalle por mes</h3>
+                  <h3 className="text-sm font-black text-slate-800">Detalle {groupingMeta.label.toLowerCase()}</h3>
                   <p className="mt-1 text-[11px] font-medium text-slate-500">La gestión se identifica con el estado de plataforma.</p>
                 </div>
               </div>
@@ -313,20 +348,20 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                 <table className="min-w-[650px] w-full text-left">
                   <thead className="sticky top-0 bg-slate-50/95 text-[10px] font-black uppercase tracking-wider text-slate-400 backdrop-blur">
                     <tr>
-                      <th className="px-4 py-3 sm:px-5">Mes</th>
+                      <th className="px-4 py-3 sm:px-5">{groupingMeta.singular}</th>
                       <th className="px-4 py-3 text-right">Envíos</th>
                       <th className="px-4 py-3 text-right">Gestionados</th>
                       <th className="px-4 py-3 text-right sm:px-5">Tasa</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...monthlyData].reverse().map((month) => (
-                      <tr className="transition-colors hover:bg-slate-50/70" key={month.key}>
-                        <td className="px-4 py-3 font-bold capitalize text-slate-700 sm:px-5">{month.label}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-600">{month.envios.toLocaleString('es-CO')}</td>
-                        <td className="px-4 py-3 text-right font-bold text-emerald-600">{month.gestionadosPlataforma.toLocaleString('es-CO')}</td>
+                    {[...periodData].reverse().map((period) => (
+                      <tr className="transition-colors hover:bg-slate-50/70" key={period.key}>
+                        <td className="px-4 py-3 font-bold capitalize text-slate-700 sm:px-5">{period.label}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-600">{period.envios.toLocaleString('es-CO')}</td>
+                        <td className="px-4 py-3 text-right font-bold text-emerald-600">{period.gestionadosPlataforma.toLocaleString('es-CO')}</td>
                         <td className="px-4 py-3 text-right sm:px-5">
-                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-black text-indigo-600">{formatPercent(month.porcentajeGestionado)}</span>
+                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-black text-indigo-600">{formatPercent(period.porcentajeGestionado)}</span>
                         </td>
                       </tr>
                     ))}
