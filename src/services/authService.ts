@@ -82,7 +82,7 @@ export class AuthService {
     if (country && countries.includes(country)) return country;
     if (countries.length) return countries[0];
     if (!countries.length) {
-      throw new Error('La sesión no tiene pais_sede. Vuelve a iniciar sesión con un usuario que tenga país asignado.');
+      throw new Error('Vuelve a iniciar sesión.');
     }
     throw new Error('Selecciona el país con el que vas a trabajar.');
   }

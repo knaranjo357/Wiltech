@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
 import { Layout } from "./components/Layout";
+import { SessionReset } from './components/SessionReset';
 
 // Importación de Páginas
 const PreciosPage = lazy(() => import("./pages/PreciosPage").then((module) => ({ default: module.PreciosPage })));
@@ -96,7 +97,7 @@ function App() {
   if (!isAuthenticated) return <LoginForm />;
   let country: string;
   try { country = AuthService.getPaisSede(); }
-  catch { return <div className="p-8 text-center"><p>Tu sesión no tiene países asignados.</p><button className="btn-primary mt-4" onClick={() => { AuthService.logout(); window.location.reload(); }}>Volver al inicio de sesión</button></div>; }
+  catch { return <SessionReset />; }
   return <CountryProvider key={country}><Workspace /></CountryProvider>;
 }
 export default App;

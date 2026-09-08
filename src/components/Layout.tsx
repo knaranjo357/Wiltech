@@ -3,6 +3,7 @@ import { AuthService } from '../services/authService';
 import { useCountryConfig } from '../hooks/useCountryConfig';
 import { canAccessCountryPage } from '../utils/countryConfig';
 import { useAuth } from "../hooks/useAuth";
+import { SessionReset } from './SessionReset';
 import {
   DollarSign,
   Bot,
@@ -369,7 +370,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
 
         {/* Page Content */}
         <main id="main-content" tabIndex={-1} className="wt-workspace w-full min-w-0 flex-1 outline-none">
-          {activeCountry ? children : <p role="alert" className="p-6">Tu sesión no tiene países asignados. Vuelve a iniciar sesión.</p>}
+          {activeCountry ? children : <SessionReset />}
         </main>
       </div>
     </div>
