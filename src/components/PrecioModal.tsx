@@ -1,6 +1,7 @@
 ﻿import React from 'react';
 import { X } from 'lucide-react';
 import { PrecioItem } from '../types/precios';
+import { ModalPortal } from './ModalPortal';
 
 interface PrecioModalProps {
   isOpen: boolean;
@@ -38,14 +39,13 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border border-white/40 w-full max-w-5xl max-h-[90vh] overflow-hidden">
+    <ModalPortal open={isOpen} onClose={onClose} className="max-w-5xl flex flex-col" ariaLabel={`Detalle de ${title}`}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-slate-900 px-6 py-4 text-white">
+        <div className="bg-zinc-950 px-5 py-5 text-white sm:px-7">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <h2 className="text-xl font-bold truncate">{title}</h2>
-              <p className="text-blue-100 truncate">{categoryName}</p>
+              <h2 className="text-xl font-black tracking-tight truncate">{title}</h2>
+              <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500 truncate">{categoryName}</p>
             </div>
             <button
               onClick={onClose}
@@ -59,7 +59,7 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
         </div>
 
         {/* Contenido */}
-        <div className="p-6 overflow-auto max-h-[75vh]">
+        <div className="p-5 sm:p-7 overflow-auto flex-1 custom-scrollbar">
           {/* Grid más denso para ver más campos a la vez */}
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {fields.map(([key, value]) => {
@@ -72,11 +72,11 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
               const colSpan = isLong ? 'sm:col-span-2 lg:col-span-2' : '';
 
               return (
-                <div key={key} className={`bg-gray-50 rounded-xl p-4 border border-gray-100 ${colSpan}`}>
-                  <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                <div key={key} className={`bg-slate-50 rounded-2xl p-4 border border-slate-200/70 ${colSpan}`}>
+                  <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.16em] mb-2">
                     {label}
                   </h3>
-                  <p className="text-lg font-bold text-gray-900 break-words">
+                  <p className="text-sm font-bold text-slate-900 break-words">
                     {val}
                   </p>
                 </div>
@@ -90,7 +90,6 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalPortal>
   );
 };

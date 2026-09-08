@@ -1,35 +1,44 @@
+import { RepairLoader } from './RepairLoader';
 // src/components/NuevoCliente.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useMemo, useState } from 'react';
 import {
   Plus, X, Save, Phone, MapPin, User, Smartphone, FileText, Settings, 
   DollarSign, UserCheck, Calendar, ShieldCheck, ClipboardList, ClipboardCheck, 
   Truck, Mail, Bot, MessageCircle, Percent, ChevronRight, Fingerprint,
-  LayoutDashboard, ShoppingBag
+  Globe, ShoppingBag
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
+import { AuthService } from '../services/authService';
+import { ModalPortal } from './ModalPortal';
 import { SedeSelect } from './SedeSelect';
+import { StageAutocomplete } from './StageAutocomplete';
 
 /** ===================== Helpers ===================== **/
 
 /**
  * Normaliza un número para guardar en BD: 573001234567@s.whatsapp.net
  */
-function toWaJid(raw: string): { jid: string; e164: string } | null {
+function toWaJid(raw: string, country: string): { jid: string; e164: string } | null {
   if (!raw) return null;
   const digits = raw.replace(/\D+/g, '');
 
   let e164 = '';
   
-  if (digits.startsWith('57') && digits.length === 12) {
+  if (raw.trim().startsWith('+') && /^[1-9]\d{7,14}$/.test(digits)) {
+    e164 = digits;
+  } else if (country === 'Mexico' || country === 'México') {
+    if (digits.length === 10) e164 = '52' + digits;
+    else if (digits.startsWith('52') && digits.length === 12) e164 = digits;
+    else return null;
+  } else if (country !== 'Colombia') {
+    return null;
+  } else if (digits.startsWith('57') && digits.length === 12) {
     e164 = digits;
   } else if (digits.length === 10 && digits.startsWith('3')) {
     e164 = '57' + digits;
   } else if (digits.length === 11 && digits.startsWith('03')) {
     e164 = '57' + digits.slice(1);
-  } else if (digits.length > 10) {
-    e164 = digits;
   } else {
     return null;
   }
@@ -58,7 +67,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const activeCountry = AuthService.getPaisSede();
 
   // Estado inicial del formulario (Bot activo por defecto: true)
   const initialForm: Partial<Client> = {
@@ -69,7 +78,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     intencion: '',
     detalles: '',
     modo_recepcion: '',
-    estado_etapa: 'nuevo', 
+    estado_etapa: 'Nuevo',
     categoria_contacto: '',
     fecha_agenda: '',
     asignado_a: '',
@@ -103,11 +112,13 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
   const [form, setForm] = useState<Partial<Client>>(initialForm);
 
   // Preview del WhatsApp
-  const waParsed = useMemo(() => toWaJid(String(form.whatsapp || '')), [form.whatsapp]);
+  const waParsed = useMemo(() => toWaJid(String(form.whatsapp || ''), activeCountry), [form.whatsapp, activeCountry]);
 
   // Manejadores de cierre
   const handleClose = () => {
-    if ((form.nombre || form.whatsapp) && !window.confirm("¿Deseas cerrar? Se perderán los datos ingresados.")) {
+    if (saving) return;
+    const hasChanges = Object.entries(form).some(([key, value]) => value !== initialForm[key as keyof Client] && value !== '');
+    if (hasChanges && !window.confirm("¿Deseas cerrar? Se perderán los datos ingresados.")) {
        return;
     }
     setOpen(false);
@@ -115,35 +126,20 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     setError(null);
   };
 
-  const onOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === overlayRef.current) handleClose();
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose();
-    };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [open, form]);
-
   const setVal = <K extends keyof Client>(key: K, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
   // ================= SECCIONES (Estilo Idéntico a ClientModal) =================
   const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
     {
-      title: 'Información Personal',
+      title: 'Contacto y Agenda',
       icon: User,
       iconColor: 'text-blue-600 bg-blue-50',
       fields: [
         { label: 'Nombre', key: 'nombre', icon: User, type: 'text', required: true },
-        { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text', required: true, placeholder: 'Ej: 315 123 4567' },
+        { label: 'WhatsApp', key: 'whatsapp', icon: Phone, type: 'text', required: true, placeholder: activeCountry === 'Colombia' ? '+57 300 123 4567' : ['Mexico', 'México'].includes(activeCountry) ? '+52 55 1234 5678' : '+ Código de país y número' },
+        { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
+        { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: MapPin, type: 'sede' },
         { label: 'Ciudad', key: 'ciudad', icon: MapPin, type: 'text' },
         { label: 'Subscriber ID', key: 'subscriber_id', icon: Fingerprint, type: 'text' },
       ],
@@ -160,14 +156,12 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
       ],
     },
     {
-      title: 'Comercial y Agenda',
+      title: 'Información Comercial',
       icon: Calendar,
       iconColor: 'text-teal-600 bg-teal-50',
       fields: [
         { label: 'Etapa', key: 'estado_etapa', icon: Settings, type: 'text' },
         { label: 'Categoría', key: 'categoria_contacto', icon: UserCheck, type: 'text' },
-        { label: 'Fecha agenda', key: 'fecha_agenda', icon: Calendar, type: 'datetime' },
-        { label: 'Sede Agendada', key: 'agenda_ciudad_sede', icon: MapPin, type: 'sede' },
         { label: 'Asignado a', key: 'asignado_a', icon: User, type: 'text' },
       ],
     },
@@ -217,6 +211,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
 
   // ================= SUBMIT =================
   const handleSubmit = async () => {
+    if (saving) return;
     setError(null);
 
     // Validaciones
@@ -225,9 +220,9 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
       return;
     }
 
-    const parsed = toWaJid(String(form.whatsapp || ''));
+    const parsed = toWaJid(String(form.whatsapp || ''), activeCountry);
     if (!parsed) {
-      setError('Número de WhatsApp inválido. Formato requerido: 10 dígitos (Ej: 3001234567)');
+      setError('Revisa el WhatsApp. Incluye + y el código de país; para Colombia y México también puedes escribir los 10 dígitos locales.');
       return;
     }
 
@@ -240,6 +235,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     // Payload
     const payload: Partial<Client> = {
       ...form,
+      pais_sede: activeCountry,
       whatsapp: parsed.jid,
       created: new Date().toISOString(),
       last_msg: new Date().toISOString(),
@@ -277,10 +273,10 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     <>
       {/* Botón Flotante */}
       {floating && (
-        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
+        <div className="fixed bottom-5 right-5 z-50 animate-in slide-in-from-bottom-4 duration-500">
           <button
             onClick={() => setOpen(true)}
-            className="group flex items-center gap-2.5 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl shadow-slate-900/40 hover:bg-black hover:shadow-slate-900/60 hover:-translate-y-0.5 transition-all duration-200 active:scale-95 border border-slate-700"
+            className="group flex items-center gap-2.5 bg-slate-950 text-white px-4 py-3 rounded-xl shadow-lg shadow-slate-900/20 hover:bg-black hover:shadow-xl transition-all duration-200 active:scale-95 border border-slate-800"
             title="Crear Nuevo Cliente"
           >
             <span className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center">
@@ -291,67 +287,36 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
         </div>
       )}
 
-      {/* Modal Overlay */}
-      {open && createPortal(
-        <div
-          ref={overlayRef}
-          onMouseDown={onOverlayClick}
-          className="wt-overlay"
-          role="dialog"
-        >
-          <div
-            onMouseDown={(e) => e.stopPropagation()}
-            className="wt-modal h-full sm:h-[92vh] sm:max-w-6xl flex flex-col"
-          >
-            {/* Header */}
-            <div className="relative shrink-0 bg-white z-20">
-              <div className="wt-modal-header py-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-lg shadow-blue-200 border-2 border-white ring-1 ring-gray-100">
-                     <Plus className="w-6 h-6" />
+      <ModalPortal open={open} onClose={handleClose} ariaLabel="Nuevo cliente" className="flex max-h-[92dvh] w-full max-w-3xl flex-col">
+            <div className="shrink-0 border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-950 text-white">
+                    <User className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900 tracking-tight">Crear Nuevo Cliente</h2>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-100 flex items-center gap-1">
-                         <Bot className="w-3 h-3" /> Bot: Activo
-                      </span>
-                      <span className="text-xs text-gray-400">Complete la información requerida</span>
-                    </div>
+                    <h2 className="text-xl font-bold tracking-tight text-zinc-950">Nuevo cliente</h2>
+                    <p className="mt-1 text-sm text-slate-500">Empieza con su nombre, WhatsApp, fecha y sede de agenda.</p>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleClose}
-                    className="btn-secondary"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={handleSubmit}
-                    disabled={saving}
-                    className="btn-primary px-6"
-                  >
-                    {saving ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-                        <span>Guardando...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Guardar Cliente</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+                <button onClick={handleClose} disabled={saving} aria-label="Cerrar nuevo cliente" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                  <Globe className="h-3.5 w-3.5" /> {activeCountry}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                  <Bot className="h-3.5 w-3.5" /> Bot activo
+                </span>
+                <span className="text-xs text-slate-400">Los campos con * son obligatorios</span>
               </div>
             </div>
 
             {/* Error Banner */}
             {error && (
-              <div className="px-6 py-3 bg-red-50 border-b border-red-100 flex items-center gap-3 text-red-700 text-sm animate-in slide-in-from-top-2">
+              <div role="alert" className="shrink-0 px-6 py-3 bg-red-50 border-b border-red-100 flex items-center gap-3 text-red-700 text-sm animate-in slide-in-from-top-2">
                 <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center shrink-0">
                    <X className="w-4 h-4 text-red-600" />
                 </div>
@@ -360,35 +325,41 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
             )}
 
             {/* Scrollable Body */}
-            <div className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-8">
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/70 p-4 sm:p-6">
+              <div className="space-y-3">
                 {sections.map((section, idx) => (
-                  <div key={idx} className="card overflow-hidden h-fit flex flex-col relative">
+                  <details key={idx} open={idx < 2} className="group/section rounded-2xl border border-slate-200 bg-white shadow-sm">
                     {/* Section Header */}
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-slate-400 sm:px-5 [&::-webkit-details-marker]:hidden">
                         <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-xl shadow-sm ${section.iconColor}`}>
                                 <section.icon className="w-5 h-5" />
                             </div>
-                            <h3 className="font-extrabold text-slate-800 text-sm uppercase tracking-widest">{section.title}</h3>
+                            <div><h3 className="text-sm font-semibold text-slate-800">{section.title}</h3><p className="mt-0.5 text-xs text-slate-400">{idx === 0 ? "Datos de contacto y programación de la visita" : "Opcional · Puedes completarlo después"}</p></div>
                         </div>
-                    </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-slate-400 transition-transform group-open/section:rotate-90" />
+                    </summary>
 
                     {/* Fields */}
-                    <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                    <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 rounded-b-2xl border-t border-slate-100">
                       {section.fields.map((field, j) => {
                         const isFullWidth = field.type === 'textarea';
                         const val = (form as any)[field.key];
 
                         return (
                           <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
-                             <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest pl-0.5 mb-1 flex items-center justify-between">
+                             <label className="text-xs font-semibold text-slate-600 pl-0.5 flex items-center justify-between">
                                 {field.label} {field.required && <span className="text-red-500">*</span>}
                              </label>
                              
                              <div className="relative group">
-                               {field.type === 'textarea' ? (
-                                 <textarea
+                               {field.key === 'estado_etapa' ? (
+                                 <StageAutocomplete
+                                   value={val}
+                                   onChange={(nextValue) => setVal('estado_etapa', nextValue as any)}
+                                 />
+                               ) : field.type === 'textarea' ? (
+                                 <textarea aria-label={field.label}
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    rows={3}
@@ -397,7 +368,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                  />
                                ) : field.type === 'boolean' ? (
                                  <div className="relative">
-                                    <select
+                                    <select aria-label={field.label}
                                       value={val === true ? 'true' : 'false'}
                                       onChange={(e) => setVal(field.key, e.target.value === 'true')}
                                       className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 appearance-none"
@@ -409,22 +380,25 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                  </div>
                                ) : field.type === 'datetime' ? (
                                  <input
-                                   type="datetime-local"
+                                   aria-label={field.label} type="datetime-local"
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5"
                                  />
-                               ) : field.type === 'sede' ? (
+                               ) : field.type === 'sede' || field.key === 'ciudad' || field.key === 'guia_ciudad' ? (
                                  <SedeSelect
+                                   placeholder={`Selecciona o escribe ${field.label.toLowerCase()}`}
                                    value={val ?? ''}
                                    onChange={(v) => setVal(field.key, v)}
                                  />
                                ) : (
                                  <input
-                                   type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
+                                   aria-label={field.label}
+                                   aria-required={field.required}
+                                   type={field.key === 'whatsapp' ? 'tel' : field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
                                    value={val ?? ''}
                                    onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
-                                   placeholder={field.placeholder || '-'}
+                                   placeholder={field.placeholder || field.label}
                                    className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"
                                  />
                                )}
@@ -445,21 +419,30 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                              {field.key === 'whatsapp' && waParsed && (
                                 <span className="text-[10px] text-gray-400 font-mono pl-1 flex items-center gap-1">
                                   <ShieldCheck className="w-3 h-3 text-gray-300" />
-                                  Se guardará como: {waParsed.jid}
+                                  Número de contacto: +{waParsed.e164}
                                 </span>
                              )}
                           </div>
                         );
                       })}
                     </div>
-                  </div>
+                  </details>
                 ))}
               </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+            <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">El cliente se creará en <span className="font-semibold text-slate-800">{activeCountry}</span>.</p>
+                <div className="flex items-center justify-end gap-2">
+                  <button onClick={handleClose} disabled={saving} className="btn-secondary">Cancelar</button>
+                  <button onClick={handleSubmit} disabled={saving} className="btn-primary min-w-[150px]">
+                    {saving ? <RepairLoader variant="icon" /> : <Save className="h-4 w-4" />}
+                    {saving ? 'Creando...' : 'Crear cliente'}
+                  </button>
+                </div>
+              </div>
+            </div>
+      </ModalPortal>
     </>
   );
 };

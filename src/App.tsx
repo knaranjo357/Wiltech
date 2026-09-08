@@ -1,224 +1,102 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useAuth } from "./hooks/useAuth";
 import { LoginForm } from "./components/LoginForm";
 import { Layout } from "./components/Layout";
 
 // Importación de Páginas
-import { PreciosPage } from "./pages/PreciosPage";
-import { CRMPage } from "./pages/CRMPage";
-import { AgendaPage } from "./pages/AgendaPage";
-import { EnviosPage } from "./pages/EnviosPage";
-import { Resultados } from "./pages/Resultados/index";
-import { WppPage } from "./pages/WppPage";
-import { AgentePage } from "./pages/AgentePage";
-import ConversacionesPage from "./pages/ConversacionesPage";
-import Web1ConversacionesPage from "./pages/Web1ConversacionesPage";
-import { AsistenciaPage } from "./pages/AsistenciaPage";
-import { UsuariosPage } from "./pages/UsuariosPage";
-import Diagnosticador from "./pages/Diagnosticador";
-import DiagnosticadorAdmin from "./pages/DiagnosticadorAdmin";
-import ReparacionesPage from "./pages/ReparacionesPage";
+const PreciosPage = lazy(() => import("./pages/PreciosPage").then((module) => ({ default: module.PreciosPage })));
+const CRMPage = lazy(() => import("./pages/CRMPage").then((module) => ({ default: module.CRMPage })));
+const AgendaPage = lazy(() => import("./pages/AgendaPage").then((module) => ({ default: module.AgendaPage })));
+const EnviosPage = lazy(() => import("./pages/EnviosPage").then((module) => ({ default: module.EnviosPage })));
+const Resultados = lazy(() => import("./pages/Resultados/index").then((module) => ({ default: module.Resultados })));
+const WppPage = lazy(() => import("./pages/WppPage").then((module) => ({ default: module.WppPage })));
+const AgentePage = lazy(() => import("./pages/AgenteWorkspacePage").then((module) => ({ default: module.AgentePage })));
+const ConversacionesPage = lazy(() => import("./pages/ConversacionesPage"));
+const Web1ConversacionesPage = lazy(() => import("./pages/Web1ConversacionesPage"));
+const AsistenciaPage = lazy(() => import("./pages/AsistenciaPage").then((module) => ({ default: module.AsistenciaPage })));
+const UsuariosPage = lazy(() => import("./pages/UsuariosPage").then((module) => ({ default: module.UsuariosPage })));
+const Diagnosticador = lazy(() => import("./pages/Diagnosticador"));
+const DiagnosticadorAdmin = lazy(() => import("./pages/DiagnosticadorAdmin"));
+const ReparacionesPage = lazy(() => import("./pages/ReparacionesPage"));
 
-// 1. DEFINICIÓN DE CLAVES (Deben coincidir con los roles del Backend)
-type PageKey = 
-  | "precios" 
-  | "whatsapp"
-  | "crm" 
-  | "agenda" 
-  | "envios" 
-  | "resultados" 
-  | "agente" 
-  | "conversaciones"
-  | "web1" 
-  | "asistencia"
-  | "usuarios"
-  | "reparaciones"
-  | "diagnosticador"
-  | "diagnosticador_admin";
+import { CountryProvider, useCountryConfig } from './hooks/useCountryConfig';
+import { canAccessCountryPage, COUNTRY_MODULES } from './utils/countryConfig';
+import { AuthService } from './services/authService';
+import { RepairLoader } from './components/RepairLoader';
+const PaisesPage = lazy(() => import('./pages/PaisesPage'));
 
-function App() {
-  const { user, loading, isAuthenticated } = useAuth();
 
-  // 2. MAPEO RUTA -> CLAVE INTERNA
-  const pathToPage = useMemo<Record<string, PageKey>>(
-    () => ({
-      "/precios": "precios",
-      "/wpp": "whatsapp", 
-      "/crm": "crm",
-      "/agenda": "agenda",
-      "/envios": "envios",
-      "/resultados": "resultados",
-      "/agente": "agente",
-      "/conversaciones": "conversaciones",
-      "/web1": "web1",
-      "/asistencia": "asistencia",
-      "/usuarios": "usuarios",
-      "/reparaciones": "reparaciones",
-      "/diagnosticador": "diagnosticador",
-      "/diagnosticador-admin": "diagnosticador_admin",
-    }),
-    []
-  );
+const pageToPath: Record<string, string> = {
+  precios: '/precios', whatsapp: '/wpp', crm: '/crm', agenda: '/agenda',
+  envios: '/envios', resultados: '/resultados', agente: '/agente',
+  conversaciones: '/conversaciones', web1: '/web1', asistencia: '/asistencia',
+  usuarios: '/usuarios', reparaciones: '/reparaciones', diagnosticador: '/diagnosticador',
+  diagnosticador_admin: '/diagnosticador-admin', paises: '/paises',
+};
+const pathToPage = Object.fromEntries(Object.entries(pageToPath).map(([page, path]) => [path, page]));
 
-  // 3. MAPEO CLAVE INTERNA -> RUTA
-  const pageToPath = useMemo<Record<PageKey, string>>(
-    () => ({
-      precios: "/precios",
-      whatsapp: "/wpp",
-      crm: "/crm",
-      agenda: "/agenda",
-      envios: "/envios",
-      resultados: "/resultados",
-      agente: "/agente",
-      conversaciones: "/conversaciones",
-      web1: "/web1",
-      asistencia: "/asistencia",
-      usuarios: "/usuarios",
-      reparaciones: "/reparaciones",
-      diagnosticador: "/diagnosticador",
-      diagnosticador_admin: "/diagnosticador-admin",
-    }),
-    []
-  );
-
-  // 4. LÓGICA DE PÁGINA INICIAL SEGÚN ROLES
-  const getFirstAllowedPage = (): PageKey => {
-    if (!user || !user.role) return "precios"; // Fallback genérico si no hay user
-    
-    const roles = user.role.split(',').map(r => r.trim().toLowerCase());
-    
-    // Si es admin, su default puede ser Agenda (o lo que prefieras)
-    if (roles.includes('admin')) return "agenda";
-
-    // Si no es admin, buscamos el primer rol que coincida con una página válida
-    const validRole = roles.find(r => r in pageToPath) as PageKey | undefined;
-    
-    // Retornamos el primer rol válido encontrado, o 'precios' como último recurso
-    return validRole || "precios";
-  };
-
-  // Inicialización del estado
-  const [currentPage, setCurrentPage] = useState<PageKey>(() => {
-    const path = window.location.pathname;
-    // Si la URL es válida, intentamos usarla, si no, calculamos dinámicamente
-    if (path in pathToPage) return pathToPage[path];
-    return "agenda"; // Valor temporal, el useEffect lo corregirá inmediatamente
-  });
-
-  // Manejar navegación del navegador (atrás/adelante)
+function Workspace() {
+  const { user } = useAuth();
+  const { config } = useCountryConfig();
+  const [currentPage, setCurrentPage] = useState(() => pathToPage[window.location.pathname] ?? 'agenda');
+  const allowedPages = useMemo(() => [...COUNTRY_MODULES.map(module => module.page), 'paises'].filter(page => canAccessCountryPage(page, user?.role, config)), [config, user?.role]);
+  const canOpen = (page: string) => allowedPages.includes(page);
   useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path === "/login") return;
-      if (path in pathToPage) {
-        setCurrentPage(pathToPage[path]);
+    const onPop = () => {
+      const next = pathToPage[window.location.pathname] ?? allowedPages[0];
+      if (next !== currentPage && !window.dispatchEvent(new Event('app:before-navigate', { cancelable: true }))) {
+        window.history.pushState(null, '', pageToPath[currentPage]); return;
       }
+      if (next) setCurrentPage(next);
     };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [pathToPage]);
-
-  // === GUARD DE SEGURIDAD Y REDIRECCIÓN ===
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [currentPage, allowedPages]);
   useEffect(() => {
-    if (loading) return;
-
-    const path = window.location.pathname;
-
-    // A. NO AUTENTICADO
-    if (!isAuthenticated) {
-      if (path !== "/login") {
-        window.history.replaceState(null, "", "/login");
-      }
-      return;
+    if (!allowedPages.includes(currentPage) && allowedPages[0]) {
+      setCurrentPage(allowedPages[0]);
+      window.history.replaceState(null, '', pageToPath[allowedPages[0]]);
+    } else if (allowedPages.includes(currentPage) && !pathToPage[window.location.pathname]) {
+      window.history.replaceState(null, '', pageToPath[currentPage]);
     }
-
-    // B. AUTENTICADO
-    if (isAuthenticated) {
-      // 1. Si está en login, sacarlo de ahí
-      if (path === "/login") {
-        const targetPage = getFirstAllowedPage();
-        setCurrentPage(targetPage);
-        window.history.replaceState(null, "", pageToPath[targetPage]);
-        return;
-      }
-
-      // 2. Verificar Permisos
-      if (user?.role) {
-        const userRoles = user.role.split(',').map(r => r.trim().toLowerCase());
-        const pageKeyToCheck = pathToPage[path] || currentPage;
-
-        const isAdmin = userRoles.includes('admin');
-        const hasSpecificRole = userRoles.includes(pageKeyToCheck) || (pageKeyToCheck === "reparaciones" && userRoles.includes("diagnosticador"));
-
-        if (!isAdmin && !hasSpecificRole) {
-          console.warn(`Acceso denegado a: ${pageKeyToCheck}. Redirigiendo...`);
-          
-          // Encontrar ruta segura
-          const safePage = getFirstAllowedPage();
-          
-          setCurrentPage(safePage);
-          window.history.replaceState(null, "", pageToPath[safePage]);
-        } 
-        // Caso especial: Si la URL no coincide con el estado actual (sincronización inicial)
-        else if (path in pathToPage && pathToPage[path] !== currentPage) {
-             setCurrentPage(pathToPage[path]);
-        }
-      }
-    }
-  }, [loading, isAuthenticated, user, pathToPage, pageToPath, currentPage]);
-
+  }, [allowedPages, currentPage]);
   const handlePageChange = (page: string) => {
-    const p = page as PageKey;
-    if (pageToPath[p]) {
-      setCurrentPage(p);
-      window.history.pushState(null, "", pageToPath[p]);
-    }
+    if (!canOpen(page) || page === currentPage) return;
+    if (!window.dispatchEvent(new Event('app:before-navigate', { cancelable: true }))) return;
+    setCurrentPage(page);
+    window.history.pushState(null, '', pageToPath[page]);
   };
-
-  if (loading) return <div className="flex h-screen items-center justify-center">Cargando...</div>;
-  if (!isAuthenticated) return <LoginForm />;
-
-  // 5. RENDERIZADO SEGURO
   const renderPage = () => {
-    // Verificación extra antes de renderizar (Doble check de seguridad)
-    if (user?.role) {
-      const userRoles = user.role.split(',').map(r => r.trim().toLowerCase());
-      const isAdmin = userRoles.includes('admin');
-      
-      // Si no es admin y no tiene el rol de la página actual, NO renderizar nada (o un error)
-      // Esto evita que se vea la Agenda por milisegundos
-      const hasPageAccess = userRoles.includes(currentPage) || (currentPage === "reparaciones" && userRoles.includes("diagnosticador"));
-      if (!isAdmin && !hasPageAccess) {
-        return <div className="flex h-full items-center justify-center">Verificando permisos...</div>;
-      }
-    }
-
+    if (!canOpen(currentPage)) return <div className="p-8 text-center text-slate-500">No hay módulos disponibles para tu usuario en este país. Contacta a root.</div>;
     switch (currentPage) {
-      case "precios": return <PreciosPage />;
-      case "whatsapp": return <WppPage />; // Clave 'whatsapp'
-      case "crm": return <CRMPage />;
-      case "agenda": return <AgendaPage />;
-      case "envios": return <EnviosPage />;
-      case "resultados": return <Resultados />;
-      case "agente": return <AgentePage />;
-      case "conversaciones": return <ConversacionesPage />;
-      case "web1": return <Web1ConversacionesPage />;
-      case "asistencia": return <AsistenciaPage />;
-      case "usuarios": return <UsuariosPage />;
-      case "reparaciones": return <ReparacionesPage />;
-      case "diagnosticador": return <Diagnosticador />;
-      case "diagnosticador_admin": return <DiagnosticadorAdmin />;
-      default: 
-        // En lugar de Agenda, retornamos null o redirección visual si algo falla
-        return null;
+      case 'precios': return <PreciosPage />;
+      case 'whatsapp': return <WppPage />;
+      case 'crm': return <CRMPage />;
+      case 'agenda': return <AgendaPage />;
+      case 'envios': return <EnviosPage />;
+      case 'resultados': return <Resultados />;
+      case 'agente': return <AgentePage />;
+      case 'conversaciones': return <ConversacionesPage onOpenWeb={() => handlePageChange('web1')} />;
+      case 'web1': return <Web1ConversacionesPage onOpenConversations={() => handlePageChange('conversaciones')} />;
+      case 'asistencia': return <AsistenciaPage />;
+      case 'usuarios': return <UsuariosPage />;
+      case 'reparaciones': return <ReparacionesPage />;
+      case 'diagnosticador': return <Diagnosticador />;
+      case 'diagnosticador_admin': return <DiagnosticadorAdmin />;
+      case 'paises': return <PaisesPage />;
+      default: return null;
     }
   };
-
-  return (
-    <Layout currentPage={currentPage} onPageChange={handlePageChange}>
-      {renderPage()}
-    </Layout>
-  );
+  return <Layout currentPage={currentPage} onPageChange={handlePageChange}><Suspense fallback={<RepairLoader variant="panel" label="Cargando módulo" />}>{renderPage()}</Suspense></Layout>;
 }
 
+function App() {
+  const { loading, isAuthenticated } = useAuth();
+  if (loading) return <RepairLoader />;
+  if (!isAuthenticated) return <LoginForm />;
+  let country: string;
+  try { country = AuthService.getPaisSede(); }
+  catch { return <div className="p-8 text-center"><p>Tu sesión no tiene países asignados.</p><button className="btn-primary mt-4" onClick={() => { AuthService.logout(); window.location.reload(); }}>Volver al inicio de sesión</button></div>; }
+  return <CountryProvider key={country}><Workspace /></CountryProvider>;
+}
 export default App;

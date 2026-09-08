@@ -5,6 +5,7 @@ export interface LoginRequest {
 }
 
 export interface User {
+  pais_sede?: string;
   email: string;
   token: string;
   role?: string;
@@ -55,7 +56,9 @@ export class AuthService {
     const role = this.normalizeRole(first.rol);
     const locations: string[] | undefined = Array.isArray(first.ciudad) ? first.ciudad : undefined;
 
-    const user: User = { email: credentials.email, token, role, locations };
+    const pais_sede = this.parseCountries(first.pais_sede).join(',');
+    const user: User = { email: credentials.email, token, role, locations, pais_sede };
+    sessionStorage.removeItem('wiltech_active_country');
 
     localStorage.setItem(this.TOKEN_KEY, token);
     localStorage.setItem(this.USER_KEY, JSON.stringify(user));
@@ -64,12 +67,53 @@ export class AuthService {
   }
 
   static logout(): void {
+    sessionStorage.removeItem('wiltech_active_country');
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
   }
 
   static getToken(): string | null {
     return localStorage.getItem(this.TOKEN_KEY);
+  }
+
+  static getPaisSede(): string {
+    const countries = this.getAllowedCountries();
+    const country = sessionStorage.getItem('wiltech_active_country');
+    if (country && countries.includes(country)) return country;
+    if (countries.length) return countries[0];
+    if (!countries.length) {
+      throw new Error('La sesión no tiene pais_sede. Vuelve a iniciar sesión con un usuario que tenga país asignado.');
+    }
+    throw new Error('Selecciona el país con el que vas a trabajar.');
+  }
+
+  static getAllowedCountries(): string[] {
+    const countries = this.parseCountries(this.getCurrentUser()?.pais_sede);
+    return this.isRoot() ? countries : countries.slice(0, 1);
+  }
+
+  static isRoot(): boolean {
+    return this.getCurrentUser()?.role?.split(',').some(role => role.trim().toLowerCase() === 'root') ?? false;
+  }
+
+  /** Accept arrays, serialized arrays and the legacy comma-separated format. */
+  static parseCountries(raw: unknown): string[] {
+    if (typeof raw === 'string') {
+      const text = raw.trim();
+      try {
+        const parsed: unknown = JSON.parse(text);
+        if (Array.isArray(parsed)) return this.parseCountries(parsed);
+      } catch { /* Legacy lists can contain brackets without JSON quotes. */ }
+      raw = text.replace(/^\[/, '').replace(/\]$/, '').split(',');
+    }
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.filter((value): value is string => typeof value === 'string')
+      .map(value => value.trim().replace(/^["']|["']$/g, '').trim()).filter(Boolean))];
+  }
+
+  static setPaisSede(country: string): void {
+    if (!this.getAllowedCountries().includes(country)) throw new Error('País no autorizado.');
+    sessionStorage.setItem('wiltech_active_country', country);
   }
 
   static getCurrentUser(): User | null {

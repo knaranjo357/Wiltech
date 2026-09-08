@@ -140,7 +140,7 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
             <div className="flex space-x-1">
               <button
                 onClick={showAll}
-                className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                className="text-xs px-2 py-1 bg-black text-white rounded-lg hover:bg-zinc-800 transition-colors"
               >
                 Todas
               </button>

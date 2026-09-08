@@ -17,4 +17,6 @@ export interface PrecioItem {
 export interface SystemMessage {
   row_number: number;
   system_message: string;
+  pais_sede: string;
+  Tipo?: string;
 }

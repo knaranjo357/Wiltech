@@ -1,16 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { RepairLoader } from '../components/RepairLoader';
+import { countryFetch } from '../services/countryRequest';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { 
-  LifeBuoy, RefreshCw, Phone, MapPin, Search, 
-  AlertCircle, CheckCircle2, X, ArrowUpDown, 
-  Clock, MessageCircle, Bot, MessageSquare, 
-  Smartphone, Check, Edit3, Globe, User, ClipboardCheck, 
-  Filter, ChevronDown, Fingerprint
+  LifeBuoy, RefreshCw, Phone, MapPin, Search, CheckCircle2, X, ArrowUpDown, 
+  Clock, Bot, MessageSquare, Edit3, ClipboardCheck, ChevronDown, Fingerprint
 } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
 import { formatWhatsApp } from '../utils/clientHelpers';
 import { ClientModal } from '../components/ClientModal';
 import { normalize, safeText, formatTimeDate, isBotOn } from '../utils/textUtils';
+import { ModalPortal } from '../components/ModalPortal';
 
 // Constantes de Categoría
 const CAT_PENDIENTE = 'SOLICITUD_AYUDA';
@@ -34,6 +36,7 @@ export const AsistenciaPage: React.FC = () => {
 
   // Filtros UI
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const [sedeFilter, setSedeFilter] = useState<string>('Todas');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('PENDIENTES');
   const [sortOption, setSortOption] = useState<SortOption>('last_msg_desc');
@@ -47,11 +50,11 @@ export const AsistenciaPage: React.FC = () => {
   const [resolutionNote, setResolutionNote] = useState('');
 
   /** --- Carga de datos --- */
-  const fetchClients = async () => {
+  const fetchClients = async (force = true) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await ClientService.getAsistenciaClients();
+      const data = await ClientService.getAsistenciaClients({ force });
       const arr = Array.isArray(data) ? (data as Client[]) : [];
       setClients(arr.filter(isAssistanceTarget));
     } catch (e) {
@@ -61,7 +64,7 @@ export const AsistenciaPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { fetchClients(false); }, []);
 
   /** --- Realtime Update --- */
   useEffect(() => {
@@ -95,7 +98,7 @@ export const AsistenciaPage: React.FC = () => {
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        await fetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        await countryFetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
       return true;
     } catch (e) {
@@ -183,8 +186,8 @@ export const AsistenciaPage: React.FC = () => {
       data = data.filter(c => normalize(safeText(c.agenda_ciudad_sede)) === normSedeFilter);
     }
 
-    if (search.trim()) {
-      const q = normalize(search);
+    if (deferredSearch.trim()) {
+      const q = normalize(deferredSearch);
       data = data.filter(c => 
         normalize(safeText(c.nombre)).includes(q) ||
         normalize(safeText(c.whatsapp)).includes(q) ||
@@ -206,22 +209,10 @@ export const AsistenciaPage: React.FC = () => {
       return (hasName - hasNameB) || (getTs(b.last_msg) - getTs(a.last_msg));
     });
 
-  }, [clients, sedeFilter, search, sortOption, statusFilter]);
+  }, [clients, sedeFilter, deferredSearch, sortOption, statusFilter]);
 
-  // Paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
 
-  // Reset pagination on filter change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, sedeFilter, statusFilter]);
-
-  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-  const paginatedClients = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filtered.slice(start, start + ITEMS_PER_PAGE);
-  }, [filtered, currentPage]);
+  const pagination = usePagination(filtered, JSON.stringify([deferredSearch, sedeFilter, statusFilter, sortOption]));
 
   const handleWhatsAppClick = (whatsapp: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -255,24 +246,22 @@ export const AsistenciaPage: React.FC = () => {
   );
 
   return (
-    <div className="page-container relative flex flex-col space-y-8 min-h-[calc(100vh-100px)] overflow-hidden">
+    <div className="page-container relative flex flex-col space-y-6 min-h-[calc(100vh-100px)] overflow-hidden">
+      {error && <div role="alert" className="relative z-10 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
       
       {/* Background Decorations */}
-      <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-rose-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-emerald-500/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* === Header Dashboard === */}
-      <div className="relative z-10 flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="relative z-10 flex flex-col gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="wt-page-heading flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="flex items-center gap-5">
             <div className="relative">
-              <div className="absolute inset-0 bg-rose-400 blur-xl opacity-20 animate-pulse" />
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-rose-500 via-rose-600 to-rose-700 text-white flex items-center justify-center shadow-xl shadow-rose-200/40 relative z-10 border border-white/20">
-                <LifeBuoy className="w-7 h-7" />
+              <div className="w-12 h-12 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-lg shadow-slate-900/15 relative z-10 border border-white/10">
+                <LifeBuoy className="w-6 h-6" />
               </div>
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Centro de Ayuda</h1>
+              <h1 className="wt-page-title">Centro de Ayuda</h1>
               <div className="flex items-center gap-2 mt-1.5">
                 <div className="flex -space-x-1">
                    <div className="w-2 h-2 rounded-full bg-rose-500 border-2 border-white" />
@@ -295,11 +284,11 @@ export const AsistenciaPage: React.FC = () => {
                />
              </div>
              <button 
-               onClick={fetchClients} 
+               onClick={() => void fetchClients()} 
                disabled={loading} 
                className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-400 hover:text-rose-500 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
              >
-               <RefreshCw className={`w-4.5 h-4.5 ${loading ? 'animate-spin' : ''}`} />
+               {loading ? <RepairLoader variant="icon" /> : <RefreshCw className="w-4.5 h-4.5" />}
              </button>
           </div>
         </div>
@@ -353,16 +342,16 @@ export const AsistenciaPage: React.FC = () => {
       </div>
 
       {/* === Ticket List === */}
-      <div className="w-full max-w-7xl mx-auto space-y-4 pb-20 relative z-10">
+      <div className="w-full mx-auto space-y-3 pb-20 relative z-10">
          {loading && clients.length === 0 ? (
            <div className="flex flex-col items-center justify-center py-32 space-y-4 opacity-50">
-              <RefreshCw className="w-10 h-10 animate-spin text-rose-500" />
+              <RepairLoader variant="icon" className="repair-loader--large" />
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Sincronizando Ayuda...</p>
            </div>
          ) : filtered.length > 0 ? (
             <>
-              <div className="grid grid-cols-1 gap-5">
-                {paginatedClients.map((client) => {
+              <div className="grid grid-cols-1 gap-3">
+                {pagination.items.map((client) => {
                   const botActive = isBotOn(client.consentimiento_contacto);
                   const isGestionado = String(client.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA;
                   const isSaving = savingRow === client.row_number;
@@ -374,7 +363,7 @@ export const AsistenciaPage: React.FC = () => {
                     <div
                       key={client.row_number}
                       onClick={() => setViewClient(client)}
-                      className="group relative rounded-[28px] bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.99] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500"
+                      className="group wt-ops-card cursor-pointer animate-in fade-in slide-in-from-bottom-4"
                     >
                       {/* Left border strip */}
                       <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-300
@@ -383,13 +372,13 @@ export const AsistenciaPage: React.FC = () => {
                             : 'bg-rose-500 animate-pulse-soft'}`} 
                       />
 
-                      <div className="flex flex-col lg:flex-row items-stretch">
+                      <div className="wt-ops-card-layout">
                          {/* LEFT COLUMN: Avatar / Basic Status */}
-                         <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-4 p-6 lg:w-[150px] lg:bg-slate-50/40 lg:border-r border-white/20">
-                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm border border-white
+                         <div className="wt-ops-card-rail">
+                            <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-black text-base shadow-sm border border-white
                                ${isGestionado 
-                                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-emerald-100' 
-                                  : 'bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-rose-100'}`}
+                                  ? 'bg-emerald-600 text-white shadow-emerald-100'
+                                  : 'bg-slate-950 text-white shadow-slate-200'}`}
                             >
                                {client.nombre ? client.nombre.charAt(0).toUpperCase() : '?'}
                             </div>
@@ -397,8 +386,8 @@ export const AsistenciaPage: React.FC = () => {
                             <div className="flex lg:flex-col items-center gap-1.5">
                                <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider shadow-sm border
                                   ${isGestionado 
-                                     ? 'bg-emerald-500 text-white border-emerald-400' 
-                                     : 'bg-rose-500 text-white border-rose-400 animate-pulse'}`}
+                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                     : 'bg-rose-50 text-rose-700 border-rose-200'}`}
                                >
                                   {isGestionado ? 'Gestionado' : 'Pendiente'}
                                </span>
@@ -412,9 +401,9 @@ export const AsistenciaPage: React.FC = () => {
                          </div>
 
                          {/* CENTER COLUMN: Core Ticket info */}
-                         <div className="flex-1 p-6 flex flex-col justify-center gap-3.5">
+                         <div className="wt-ops-card-main gap-2.5">
                             <div>
-                               <h3 className="text-lg md:text-xl font-black text-slate-900 group-hover:text-rose-500 transition-colors duration-300">
+                               <h3 className="text-lg font-extrabold text-slate-900 transition-colors duration-300">
                                   {client.nombre || 'Sin Nombre'}
                                </h3>
                                
@@ -436,11 +425,11 @@ export const AsistenciaPage: React.FC = () => {
 
                             {/* Solicitud Description box */}
                             {client.last_msg && (
-                               <div className="p-4 rounded-2xl bg-rose-50/30 border border-rose-100/50 text-xs leading-relaxed text-slate-700">
+                               <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs leading-relaxed text-slate-700">
                                   <div className="flex items-center gap-1.5 mb-1.5 text-rose-800 font-bold uppercase text-[9px] tracking-wider">
                                      <MessageSquare size={12} /> Solicitud / Problema
                                   </div>
-                                  <p className="font-semibold italic">"{client.last_msg}"</p>
+                                  <p className="font-semibold italic line-clamp-2">"{client.last_msg}"</p>
                                </div>
                             )}
 
@@ -456,7 +445,7 @@ export const AsistenciaPage: React.FC = () => {
                          </div>
 
                          {/* RIGHT COLUMN: Metadata & Actions */}
-                         <div className="p-6 lg:w-[260px] lg:bg-slate-50/20 lg:border-l border-white/20 flex flex-col justify-between gap-4">
+                         <div className="wt-ops-card-aside">
                             <div className="space-y-3">
                                {/* Sede indicator */}
                                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[10px] font-bold text-slate-600 w-fit">
@@ -475,7 +464,7 @@ export const AsistenciaPage: React.FC = () => {
                                <button 
                                   onClick={(e) => handleMainActionClick(client, e)}
                                   disabled={isSaving}
-                                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 shadow-sm
+                                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95 shadow-sm
                                      ${isGestionado 
                                        ? 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50 hover:text-slate-800' 
                                        : 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-200/40 hover:bg-emerald-700 hover:-translate-y-0.5'}
@@ -488,7 +477,7 @@ export const AsistenciaPage: React.FC = () => {
                                <div className="grid grid-cols-2 gap-2">
                                   <button 
                                      onClick={(e) => handleToggleBot(client, e)} 
-                                     className={`flex items-center justify-center gap-2 py-2.5 rounded-[18px] text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
+                                     className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
                                         ${botActive 
                                            ? 'bg-white text-slate-800 border-slate-200 hover:shadow-sm' 
                                            : 'bg-white text-rose-700 border-rose-100 hover:shadow-sm'}
@@ -500,7 +489,7 @@ export const AsistenciaPage: React.FC = () => {
                                   
                                   <button 
                                      onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
-                                     className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-[18px] text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
+                                     className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
                                   >
                                      <Phone size={12} /> WhatsApp
                                   </button>
@@ -512,101 +501,8 @@ export const AsistenciaPage: React.FC = () => {
                   );
                 })}
               </div>
-              {/* PAGINACIÓN */}
-              {totalPages > 1 && (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 px-5 py-4 bg-white/60 backdrop-blur-md border border-white/40 rounded-[24px] shadow-lg">
-                  <div className="text-xs font-black uppercase text-slate-500 tracking-wider">
-                    Mostrando <span className="text-slate-800 font-bold">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, filtered.length)}</span> a{' '}
-                    <span className="text-slate-800 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)}</span> de{' '}
-                    <span className="text-slate-800 font-bold">{filtered.length}</span> registros
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
-                    >
-                      &larr;
-                    </button>
-                    
-                    {(() => {
-                      const pages = [];
-                      const maxVisible = 5;
-                      let start = Math.max(1, currentPage - 2);
-                      let end = Math.min(totalPages, start + maxVisible - 1);
-                      
-                      if (end - start + 1 < maxVisible) {
-                        start = Math.max(1, end - maxVisible + 1);
-                      }
-                      
-                      if (start > 1) {
-                        pages.push(
-                          <button
-                            key={1}
-                            onClick={() => setCurrentPage(1)}
-                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
-                              currentPage === 1
-                                ? 'bg-slate-900 text-white shadow-md'
-                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            1
-                          </button>
-                        );
-                        if (start > 2) {
-                          pages.push(<span key="dots-prev" className="px-2 text-slate-400 font-black text-xs">...</span>);
-                        }
-                      }
-                      
-                      for (let p = start; p <= end; p++) {
-                        pages.push(
-                          <button
-                            key={p}
-                            onClick={() => setCurrentPage(p)}
-                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
-                              currentPage === p
-                                ? 'bg-slate-900 text-white shadow-md'
-                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            {p}
-                          </button>
-                        );
-                      }
-                      
-                      if (end < totalPages) {
-                        if (end < totalPages - 1) {
-                          pages.push(<span key="dots-next" className="px-2 text-slate-400 font-black text-xs">...</span>);
-                        }
-                        pages.push(
-                          <button
-                            key={totalPages}
-                            onClick={() => setCurrentPage(totalPages)}
-                            className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
-                              currentPage === totalPages
-                                ? 'bg-slate-900 text-white shadow-md'
-                                : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                            }`}
-                          >
-                            {totalPages}
-                          </button>
-                        );
-                      }
-                      
-                      return pages;
-                    })()}
-                    
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
-                    >
-                      &rarr;
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
+              <Pagination {...pagination} />
+          </>
          ) : (
            <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in duration-700 relative">
               <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">
@@ -633,13 +529,9 @@ export const AsistenciaPage: React.FC = () => {
 
       {/* ================= MODERN RESOLUTION MODAL ================= */}
       {resolveModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setResolveModal(null)} />
-           
-           <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden relative z-10 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 border border-white/20">
+        <ModalPortal open={!!resolveModal} onClose={() => setResolveModal(null)} className="max-w-lg" ariaLabel="Cerrar ticket">
               {/* Header Modal */}
-              <div className="bg-emerald-600 px-10 py-8 relative overflow-hidden">
-                 <div className="absolute top-[-20%] right-[-10%] w-48 h-48 bg-white/10 blur-[60px] rounded-full pointer-events-none" />
+              <div className="bg-zinc-950 px-7 py-7 sm:px-9 relative overflow-hidden">
                  <div className="relative z-10">
                     <div className="flex items-center gap-4 mb-2">
                        <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md border border-white/20">
@@ -657,7 +549,7 @@ export const AsistenciaPage: React.FC = () => {
                  </button>
               </div>
               
-              <div className="p-10 space-y-8">
+              <div className="p-6 sm:p-9 space-y-8">
                  <div className="flex items-start gap-5">
                      <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
                          <ClipboardCheck className="w-6 h-6 text-emerald-600" />
@@ -699,8 +591,7 @@ export const AsistenciaPage: React.FC = () => {
                     </button>
                  </div>
               </div>
-           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* Modal Detalle Cliente */}

@@ -81,8 +81,8 @@ export const KPICards: React.FC<KPICardsProps> = ({
         value={totalLeads}
         sub={`${uniqueLeads.toLocaleString()} únicos`}
         icon={PieChart}
-        color="text-blue-500"
-        bgClass="bg-blue-500"
+        color="text-black"
+        bgClass="bg-black"
       />
       <KPICard
         title="Citas Agendadas"

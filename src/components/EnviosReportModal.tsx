@@ -192,9 +192,9 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
         className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] bg-slate-50 shadow-2xl ring-1 ring-black/10"
         role="dialog"
       >
-        <header className="relative shrink-0 overflow-hidden bg-gradient-to-br from-slate-950 via-slate-800 to-indigo-950 px-5 pb-7 pt-5 sm:px-7">
+        <header className="relative shrink-0 overflow-hidden bg-gradient-to-br from-black via-zinc-900 to-zinc-800 px-5 pb-7 pt-5 sm:px-7">
           <div className="absolute -right-8 -top-10 h-44 w-44 rounded-full bg-indigo-400/20 blur-3xl" />
-          <div className="absolute bottom-0 left-1/3 h-20 w-56 rounded-full bg-purple-400/10 blur-3xl" />
+          <div className="absolute bottom-0 left-1/3 h-20 w-56 rounded-full bg-white/5 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-lg shadow-black/20">
@@ -319,16 +319,16 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               )}
             </div>
 
-            <aside className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm">
+            <aside className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
-              <p className="mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-indigo-500">Indicador principal</p>
+              <p className="mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Indicador principal</p>
               <p className="mt-1 text-4xl font-black tracking-tight text-slate-900">{formatPercent(summary.managementRate)}</p>
               <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">de los envíos registrados ya fueron gestionados desde la plataforma.</p>
-              <div className="mt-5 h-2 overflow-hidden rounded-full bg-indigo-100">
+              <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-500"
+                  className="h-full rounded-full bg-gradient-to-r from-black to-slate-500 transition-all duration-500"
                   style={{ width: `${Math.min(Math.max(summary.managementRate, 0), 100)}%` }}
                 />
               </div>

@@ -1,6 +1,8 @@
 // services/agenteService.ts
 import { SystemMessage } from "../types/precios";
-import { ApiService } from "./apiService";
+import { ApiService, type ReadOptions } from "./apiService";
+import { AuthService } from './authService';
+import { validatePromptIdentity } from '../utils/agentDocument';
 
 export type AgentSource = "Wiltech" | "WiltechBga" | "WiltechCRM" | "WiltechPrecios";
 
@@ -19,14 +21,21 @@ const endpointFor = (source: AgentSource) => {
 };
 
 export class AgenteService {
-  static async getSystemMessage(source: AgentSource = "Wiltech"): Promise<SystemMessage[]> {
-    return ApiService.get<SystemMessage[]>(endpointFor(source));
+  static async getSystemMessage(source: AgentSource = "Wiltech", options: ReadOptions = {}): Promise<SystemMessage[]> {
+    return ApiService.get<SystemMessage[]>(endpointFor(source), { ttl: 60_000, ...options });
   }
 
   static async updateSystemMessage(
     system_message: string,
-    source: AgentSource = "Wiltech"
+    source: AgentSource,
+    record: Pick<SystemMessage, 'row_number' | 'pais_sede' | 'Tipo'>
   ): Promise<SystemMessage> {
-    return ApiService.post<SystemMessage>(endpointFor(source), { system_message });
+    validatePromptIdentity(record, AuthService.getPaisSede(), source === 'WiltechPrecios');
+    return ApiService.post<SystemMessage>(endpointFor(source), {
+      system_message,
+      row_number: record.row_number,
+      pais_sede: record.pais_sede,
+      ...(source === 'WiltechPrecios' ? { Tipo: 'prompt' } : {}),
+    });
   }
 }

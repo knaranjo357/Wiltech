@@ -3,12 +3,36 @@ import { Client, EstadoEtapa, CategoriaContacto } from '../types/client';
 
 /* ======================= Colores de etapa y categoría ======================= */
 
+export const CLIENT_STAGE_OPTIONS: ReadonlyArray<{ value: EstadoEtapa; label: string }> = [
+  { value: 'Nuevo', label: 'Nuevo' },
+  { value: 'Cotizando', label: 'Cotizando' },
+  { value: 'Agendado', label: 'Agendado' },
+  { value: 'Reagendar', label: 'Reagendar' },
+  { value: 'En_taller', label: 'En taller' },
+  { value: 'EN_REVISION', label: 'En revisión' },
+  { value: 'ENVIO_GESTIONADO', label: 'Envío gestionado' },
+  { value: 'Entregado', label: 'Entregado' },
+  { value: 'Cerrado', label: 'Cerrado' },
+  { value: 'Fan', label: 'Fan' },
+  { value: 'Hater', label: 'Hater' },
+  { value: 'Espia', label: 'Espía' },
+];
+
+export const formatStageLabel = (value: string | null | undefined): string => {
+  if (!value) return '';
+  return CLIENT_STAGE_OPTIONS.find((option) => option.value.toLowerCase() === value.toLowerCase())?.label
+    ?? value.replace(/_/g, ' ').toLowerCase().replace(/^./, (letter) => letter.toUpperCase());
+};
+
 export const getEtapaColor = (etapa: EstadoEtapa): string => {
   const colors: Record<EstadoEtapa, string> = {
     Nuevo: 'bg-blue-100 text-blue-800 border-blue-200',
     Cotizando: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    Agendado: 'bg-purple-100 text-purple-800 border-slate-200',
+    Agendado: 'bg-violet-100 text-violet-800 border-violet-200',
+    Reagendar: 'bg-amber-100 text-amber-800 border-amber-200',
     En_taller: 'bg-orange-100 text-orange-800 border-orange-200',
+    EN_REVISION: 'bg-sky-100 text-sky-800 border-sky-200',
+    ENVIO_GESTIONADO: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     Entregado: 'bg-green-100 text-green-800 border-green-200',
     Cerrado: 'bg-gray-100 text-gray-800 border-gray-200',
     Hater: 'bg-red-100 text-red-800 border-red-200',
@@ -20,6 +44,8 @@ export const getEtapaColor = (etapa: EstadoEtapa): string => {
 
 export const getCategoriaColor = (categoria: CategoriaContacto): string => {
   const colors: Record<CategoriaContacto, string> = {
+    SOLICITUD_AYUDA: 'bg-amber-100 text-amber-800',
+    SOLICITUD_AYUDA_GESTIONADA: 'bg-emerald-100 text-emerald-800',
     Prospecto_frio: 'bg-slate-100 text-slate-700',
     Prospecto_tibio: 'bg-amber-100 text-amber-700',
     Prospecto_caliente: 'bg-red-100 text-red-700',

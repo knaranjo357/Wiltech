@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { RepairLoader } from '../components/RepairLoader';
+import { countryFetch } from '../services/countryRequest';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
+import React, { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { 
-  Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, 
-  ChevronRight, Search, CalendarDays, History, ArrowRightCircle,
-  Smartphone, MessageSquare, FileText, Globe, AlertCircle, Check, User, Clock, ChevronDown,
-  CalendarClock, Send, Edit3, Layers, PenBox, BarChart3 // Icono para edición manual
-} from 'lucide-react';
+  Calendar, RefreshCw, Phone, X, CheckCircle2, MapPin, Search, CalendarDays, History, ArrowRightCircle,
+  Smartphone, FileText, Globe, AlertCircle, Check, Clock, ChevronDown,
+  CalendarClock, Send, Edit3, Layers, PenBox, BarChart3} from 'lucide-react';
 import { ClientService } from '../services/clientService';
 import { ApiService } from '../services/apiService';
 import { Client } from '../types/client';
@@ -14,6 +16,7 @@ import { AgendaReportModal } from '../components/AgendaReportModal';
 import { NuevoCliente } from '../components/NuevoCliente';
 import { safeText, normalize } from '../utils/textUtils';
 import { useAuth } from '../hooks/useAuth';
+import { ModalPortal } from '../components/ModalPortal';
 
 /** ================== Configuración y Utils ================== */
 const SOURCE_TO_SEDE: Record<string, string> = {
@@ -82,7 +85,8 @@ const SedeModal: React.FC<{
   options: string[];
   defaultSede?: string;
   onSelect: (sede: string | 'Todas') => void;
-}> = ({ isOpen, options, defaultSede, onSelect }) => {
+  onClose: () => void;
+}> = ({ isOpen, options, defaultSede, onSelect, onClose }) => {
   const [sel, setSel] = useState<string>('Todas');
 
   useEffect(() => {
@@ -95,11 +99,8 @@ const SedeModal: React.FC<{
     }
   }, [options, defaultSede, isOpen]);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-[140] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden ring-1 ring-black/5 transform transition-all scale-100">
+    <ModalPortal open={isOpen} onClose={onClose} className="max-w-sm" ariaLabel="Seleccionar sede">
         <div className="bg-slate-900 p-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <MapPin className="w-24 h-24 text-white"/>
@@ -112,19 +113,19 @@ const SedeModal: React.FC<{
         <div className="p-4 max-h-[60vh] overflow-y-auto grid grid-cols-2 gap-3 custom-scrollbar">
           <button
             onClick={() => setSel('Todas')}
-            className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${sel === 'Todas' ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-600 bg-white shadow-sm ring-1 ring-slate-900/5'}`}
+            className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${sel === 'Todas' ? 'bg-black border-black text-white shadow-lg shadow-black/15' : 'border-slate-200 hover:bg-slate-50 text-slate-600 bg-white shadow-sm'}`}
           >
             <span className="font-medium text-sm">Todas</span>
-            {sel === 'Todas' && <CheckCircle2 className="w-4 h-4 text-blue-600"/>}
+            {sel === 'Todas' && <CheckCircle2 className="w-4 h-4 text-white"/>}
           </button>
           {options.map(s => (
             <button
               key={s}
               onClick={() => setSel(s)}
-              className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${sel === s ? 'bg-blue-50 border-blue-200 text-blue-700 shadow-sm' : 'border-transparent hover:bg-slate-50 text-slate-600 bg-white shadow-sm ring-1 ring-slate-900/5'}`}
+              className={`w-full text-left px-4 py-3 rounded-xl border transition-all flex items-center justify-between group ${sel === s ? 'bg-black border-black text-white shadow-lg shadow-black/15' : 'border-slate-200 hover:bg-slate-50 text-slate-600 bg-white shadow-sm'}`}
             >
               <span className="font-medium text-sm truncate">{s}</span>
-              {sel === s && <CheckCircle2 className="w-4 h-4 text-blue-600"/>}
+              {sel === s && <CheckCircle2 className="w-4 h-4 text-white"/>}
             </button>
           ))}
         </div>
@@ -136,8 +137,7 @@ const SedeModal: React.FC<{
             Confirmar Sede
           </button>
         </div>
-      </div>
-    </div>
+    </ModalPortal>
   );
 };
 
@@ -158,11 +158,10 @@ const ReagendarModal: React.FC<{
     }
   }, [client]);
 
-  if (!isOpen || !client) return null;
+  if (!client) return null;
 
   return (
-    <div className="fixed inset-0 z-[150] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden ring-1 ring-black/5 transform transition-all scale-100 flex flex-col">
+    <ModalPortal open={isOpen} onClose={() => { if (!loading) onClose(); }} className="max-w-md flex flex-col" ariaLabel="Reagendar cita" closeOnBackdrop={!loading}>
         <div className="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
            <div className="flex items-center gap-2 text-slate-800">
               <CalendarClock className="w-5 h-5" />
@@ -195,12 +194,11 @@ const ReagendarModal: React.FC<{
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
            <button onClick={onClose} disabled={loading} className="px-4 py-2 rounded-xl text-slate-600 font-medium hover:bg-slate-200 hover:text-slate-800 transition text-sm">Cancelar</button>
            <button onClick={() => onSend(msg)} disabled={loading || !msg.trim()} className="px-5 py-2 rounded-xl bg-slate-900 text-white font-medium hover:bg-slate-800 transition shadow-lg shadow-slate-900/20 active:scale-95 flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
-             {loading ? <RefreshCw className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4" />}
+             {loading ? <RepairLoader variant="icon" /> : <Send className="w-4 h-4" />}
              Enviar Mensaje
            </button>
         </div>
-      </div>
-    </div>
+    </ModalPortal>
   );
 };
 
@@ -208,7 +206,7 @@ const ReagendarModal: React.FC<{
 export const AgendaPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = useMemo(
-    () => user?.role?.split(',').some((role) => role.trim().toLowerCase() === 'admin') ?? false,
+    () => user?.role?.split(',').some((role) => ['admin', 'root'].includes(role.trim().toLowerCase())) ?? false,
     [user?.role],
   );
   const [clients, setClients] = useState<Client[]>([]);
@@ -219,6 +217,7 @@ export const AgendaPage: React.FC = () => {
   const [dateFilter, setDateFilter] = useState<DateFilter>('today');
   const [customDate, setCustomDate] = useState('');
   const [searchTerm, setSearchTerm] = useState(''); 
+  const deferredSearch = useDeferredValue(searchTerm);
   const [selectedSede, setSelectedSede] = useState<string | 'Todas' | ''>('');
   
   // Estado UI
@@ -235,10 +234,10 @@ export const AgendaPage: React.FC = () => {
   const initRef = useRef(false);
 
   /** --- Carga de Datos --- */
-  const fetchClients = async () => {
+  const fetchClients = async (force = true) => {
     try {
       setLoading(true);
-      const data = await ClientService.getAgendaClients();
+      const data = await ClientService.getAgendaClients({ force });
       const withValidDate = (Array.isArray(data) ? data : []).filter((c) => Boolean(parseAgendaDate((c as any).fecha_agenda)));
       setClients(withValidDate);
       setError(null);
@@ -249,7 +248,7 @@ export const AgendaPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { fetchClients(false); }, []);
 
   const sedes = useMemo(() => {
     const map = new Map<string, string>();
@@ -301,7 +300,7 @@ export const AgendaPage: React.FC = () => {
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        await fetch('/api/clients/update', { 
+        await countryFetch('/api/clients/update', { 
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify(payload) 
@@ -402,7 +401,7 @@ export const AgendaPage: React.FC = () => {
       const targetNorm = normalize(String(selectedSede));
       filtered = filtered.filter((c) => normalize(getClientSede(c)) === targetNorm);
     }
-    const q = normalize(searchTerm);
+    const q = normalize(deferredSearch);
     if (q) {
       filtered = filtered.filter(c => 
         normalize(safeText(c.nombre)).includes(q) || 
@@ -412,7 +411,7 @@ export const AgendaPage: React.FC = () => {
       );
     }
     return filtered;
-  }, [clients, selectedSede, searchTerm]);
+  }, [clients, selectedSede, deferredSearch]);
 
   const stats = useMemo(() => ({
     today: filteredClientsBase.filter((c) => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))).length,
@@ -421,14 +420,6 @@ export const AgendaPage: React.FC = () => {
     future: filteredClientsBase.filter((c) => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))).length,
   }), [filteredClientsBase]);
 
-  // Paginación
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
-
-  // Reset pagination on filter change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, selectedSede, dateFilter, customDate]);
 
   const finalDisplayClients = useMemo(() => {
     let filtered = [...filteredClientsBase];
@@ -453,11 +444,7 @@ export const AgendaPage: React.FC = () => {
     return filtered;
   }, [filteredClientsBase, dateFilter, customDate]);
 
-  const totalPages = Math.ceil(finalDisplayClients.length / ITEMS_PER_PAGE);
-  const paginatedClients = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return finalDisplayClients.slice(start, start + ITEMS_PER_PAGE);
-  }, [finalDisplayClients, currentPage]);
+  const pagination = usePagination(finalDisplayClients, JSON.stringify([deferredSearch, selectedSede, dateFilter, customDate]));
 
   const FilterTab = ({ id, label, count, icon: Icon }: any) => {
     const isActive = dateFilter === id;
@@ -484,6 +471,7 @@ export const AgendaPage: React.FC = () => {
         isOpen={showSedeModal}
         options={sedes}
         defaultSede={(selectedSede as string) || undefined}
+        onClose={() => setShowSedeModal(false)}
         onSelect={(s) => { setSelectedSede(s); setShowSedeModal(false); }}
       />
       <ReagendarModal
@@ -494,24 +482,21 @@ export const AgendaPage: React.FC = () => {
         onSend={handleConfirmReagendar}
       />
 
-      <div className="page-container relative overflow-hidden flex flex-col space-y-8 min-h-[calc(100vh-100px)]">
+      <div className="page-container relative overflow-hidden flex flex-col space-y-6 min-h-[calc(100vh-100px)]">
         
         {/* Background Decorations */}
-        <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-slate-800/5 blur-[120px] rounded-full pointer-events-none" />
-        <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-blue-500/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* HEADER DASHBOARD */}
-      <div className="relative z-10 flex flex-col gap-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
+      <div className="relative z-10 flex flex-col gap-6">
+        <div className="wt-page-heading flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             <div className="relative">
-               <div className="absolute inset-0 bg-slate-700 blur-xl opacity-20 animate-pulse" />
-               <div className="w-14 h-14 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-xl shadow-slate-900/20 relative z-10 border border-white/20">
-                 <Calendar className="w-7 h-7" />
+               <div className="w-12 h-12 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-lg shadow-slate-900/15 relative z-10 border border-white/10">
+                 <Calendar className="w-6 h-6" />
                </div>
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">Agenda de Citas</h1>
+              <h1 className="wt-page-title">Agenda de Citas</h1>
               <div className="flex items-center gap-2 mt-1.5 cursor-pointer hover:opacity-80 transition-opacity" onClick={() => setShowSedeModal(true)}>
                 <MapPin className="w-3.5 h-3.5 text-slate-700" />
                 <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">{selectedSede || 'Todas las Sedes'}</p>
@@ -542,11 +527,11 @@ export const AgendaPage: React.FC = () => {
             </button>
             )}
             <button 
-               onClick={fetchClients} 
+               onClick={() => void fetchClients()} 
               disabled={loading} 
               className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-slate-800 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? <RepairLoader variant="icon" /> : <RefreshCw className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -576,15 +561,11 @@ export const AgendaPage: React.FC = () => {
 
       <div className="w-full mx-auto space-y-4 pb-12">
         {loading ? (
-          <div className="space-y-4 max-w-5xl mx-auto">
-            {[...Array(3)].map((_, i) => (
-               <div key={i} className="shimmer-skeleton h-44 w-full" />
-             ))}
-          </div>
+          <RepairLoader variant="panel" label="Cargando agenda" />
         ) : finalDisplayClients.length > 0 ? (
           <>
-            <div className="grid grid-cols-1 gap-4">
-              {paginatedClients.map((client) => {
+            <div className="grid grid-cols-1 gap-3">
+              {pagination.items.map((client) => {
                 const dateObj = parseAgendaDate((client as any).fecha_agenda);
                 const attended = (client as any).asistio_agenda === true;
                 const isSaving = savingRow === client.row_number;
@@ -600,16 +581,16 @@ export const AgendaPage: React.FC = () => {
                   <div
                     key={client.row_number}
                     onClick={() => handleOpenClient(client)}
-                    className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[32px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.98] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
+                    className="group wt-ops-card cursor-pointer animate-in fade-in slide-in-from-bottom-4"
                   >
-                    <div className={`absolute left-0 top-0 bottom-0 w-2 transition-colors duration-300 ${attended ? 'bg-emerald-500' : 'bg-slate-200 group-hover:bg-slate-800'}`} />
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 transition-colors duration-300 ${attended ? 'bg-emerald-500' : 'bg-slate-300 group-hover:bg-slate-950'}`} />
                     
-                    <div className="flex flex-col lg:flex-row items-stretch">
+                    <div className="wt-ops-card-layout">
                       
                       {/* TIME & ACTIONS */}
-                      <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-6 p-6 lg:w-[160px] lg:bg-slate-50/40 lg:border-r border-white/20">
+                      <div className="wt-ops-card-rail">
                         <div className="text-center">
-                          <span className={`block text-3xl font-black tracking-tighter transition-colors ${attended ? 'text-emerald-600' : 'text-slate-900 group-hover:text-slate-800'}`}>
+                          <span className={`block text-2xl font-black tracking-tighter transition-colors ${attended ? 'text-emerald-600' : 'text-slate-900'}`}>
                             {dateObj ? getDisplayTime(dateObj) : '--:--'}
                           </span>
                           <div className="flex items-center justify-center gap-1.5 mt-1">
@@ -619,17 +600,17 @@ export const AgendaPage: React.FC = () => {
                           </div>
                         </div>
                         
-                        <div className="flex flex-col gap-2 w-full max-w-[120px]">
+                        <div className="flex flex-col gap-1.5 w-full max-w-[108px]">
                           <button
                             onClick={(e) => handleToggleAsistencia(client, e)}
                             disabled={isSaving}
-                            className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
+                            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
                               ${attended 
                                 ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-200/50' 
                                 : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300 hover:text-slate-800 hover:bg-slate-50'
                               } ${isSaving ? 'opacity-50' : ''}`}
                           >
-                            {isSaving ? <RefreshCw className="w-3 h-3 animate-spin"/> : attended ? <Check className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border-2 border-current" />}
+                            {isSaving ? <RepairLoader variant="icon" /> : attended ? <Check className="w-3 h-3" /> : <div className="w-3 h-3 rounded-full border-2 border-current" />}
                             {attended ? 'Asistió' : 'Marcar'}
                           </button>
 
@@ -637,7 +618,7 @@ export const AgendaPage: React.FC = () => {
                             <button
                               onClick={(e) => handleOpenReagendarModal(client, e)}
                               disabled={isEtapaReagendar}
-                              className={`flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all active:scale-95
+                              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all active:scale-95
                                 ${isEtapaReagendar 
                                   ? 'bg-amber-100 text-amber-600 border-amber-200 opacity-60' 
                                   : 'bg-white text-slate-700 border-slate-200 hover:bg-white hover:shadow-md'
@@ -651,11 +632,11 @@ export const AgendaPage: React.FC = () => {
                       </div>
 
                       {/* MAIN CONTENT */}
-                      <div className="flex-1 p-6 md:p-8 flex flex-col justify-center">
-                        <div className="flex items-start justify-between gap-4 mb-4">
+                      <div className="wt-ops-card-main">
+                        <div className="flex items-start justify-between gap-4 mb-2">
                           <div className="min-w-0">
-                            <div className="flex items-center gap-3 mb-2 flex-wrap">
-                               <h3 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight truncate max-w-[300px]">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                               <h3 className="text-lg font-extrabold text-slate-900 tracking-tight truncate max-w-[360px]">
                                  {safeText(client.nombre) || 'Sin Nombre'}
                                </h3>
                                {isWeb1 && (
@@ -668,17 +649,17 @@ export const AgendaPage: React.FC = () => {
                                </span>
                             </div>
                             
-                            <div className="flex flex-wrap items-center gap-3 mt-4">
-                              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                            <div className="flex flex-wrap items-center gap-2 mt-2">
+                              <div className="wt-ops-chip">
                                 <Smartphone className="w-3.5 h-3.5 text-slate-400" />
                                 <span className="truncate max-w-[120px]">{safeText(client.modelo) || 'Modelo no esp.'}</span>
                               </div>
-                              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                              <div className="wt-ops-chip">
                                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
                                 <span>{getClientSede(client)}</span>
                               </div>
                               {safeText(client.source) && (
-                                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-100/80 rounded-xl text-[11px] font-bold text-slate-600 border border-white/50">
+                                <div className="wt-ops-chip">
                                    <Layers className="w-3.5 h-3.5 text-slate-400" />
                                    <span className="truncate max-w-[100px]">{safeText(client.source)}</span>
                                 </div>
@@ -688,7 +669,7 @@ export const AgendaPage: React.FC = () => {
                         </div>
 
                         {(safeText(client.intencion) || safeText(client.notas)) && (
-                          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                          <div className="flex items-start gap-2.5 p-3 bg-slate-50 rounded-xl border border-slate-100">
                              <FileText className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
                              <p className="text-xs text-slate-600 leading-relaxed italic line-clamp-2">
                                {safeText(client.intencion || client.notas)}
@@ -698,19 +679,19 @@ export const AgendaPage: React.FC = () => {
                       </div>
 
                       {/* MESSAGES & MANUAL ACTIONS */}
-                      <div className="w-full lg:w-[320px] bg-slate-50/50 p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6">
+                      <div className="wt-ops-card-aside">
                         <div className="space-y-3">
                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block ml-1">Último Mensaje</span>
                            {lastMsg ? (
-                              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm relative group/msg">
+                              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm relative group/msg">
                                  <div className="flex justify-between items-center mb-2">
                                     <div className="w-1.5 h-1.5 rounded-full bg-slate-800 animate-pulse" />
                                     <span className="text-[9px] font-bold text-slate-400 uppercase">{formatMsgTime(lastMsgDate)}</span>
                                  </div>
-                                 <p className="text-[11px] text-slate-700 font-medium leading-relaxed line-clamp-3">"{lastMsg}"</p>
+                                 <p className="text-[11px] text-slate-700 font-medium leading-relaxed line-clamp-2">"{lastMsg}"</p>
                               </div>
                            ) : (
-                              <div className="h-20 flex items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl">
+                              <div className="h-14 flex items-center justify-center border border-dashed border-slate-200 rounded-xl">
                                  <span className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Sin actividad</span>
                               </div>
                            )}
@@ -736,7 +717,7 @@ export const AgendaPage: React.FC = () => {
                             onClick={(e) => handleWhatsAppClick(safeText(client.whatsapp), e, client)}
                             className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all border tracking-wide
                                 ${isWeb1 
-                                ? 'bg-blue-600 text-white border-blue-500 shadow-lg shadow-blue-200/50 hover:bg-blue-700'
+                                ? 'bg-black text-white border-black shadow-lg shadow-black/15 hover:bg-zinc-800'
                                 : 'bg-emerald-600 text-white border-emerald-500 shadow-lg shadow-emerald-200/50 hover:bg-emerald-700'
                                 }`}
                           >
@@ -750,100 +731,7 @@ export const AgendaPage: React.FC = () => {
                 );
               })}
             </div>
-            {/* PAGINACIÓN */}
-            {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-8 px-5 py-4 bg-white/60 backdrop-blur-md border border-white/40 rounded-[24px] shadow-lg">
-                <div className="text-xs font-black uppercase text-slate-500 tracking-wider">
-                  Mostrando <span className="text-slate-800 font-bold">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, finalDisplayClients.length)}</span> a{' '}
-                  <span className="text-slate-800 font-bold">{Math.min(currentPage * ITEMS_PER_PAGE, finalDisplayClients.length)}</span> de{' '}
-                  <span className="text-slate-800 font-bold">{finalDisplayClients.length}</span> registros
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
-                  >
-                    &larr;
-                  </button>
-                  
-                  {(() => {
-                    const pages = [];
-                    const maxVisible = 5;
-                    let start = Math.max(1, currentPage - 2);
-                    let end = Math.min(totalPages, start + maxVisible - 1);
-                    
-                    if (end - start + 1 < maxVisible) {
-                      start = Math.max(1, end - maxVisible + 1);
-                    }
-                    
-                    if (start > 1) {
-                      pages.push(
-                        <button
-                          key={1}
-                          onClick={() => setCurrentPage(1)}
-                          className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
-                            currentPage === 1
-                              ? 'bg-slate-900 text-white shadow-md'
-                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          1
-                        </button>
-                      );
-                      if (start > 2) {
-                        pages.push(<span key="dots-prev" className="px-2 text-slate-400 font-black text-xs">...</span>);
-                      }
-                    }
-                    
-                    for (let p = start; p <= end; p++) {
-                      pages.push(
-                        <button
-                          key={p}
-                          onClick={() => setCurrentPage(p)}
-                          className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
-                            currentPage === p
-                              ? 'bg-slate-900 text-white shadow-md'
-                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      );
-                    }
-                    
-                    if (end < totalPages) {
-                      if (end < totalPages - 1) {
-                        pages.push(<span key="dots-next" className="px-2 text-slate-400 font-black text-xs">...</span>);
-                      }
-                      pages.push(
-                        <button
-                          key={totalPages}
-                          onClick={() => setCurrentPage(totalPages)}
-                          className={`w-10 h-10 rounded-xl text-xs font-black transition-all active:scale-95 ${
-                            currentPage === totalPages
-                              ? 'bg-slate-900 text-white shadow-md'
-                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {totalPages}
-                        </button>
-                      );
-                    }
-                    
-                    return pages;
-                  })()}
-                  
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-50 hover:text-slate-900 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 transition-all font-bold shadow-sm"
-                  >
-                    &rarr;
-                  </button>
-                </div>
-              </div>
-            )}
+            <Pagination {...pagination} />
           </>
         ) : (
           <div className="flex flex-col items-center justify-center py-24 text-center animate-in fade-in zoom-in duration-700 relative z-10">
@@ -885,7 +773,7 @@ export const AgendaPage: React.FC = () => {
         onUpdate={onUpdate}
       />
 
-      <NuevoCliente onCreated={fetchClients} floating={true} />
+      <NuevoCliente onCreated={() => void fetchClients()} floating={true} />
     </>
   );
 };

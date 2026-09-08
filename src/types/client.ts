@@ -8,7 +8,10 @@ export type EstadoEtapa =
   | 'Nuevo'
   | 'Cotizando'
   | 'Agendado'
+  | 'Reagendar'
   | 'En_taller'
+  | 'EN_REVISION'
+  | 'ENVIO_GESTIONADO'
   | 'Entregado'
   | 'Cerrado'
   | 'Hater'
@@ -16,6 +19,8 @@ export type EstadoEtapa =
   | 'Espia';
 
 export type CategoriaContacto =
+  | 'SOLICITUD_AYUDA'
+  | 'SOLICITUD_AYUDA_GESTIONADA'
   | 'Prospecto_frio'
   | 'Prospecto_tibio'
   | 'Prospecto_caliente'
@@ -39,6 +44,7 @@ export type SortField =
 export type SortOrder = 'asc' | 'desc';
 
 export interface Client {
+  pais_sede?: string;
   row_number: number;
   /** Puede venir como JID (xxx@s.whatsapp.net), número plano o UUID */
   whatsapp: string;

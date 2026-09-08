@@ -13,6 +13,7 @@ export interface LoginResponse {
 }
 
 export interface User {
+  pais_sede?: string;
   email: string;
   token: string;
   role?: string;

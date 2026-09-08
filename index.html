@@ -1,13 +1,76 @@
 <!doctype html>
-<html lang="en">
+<html lang="es-CO">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/images/w.png" />
+    <link rel="apple-touch-icon" href="/images/logowiltech.png" />
+    <link rel="canonical" href="https://wiltech.alliasoft.com/" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="preload" as="image" href="/images/logowiltech.png" fetchpriority="high" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Wiltech Alliasoft</title>
+    <meta name="theme-color" content="#09090b" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="description" content="Wiltech centraliza agenda, CRM, soporte, reparaciones, envíos y agentes de IA para ofrecer una operación técnica rápida, organizada y confiable." />
+    <meta name="author" content="Alliasoft" />
+    <meta property="og:locale" content="es_CO" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Wiltech" />
+    <meta property="og:title" content="Wiltech Operations | Gestión técnica y comercial" />
+    <meta property="og:description" content="Plataforma de operación para agenda, clientes, soporte, envíos, reparaciones y agentes de inteligencia artificial." />
+    <meta property="og:url" content="https://wiltech.alliasoft.com/" />
+    <meta property="og:image" content="https://wiltech.alliasoft.com/images/logowiltech.png" />
+    <meta property="og:image:alt" content="Logo de Wiltech" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Wiltech Operations | Gestión técnica y comercial" />
+    <meta name="twitter:description" content="Una plataforma fluida para coordinar la operación técnica y comercial de Wiltech." />
+    <meta name="twitter:image" content="https://wiltech.alliasoft.com/images/logowiltech.png" />
+    <title>Wiltech Operations | Gestión técnica y comercial</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Wiltech Operations",
+        "url": "https://wiltech.alliasoft.com/",
+        "description": "Plataforma de gestión técnica y comercial para agenda, CRM, soporte, envíos, reparaciones y agentes de inteligencia artificial.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "inLanguage": "es-CO",
+        "publisher": {
+          "@type": "Organization",
+          "name": "Alliasoft",
+          "url": "https://alliasoft.com"
+        }
+      }
+    </script>
+    <style>
+      .repair-loader{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#09090b;color:#f4f4f5;font-family:Inter,system-ui,sans-serif;text-align:center;padding:24px;box-sizing:border-box}
+      .repair-loader svg{width:120px;height:120px}
+      .repair-loader-brand{font-size:14px;font-weight:800;letter-spacing:.3em}
+      .repair-loader p{font-size:12px;color:#a1a1aa;margin:0}
+      .repair-loader-scan{animation:repair-scan 2s ease-in-out infinite}
+      .repair-loader-tool{transform-origin:83px 60px;animation:repair-turn 2s ease-in-out infinite}
+      @keyframes repair-scan{0%,100%{transform:translateY(0);opacity:.35}50%{transform:translateY(30px);opacity:1}}
+      @keyframes repair-turn{0%,15%,100%{transform:rotate(-10deg)}55%,70%{transform:rotate(14deg)}}
+      @media(prefers-reduced-motion:reduce){.repair-loader-scan,.repair-loader-tool{animation:none}}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="repair-loader" role="status" aria-live="polite">
+        <svg viewBox="0 0 120 120" fill="none" aria-hidden="true">
+          <rect x="34" y="14" width="52" height="92" rx="12" stroke="currentColor" stroke-width="3"/>
+          <path d="M51 22h18M55 97h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          <path class="repair-loader-scan" d="M43 46h34" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+          <g class="repair-loader-tool">
+            <path d="M86 46C76 43 67 52 70 62L54 78a7 7 0 0 0 10 10l16-16C90 75 99 66 96 56l-8 8-8-2-2-8 8-8Z" fill="#18181b" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="m65 77 9-9" stroke="#71717a" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="59" cy="83" r="2.5" fill="#09090b" stroke="currentColor" stroke-width="1.5"/>
+          </g>
+        </svg>
+        <span class="repair-loader-brand">WILTECH</span><p>Preparando tu espacio de trabajo</p>
+      </div>
+    </div>
+    <noscript>Activa JavaScript para entrar a Wiltech.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

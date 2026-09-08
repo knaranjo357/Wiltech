@@ -55,6 +55,8 @@ export interface FlowConfig {
 }
 
 export interface FlowData {
+  pais_sede?: string;
+  isNew?: boolean;
   id: number;
   created_at?: string;
   flow_name?: string;

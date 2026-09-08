@@ -1,7 +1,8 @@
+import { RepairLoader } from '../components/RepairLoader';
 import { useState, useEffect, useRef } from 'react';
 import { flowApi, agenteApi, diagnosticoApi } from '../services/diagnosticadorService';
 import type { FlowData, FlowStepField, DiagnosticoMultimedia } from '../types/diagnosticador';
-import { ArrowLeft, ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, Loader, X, Zap, Upload, Image, Trash2, Pencil, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, X, Zap, Upload, Image, Trash2, Pencil, Wrench } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -73,7 +74,7 @@ type DiagnosticadorProps = {
 
 export default function Diagnosticador({ embedded = false, processType = 'diagnostico', initialRepairId, onExit, onSwitchProcess, onRepairLinked }: DiagnosticadorProps) {
   const params = new URLSearchParams(window.location.search);
-  const targetFlowId = processType === 'reparacion' ? 2 : 1;
+  const targetFlowName = processType;
   const processLabel = processType === 'reparacion' ? 'reparación' : 'diagnóstico';
   const [flows, setFlows] = useState<FlowData[]>([]);
   const [activeFlow, setActiveFlow] = useState<FlowData | null>(null);
@@ -308,14 +309,14 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
 
   useEffect(() => {
     loadFlow();
-  }, [targetFlowId]);
+  }, [targetFlowName]);
 
   const loadFlow = async () => {
     try {
       const data = await flowApi.getAll();
       const availableFlows = data || [];
       setFlows(availableFlows);
-      const targetFlow = availableFlows.find(flow => Number(flow.id) === targetFlowId);
+      const targetFlow = availableFlows.find(flow => flow.flow_name === targetFlowName);
       setSelectedFlowId(targetFlow ? String(targetFlow.id) : '');
     } catch (error) {
       console.error('Error loading flow:', error);
@@ -573,7 +574,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
         return (
           <div className="space-y-4">
             <label className="flex cursor-pointer items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-6 font-bold text-gray-500 transition hover:border-black hover:text-black">
-              {uploadingField === field.key ? <Loader className="animate-spin" size={20} /> : <Upload size={20} />}
+              {uploadingField === field.key ? <RepairLoader variant="icon" /> : <Upload size={20} />}
               <span className="text-xs uppercase tracking-widest">
                 {uploadingField === field.key ? 'Subiendo...' : 'Subir fotos, video o audio'}
               </span>
@@ -635,10 +636,10 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
   const currentStepIndex = currentStepId ? flowStepsList.findIndex((s: any) => s.id === currentStepId) : -1;
   const currentStepFieldsCount = currentStep?.fields?.length || 0;
 
-  if (loading) return <div className="h-screen md:h-[calc(100vh-3.5rem)] flex items-center justify-center font-black text-xl animate-pulse italic">WILTECH...</div>;
+  if (loading) return <div className="h-[calc(100dvh-4rem)] md:h-[100dvh] flex items-center justify-center font-black text-xl animate-pulse italic">WILTECH...</div>;
 
   return (
-    <div className={(embedded ? "h-full min-h-0" : "h-[calc(100vh-3.5rem)] md:h-screen") + " bg-gray-50 flex flex-col font-sans selection:bg-black selection:text-white overflow-hidden"}>
+    <div className={(embedded ? "h-full min-h-0" : "h-[calc(100dvh-4rem)] md:h-[100dvh]") + " bg-gray-50 flex flex-col font-sans selection:bg-black selection:text-white overflow-hidden"}>
       <CustomModal
         isOpen={modal.isOpen}
         title={modal.title}
@@ -659,7 +660,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
             <RotateCcw size={18} />
           </button>
           <div>
-            <h1 className="text-base font-black uppercase tracking-tighter italic leading-none text-slate-800">{processType === "reparacion" ? "Proceso de reparación" : "Diagnosticador"}</h1>
+            <h1 className="wt-page-title">{processType === "reparacion" ? "Proceso de reparación" : "Diagnosticador"}</h1>
             {activeFlow && currentStepId && currentStep?.type !== 'end' && (
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mt-1">
                 Paso {currentStepIndex + 1} de {flowStepsList.length}
@@ -718,12 +719,12 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
                     <span className="block text-[9px] font-black uppercase tracking-widest text-slate-400">Proceso seleccionado</span>
                     <div className="mt-2 flex items-center gap-3">
                       <div className="rounded-xl bg-slate-950 p-2 text-white">{processType === 'reparacion' ? <Wrench size={16} /> : <CheckCircle2 size={16} />}</div>
-                      <div><strong className="block text-sm capitalize text-slate-900">{processLabel}</strong><span className="text-[10px] font-semibold text-slate-400">Diagrama fijo #{targetFlowId}</span></div>
+                      <div><strong className="block text-sm capitalize text-slate-900">{processLabel}</strong><span className="text-[10px] font-semibold text-slate-400">{selectedFlowId ? `Diagrama #${selectedFlowId}` : 'Diagrama del país'}</span></div>
                     </div>
                   </div>
-                  {!selectedFlowId && <p className="text-xs font-bold text-amber-600">No se encontró el diagrama #{targetFlowId}. Publícalo desde AI Diagnosticador.</p>}
+                  {!selectedFlowId && <p className="text-xs font-bold text-amber-600">No se encontró el diagrama de {processLabel} para este país. Publícalo desde AI Diagnosticador.</p>}
                   <button type="button" onClick={() => void startDiagnostic()} disabled={starting || !selectedFlowId} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-black py-5 text-[10px] font-bold uppercase tracking-widest text-white disabled:opacity-40">
-                    {starting ? <Loader size={16} className="animate-spin" /> : <ArrowRight size={16} />}
+                    {starting ? <RepairLoader variant="icon" /> : <ArrowRight size={16} />}
                     {starting ? 'Creando ingreso...' : 'Comenzar ' + processLabel}
                   </button>
                 </div>
@@ -852,7 +853,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
               {isChatLoading && (
                 <div className="flex justify-start">
                   <div className="bg-white text-gray-400 border border-gray-100 p-4 rounded-2xl rounded-tl-none text-[11px] font-bold flex items-center gap-2 shadow-sm">
-                    <Loader className="animate-spin" size={14} /> Pensando...
+                    <RepairLoader variant="icon" /> Pensando...
                   </div>
                 </div>
               )}

@@ -1,5 +1,9 @@
+import { RepairLoader } from '../components/RepairLoader';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { UserService, UserData } from '../services/userService';
+import { AuthService } from '../services/authService';
 import {
   Edit3,
   Save,
@@ -13,6 +17,9 @@ import {
   Mail,
   AlertCircle,
 } from 'lucide-react';
+import { ModalPortal } from '../components/ModalPortal';
+import { useCountryConfig } from '../hooks/useCountryConfig';
+import { canAssignCountryRole } from '../utils/countryConfig';
 
 // Roles disponibles
 const AVAILABLE_ROLES = [
@@ -52,6 +59,23 @@ const normalizeRoles = (rol?: string) => {
 };
 
 export const UsuariosPage: React.FC = () => {
+  const isRoot = AuthService.isRoot();
+  const { config } = useCountryConfig();
+  const availableRoles = isRoot ? ['root', ...AVAILABLE_ROLES] : AVAILABLE_ROLES.filter(role => canAssignCountryRole(role, false, config));
+  const availableCountries = AuthService.getAllowedCountries();
+  const [createCountries, setCreateCountries] = useState<string[]>([AuthService.getPaisSede()]);
+  const [editCountries, setEditCountries] = useState<string[]>([]);
+  const countryChoices = (selected: string[], onChange: (countries: string[]) => void) => (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-semibold">Países autorizados</legend>
+      <div className="flex flex-wrap gap-4">
+        {availableCountries.map(country => <label key={country} className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={selected.includes(country)} onChange={() => onChange(selected.includes(country) ? selected.filter(value => value !== country) : [...selected, country])} />
+          {country}
+        </label>)}
+      </div>
+    </fieldset>
+  );
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -116,6 +140,7 @@ export const UsuariosPage: React.FC = () => {
         email: createForm.email.trim(),
         password: createForm.password,
         rol: createForm.roles.join(','),
+        ...(isRoot ? { pais_sede: createCountries.join(',') } : {}),
       });
 
       setIsCreating(false);
@@ -138,6 +163,7 @@ export const UsuariosPage: React.FC = () => {
         id: editingUser.id,
         email: editForm.email.trim(),
         rol: editForm.roles.join(','),
+        ...(isRoot ? { pais_sede: editCountries.join(',') } : {}),
       });
 
       setEditingUser(null);
@@ -173,6 +199,8 @@ export const UsuariosPage: React.FC = () => {
     return users.filter(u => (u.email || '').toLowerCase().includes(t));
   }, [users, searchTerm]);
 
+  const pagination = usePagination(filteredUsers, searchTerm);
+
   return (
     <div className="page-container flex flex-col space-y-6">
       
@@ -183,7 +211,7 @@ export const UsuariosPage: React.FC = () => {
               <Shield className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Administración de Usuarios</h1>
+              <h1 className="wt-page-title">Administración de Usuarios</h1>
               <p className="text-xs text-slate-700 font-bold uppercase tracking-wider mt-1.5">
                 {filteredUsers.length} usuarios registrados
               </p>
@@ -224,7 +252,7 @@ export const UsuariosPage: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-[var(--wt-shadow-sm)] border border-slate-200/60 overflow-hidden min-h-[400px]">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-64 text-slate-400">
-              <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin mb-2" />
+              <RepairLoader variant="icon" className="repair-loader--large" />
               Cargando usuarios...
             </div>
           ) : (
@@ -239,8 +267,8 @@ export const UsuariosPage: React.FC = () => {
                 </thead>
 
                 <tbody className="divide-y divide-slate-50">
-                  {filteredUsers.map((u) => {
-                    const roles = normalizeRoles(u.rol);
+                  {pagination.items.map((u) => {
+                    const roles = normalizeRoles(u.rol).filter(role => canAssignCountryRole(role, isRoot, config));
                     return (
                       <tr key={u.id} className="group hover:bg-slate-50/80 transition-colors">
                         <td className="px-6 py-4">
@@ -251,6 +279,7 @@ export const UsuariosPage: React.FC = () => {
                             <div>
                               <div className="font-medium text-slate-900">{u.email}</div>
                               <div className="text-xs text-slate-400 font-mono mt-0.5">ID: {u.id}</div>
+                              {isRoot && <div className="text-xs text-slate-500">{AuthService.parseCountries(u.pais_sede).join(', ')}</div>}
                             </div>
                           </div>
                         </td>
@@ -274,8 +303,10 @@ export const UsuariosPage: React.FC = () => {
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                             <button
+                              disabled={!UserService.canEdit(u)}
                               onClick={() => {
                                 setEditingUser(u);
+                                setEditCountries(AuthService.parseCountries(u.pais_sede));
                                 setEditForm({
                                   email: u.email || '',
                                   roles: normalizeRoles(u.rol),
@@ -288,6 +319,7 @@ export const UsuariosPage: React.FC = () => {
                             </button>
 
                             <button
+                              disabled={!UserService.canEdit(u)}
                               onClick={() => {
                                 setPasswordUser(u);
                                 setNewPassword('');
@@ -314,13 +346,13 @@ export const UsuariosPage: React.FC = () => {
               </table>
             </div>
           )}
+          {!loading && <Pagination {...pagination} />}
         </div>
       </div>
 
       {/* --- MODAL CREAR --- */}
       {isCreating && (
-        <div className="wt-overlay">
-          <div className="wt-modal max-w-xl">
+        <ModalPortal open={isCreating} onClose={() => setIsCreating(false)} className="max-w-xl overflow-y-auto" ariaLabel="Crear usuario">
             <div className="wt-modal-header">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <div className="p-1.5 bg-slate-100 rounded-md">
@@ -337,6 +369,7 @@ export const UsuariosPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleCreateSubmit} className="p-6 space-y-5">
+              {isRoot && countryChoices(createCountries, setCreateCountries)}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-500 uppercase">Email</label>
@@ -359,7 +392,8 @@ export const UsuariosPage: React.FC = () => {
                     <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                     <input
                       required
-                      type="text"
+                      type="password"
+                      autoComplete="new-password"
                       value={createForm.password}
                       onChange={e => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
                       className="w-full pl-9 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-slate-700 outline-none transition-all"
@@ -372,7 +406,7 @@ export const UsuariosPage: React.FC = () => {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-500 uppercase">Roles y Permisos</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 max-h-48 overflow-y-auto">
-                  {AVAILABLE_ROLES.map(role => {
+                  {availableRoles.map(role => {
                     const active = createForm.roles.includes(role);
                     return (
                       <label
@@ -427,14 +461,12 @@ export const UsuariosPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* --- MODAL EDITAR --- */}
       {editingUser && (
-        <div className="wt-overlay">
-          <div className="wt-modal max-w-xl">
+        <ModalPortal open={!!editingUser} onClose={() => setEditingUser(null)} className="max-w-xl overflow-y-auto" ariaLabel="Editar usuario">
             <div className="wt-modal-header">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <div className="p-1.5 bg-blue-100 rounded-md">
@@ -448,6 +480,7 @@ export const UsuariosPage: React.FC = () => {
             </div>
 
             <form onSubmit={handleEditSubmit} className="p-6 space-y-5">
+              {isRoot && countryChoices(editCountries, setEditCountries)}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-slate-500 uppercase">Email</label>
                 <div className="relative">
@@ -465,20 +498,20 @@ export const UsuariosPage: React.FC = () => {
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-slate-500 uppercase">Roles Asignados</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100 max-h-48 overflow-y-auto">
-                  {AVAILABLE_ROLES.map(role => {
+                  {availableRoles.map(role => {
                     const active = editForm.roles.includes(role);
                     return (
                       <label
                         key={role}
                         className={`cursor-pointer flex items-center gap-2 p-2 rounded-lg border text-xs font-medium transition-all ${
                           active
-                            ? 'bg-blue-50 border-blue-200 text-blue-700'
+                            ? 'bg-black border-black text-white'
                             : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                         }`}
                       >
                         <div
                           className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                            active ? 'bg-blue-500 border-blue-500' : 'bg-slate-100 border-slate-300'
+                            active ? 'bg-white/20 border-white/30' : 'bg-slate-100 border-slate-300'
                           }`}
                         >
                           {active && <Check className="w-3 h-3 text-white" />}
@@ -514,20 +547,18 @@ export const UsuariosPage: React.FC = () => {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 font-medium transition-all flex items-center gap-2 disabled:opacity-70"
+                  className="px-6 py-2 bg-black text-white rounded-xl hover:bg-zinc-800 shadow-lg shadow-black/15 font-medium transition-all flex items-center gap-2 disabled:opacity-70"
                 >
                   {saving ? 'Guardando...' : (<><Save className="w-4 h-4" /> Guardar</>)}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* --- MODAL PASSWORD --- */}
       {passwordUser && (
-        <div className="wt-overlay">
-          <div className="wt-modal max-w-md">
+        <ModalPortal open={!!passwordUser} onClose={() => setPasswordUser(null)} className="max-w-md overflow-y-auto" ariaLabel="Cambiar contraseña">
             <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-amber-50/50">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                 <div className="p-1.5 bg-amber-100 rounded-md">
@@ -552,7 +583,8 @@ export const UsuariosPage: React.FC = () => {
                   <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
                   <input
                     required
-                    type="text"
+                    type="password"
+                    autoComplete="new-password"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     className="w-full pl-9 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-amber-500 outline-none transition-all"
@@ -579,8 +611,7 @@ export const UsuariosPage: React.FC = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );

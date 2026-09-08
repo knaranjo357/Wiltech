@@ -1,6 +1,9 @@
+import { RepairLoader } from '../components/RepairLoader';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, RefreshCw, Eye, X, Image as ImageIcon, Play, ClipboardCheck, Smartphone, User, MapPin, Wrench, Clock, ShieldCheck, Hash, Edit3, Save, Bot, Send, Loader } from 'lucide-react';
+import { Search, RefreshCw, Eye, X, ClipboardCheck, Smartphone, User, MapPin, Wrench, Clock, ShieldCheck, Hash, Edit3, Save, Bot, Send, Image as ImageIcon} from 'lucide-react';
 import { ReparacionService } from '../services/reparacionService';
 import type { Reparacion } from '../types/reparacion';
 import { agenteApi, flowApi } from '../services/diagnosticadorService';
@@ -151,6 +154,8 @@ export default function ReparacionesPage() {
     return term ? rows.filter(row => JSON.stringify(row).toLowerCase().includes(term)) : rows;
   }, [rows, search]);
 
+  const pagination = usePagination(filtered, search);
+
   useEffect(() => {
     if (!selected) return;
     setAnswerDraft(Object.fromEntries(getDiagnosisItems(selected, flows).map(item => [item.key, item.raw])));
@@ -221,11 +226,11 @@ export default function ReparacionesPage() {
   };
   if (workspace !== 'ordenes') {
     return (
-      <div className="flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden bg-slate-50 md:h-screen">
+      <div className="flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-slate-50 md:h-[100dvh]">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
           <div>
             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">Centro de reparaciones</span>
-            <h1 className="text-lg font-black text-slate-900">{workspace === 'diagnostico' ? 'Realizar diagnóstico' : 'Ejecutar reparación'}</h1>
+            <h1 className="wt-page-title">{workspace === 'diagnostico' ? 'Realizar diagnóstico' : 'Ejecutar reparación'}</h1>
           </div>
           <div className="flex rounded-2xl bg-slate-100 p-1">
             <button onClick={showOrders} className="rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-wider text-slate-500 hover:bg-white">Órdenes</button>
@@ -242,17 +247,17 @@ export default function ReparacionesPage() {
 
   return (
     <div className="page-container flex flex-col gap-6">
-      <header className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+      <header className="wt-page-heading flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900">Reparaciones</h1>
+          <h1 className="wt-page-title">Reparaciones</h1>
           <p className="mt-1 text-sm text-slate-500">Ingresos, equipos, diagnóstico y evidencia multimedia.</p>
         </div>
-        <button onClick={() => void load()} className="btn-secondary"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Actualizar</button>
+        <button onClick={() => void load()} className="btn-secondary">{loading ? <RepairLoader variant="icon" /> : <RefreshCw className="h-4 w-4" />} Actualizar</button>
       </header>
 
       <div className="flex w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
         <button className="flex-1 rounded-xl bg-slate-950 px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white">Órdenes</button>
-        <button onClick={() => openProcess('diagnostico')} className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-blue-700 transition hover:bg-blue-50"><ClipboardCheck className="h-4 w-4" /> Iniciar diagnóstico</button>
+        <button onClick={() => openProcess('diagnostico')} className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-slate-800 transition hover:bg-slate-100"><ClipboardCheck className="h-4 w-4" /> Iniciar diagnóstico</button>
         <button onClick={() => openProcess('reparacion')} className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-amber-700 transition hover:bg-amber-50"><Wrench className="h-4 w-4" /> Iniciar reparación</button>
       </div>
 
@@ -265,12 +270,13 @@ export default function ReparacionesPage() {
 
       <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left">
+          <table className="wt-table w-full min-w-[900px] text-left">
             <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500">
               <tr><th className="p-4">Dispositivo</th><th className="p-4">Cliente CRM</th><th className="p-4">Equipo</th><th className="p-4">Estado</th><th className="p-4">Diagnóstico</th><th className="p-4">Ingreso</th><th className="p-4" /></tr>
             </thead>
             <tbody>
-              {filtered.map(row => (
+{loading && <tr><td colSpan={7}><RepairLoader variant="panel" label="Cargando datos" /></td></tr>}
+              {pagination.items.map(row => (
                 <tr key={row.id} className="border-t border-slate-100 hover:bg-slate-50/60">
                   <td className="p-4"><strong className="block text-sm text-slate-900">{row.id_dispositivo}</strong><span className="text-xs text-slate-400">#{row.id}</span></td>
                   <td className="p-4"><span className="block text-sm font-bold">{String(row.crm_data?.nombre || 'Sin cliente')}</span><span className="text-xs text-slate-400">CRM #{row.crm_row_number || '—'} · {row.crm_whatsapp || '—'}</span></td>
@@ -286,6 +292,8 @@ export default function ReparacionesPage() {
           </table>
         </div>
       </div>
+
+      {!loading && <Pagination {...pagination} />}
 
       {selected && createPortal((
         <div className="fixed inset-0 z-[180] bg-slate-100">
@@ -462,12 +470,12 @@ export default function ReparacionesPage() {
                       </div>
                     </div>
                   ))}
-                  {agentLoading && <div className="flex items-center gap-2 text-xs font-semibold text-violet-600"><Loader className="h-4 w-4 animate-spin" /> Analizando la reparación...</div>}
+                  {agentLoading && <div className="flex items-center gap-2 text-xs font-semibold text-violet-600"><RepairLoader variant="icon" /> Analizando la reparación...</div>}
                 </div>
                 <form onSubmit={sendAgentMessage} className="border-t border-slate-200 bg-white p-4">
                   <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-2 focus-within:border-violet-400">
                     <textarea value={agentInput} onChange={event => setAgentInput(event.target.value)} placeholder="Pregunta cualquier cosa sobre esta reparación..." rows={2} className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none" />
-                    <button type="submit" disabled={!agentInput.trim() || agentLoading} className="rounded-xl bg-violet-600 p-3 text-white transition hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" /></button>
+                    <button type="submit" disabled={!agentInput.trim() || agentLoading} className="rounded-xl bg-black p-3 text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" /></button>
                   </div>
                   <p className="mt-2 text-center text-[9px] font-medium text-slate-400">El agente recibe cliente, equipo, diagnóstico, seguimiento y evidencias.</p>
                 </form>

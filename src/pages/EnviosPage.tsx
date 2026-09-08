@@ -1,12 +1,17 @@
+import { RepairLoader } from '../components/RepairLoader';
+import { countryFetch } from '../services/countryRequest';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
 // src/pages/EnviosPage.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { 
   Truck, RefreshCw, Phone, MapPin, Search, ArrowRight, 
-  Package, ShieldCheck, AlertTriangle, CheckCircle2, X,
-  ArrowUpDown, Clock, MessageCircle, Bot, AlertCircle,
+  Package, AlertTriangle, CheckCircle2,
+  ArrowUpDown, Clock, Bot, AlertCircle,
   Send, ClipboardCheck, User, ChevronDown, BarChart3
 } from 'lucide-react';
 import { Client } from '../types/client';
+import { ApiService } from '../services/apiService';
 import { ClientService } from '../services/clientService';
 import { ETAPA_ENVIO_GESTIONADO, formatWhatsApp, deriveEnvioUI, ENVIO_LABELS, isEnvioGestionado, isEnvioGestionadoServientrega } from '../utils/clientHelpers';
 import type { EnvioUIKey } from '../utils/clientHelpers';
@@ -58,7 +63,7 @@ type TabOption = 'PENDIENTES' | 'GESTIONADOS' | 'TODOS';
 export const EnviosPage: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = useMemo(
-    () => user?.role?.split(',').some((role) => role.trim().toLowerCase() === 'admin') ?? false,
+    () => user?.role?.split(',').some((role) => ['admin', 'root'].includes(role.trim().toLowerCase())) ?? false,
     [user?.role],
   );
   const [clients, setClients] = useState<Client[]>([]);
@@ -67,6 +72,7 @@ export const EnviosPage: React.FC = () => {
 
   // Filtros
   const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   const [sedeFilter, setSedeFilter] = useState<string>('Todas');
   const [currentTab, setCurrentTab] = useState<TabOption>('PENDIENTES'); 
   const [sortOption, setSortOption] = useState<SortOption>('last_msg_desc');
@@ -77,11 +83,11 @@ export const EnviosPage: React.FC = () => {
   const [webhookLoading, setWebhookLoading] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
 
-  const fetchClients = async () => {
+  const fetchClients = async (force = true) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await ClientService.getClients();
+      const data = await ClientService.getEnviosClients({ force });
       const arr = Array.isArray(data) ? (data as Client[]) : [];
       // Filtramos usando la lógica permisiva
       setClients(arr.filter(hasLogisticsData));
@@ -92,13 +98,14 @@ export const EnviosPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchClients(); }, []);
+  useEffect(() => { fetchClients(false); }, []);
 
   // Escuchar actualizaciones externas
   useEffect(() => {
     const onExternalUpdate = (ev: Event) => {
       const detail = (ev as CustomEvent<Partial<Client>>).detail;
       if (!detail?.row_number) return;
+      ApiService.invalidateCache();
       setClients(prev => {
         const updated = prev.map(c => c.row_number === detail.row_number ? ({ ...c, ...detail } as Client) : c);
         // Volvemos a filtrar para asegurar que siga cumpliendo condiciones
@@ -117,7 +124,7 @@ export const EnviosPage: React.FC = () => {
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        await fetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        await countryFetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
       setClients(prev => prev.map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c));
       return true;
@@ -134,7 +141,7 @@ export const EnviosPage: React.FC = () => {
     const url = 'https://n8n.alliasoft.com/webhook/wiltech/guia-recogida';
     setWebhookLoading(client.whatsapp);
     try {
-      const response = await fetch(url, {
+      const response = await countryFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -150,6 +157,7 @@ export const EnviosPage: React.FC = () => {
       });
       
       if (response.ok) {
+        ApiService.invalidateCache();
         const resData = await response.json();
         const updated = Array.isArray(resData) ? resData[0] : resData;
         if (updated && updated.row_number) {
@@ -228,8 +236,8 @@ export const EnviosPage: React.FC = () => {
     }
 
     // 3. Búsqueda Segura
-    if (search.trim()) {
-      const q = normalize(search);
+    if (deferredSearch.trim()) {
+      const q = normalize(deferredSearch);
       data = data.filter(c => 
         normalize(c.nombre).includes(q) ||
         normalize(c.guia_nombre_completo).includes(q) ||
@@ -252,7 +260,9 @@ export const EnviosPage: React.FC = () => {
       };
       return (score(a) - score(b)) || (getTs(b.created) - getTs(a.created));
     });
-  }, [clients, sedeFilter, currentTab, search, sortOption]);
+  }, [clients, sedeFilter, currentTab, deferredSearch, sortOption]);
+
+  const pagination = usePagination(filtered, JSON.stringify([deferredSearch, sedeFilter, currentTab, sortOption]));
 
   const handleToggleBot = async (client: Client, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -277,28 +287,26 @@ export const EnviosPage: React.FC = () => {
   };
 
   return (
-    <div className="page-container relative flex flex-col space-y-8 min-h-[calc(100vh-100px)] overflow-hidden">
+    <div className="page-container relative flex flex-col space-y-6 min-h-[calc(100vh-100px)] overflow-hidden">
+      {error && <div role="alert" className="relative z-10 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
       
       {/* Background Decorations */}
-      <div className="absolute top-[-10%] right-[-5%] w-[40%] h-[40%] bg-slate-800/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] left-[-5%] w-[30%] h-[30%] bg-slate-600/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* === Header Dashboard === */}
-      <div className="relative z-10 flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
+      <div className="relative z-10 flex flex-col gap-6 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="wt-page-heading flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
             <div className="relative">
-              <div className="absolute inset-0 bg-slate-700 blur-xl opacity-20 animate-pulse" />
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-slate-800 to-purple-700 text-white flex items-center justify-center shadow-xl shadow-slate-900/20 relative z-10 border border-white/20">
-                <Truck className="w-7 h-7" />
+              <div className="w-12 h-12 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-lg shadow-black/15 relative z-10 border border-white/10">
+                <Truck className="w-6 h-6" />
               </div>
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 leading-none tracking-tight">Logística de Envíos</h1>
+              <h1 className="wt-page-title">Logística de Envíos</h1>
               <div className="flex items-center gap-2 mt-1.5">
                 <div className="flex -space-x-1">
                    <div className="w-2 h-2 rounded-full bg-slate-800 border-2 border-white" />
-                   <div className="w-2 h-2 rounded-full bg-indigo-300 border-2 border-white animate-ping" />
+                   <div className="w-2 h-2 rounded-full bg-slate-300 border-2 border-white animate-ping" />
                 </div>
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.15em]">Gestión de Guías y Recogidas</p>
               </div>
@@ -306,10 +314,10 @@ export const EnviosPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-             <div className="flex bg-white/50 backdrop-blur-xl p-1.5 rounded-[22px] border border-white/60 shadow-xl shadow-slate-100 hover:shadow-slate-900/20/20 transition-all duration-500">
+             <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/70 transition-all">
                 <button 
                   onClick={() => setCurrentTab('PENDIENTES')}
-                  className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2
+                  className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-2
                     ${currentTab === 'PENDIENTES' 
                       ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' 
                       : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}
@@ -319,7 +327,7 @@ export const EnviosPage: React.FC = () => {
                 </button>
                 <button 
                   onClick={() => setCurrentTab('GESTIONADOS')}
-                  className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300 flex items-center gap-2
+                  className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-2
                     ${currentTab === 'GESTIONADOS' 
                       ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' 
                       : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}
@@ -329,7 +337,7 @@ export const EnviosPage: React.FC = () => {
                 </button>
                 <button 
                   onClick={() => setCurrentTab('TODOS')}
-                  className={`px-6 py-2.5 rounded-[18px] text-[10px] font-black uppercase tracking-widest transition-all duration-300
+                  className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200
                     ${currentTab === 'TODOS' 
                       ? 'bg-slate-900 text-white shadow-lg shadow-slate-200' 
                       : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}
@@ -339,10 +347,12 @@ export const EnviosPage: React.FC = () => {
                 </button>
              </div>
 
-             {isAdmin && (
+             {!loading && <Pagination {...pagination} />}
+
+      {isAdmin && (
             <button
                onClick={() => setShowReportModal(true)}
-               className="flex items-center gap-2 rounded-[20px] border border-slate-900 bg-slate-900 px-4 py-3.5 text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-slate-900/20 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800 hover:shadow-xl active:scale-95"
+               className="flex h-11 items-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-slate-900/15 transition hover:bg-slate-800 active:scale-95"
                type="button"
              >
                 <BarChart3 className="w-4 h-4" />
@@ -350,16 +360,16 @@ export const EnviosPage: React.FC = () => {
              </button>
             )}
              <button 
-               onClick={fetchClients}
-               className="p-3.5 bg-white shadow-lg border border-white rounded-[20px] text-slate-700 hover:text-slate-800 hover:scale-110 active:scale-95 transition-all duration-300 group"
+               onClick={() => void fetchClients()}
+               className="h-11 w-11 flex items-center justify-center bg-white shadow-sm border border-slate-200 rounded-xl text-slate-500 hover:text-slate-900 hover:border-slate-300 active:scale-95 transition group"
              >
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                {loading ? <RepairLoader variant="icon" /> : <RefreshCw className={`w-5 h-5 ${loading ? '' : 'group-hover:rotate-180 transition-transform duration-500'}`} />}
              </button>
           </div>
         </div>
 
         {/* Filters Row */}
-        <div className="bg-white/40 backdrop-blur-md border border-white/40 rounded-[28px] p-2.5 flex flex-col md:flex-row gap-3 shadow-xl shadow-slate-200/20">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-2.5 flex flex-col md:flex-row gap-3 shadow-sm">
           <div className="relative group flex-1">
              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-slate-700 transition-colors">
                 <Search size={16} />
@@ -368,7 +378,7 @@ export const EnviosPage: React.FC = () => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar por nombre, guía, whatsapp o cédula..."
-                className="w-full pl-12 pr-6 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-xs font-bold text-slate-700 placeholder-slate-400 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white transition-all"
+                className="w-full pl-12 pr-6 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 focus:bg-white transition-all"
              />
           </div>
 
@@ -380,7 +390,7 @@ export const EnviosPage: React.FC = () => {
                 <select 
                    value={sedeFilter} 
                    onChange={(e) => setSedeFilter(e.target.value)} 
-                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white cursor-pointer transition-all min-w-[160px]"
+                   className="appearance-none pl-9 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 focus:bg-white cursor-pointer transition-all min-w-[160px]"
                 >
                   <option value="Todas">Todas las Sedes</option>
                   {sedesList.map(s => <option key={s} value={s}>{s}</option>)}
@@ -395,7 +405,7 @@ export const EnviosPage: React.FC = () => {
                 <select 
                    value={sortOption} 
                    onChange={(e) => setSortOption(e.target.value as SortOption)} 
-                   className="appearance-none pl-9 pr-10 py-3.5 bg-white/60 border border-white/50 rounded-[22px] text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white cursor-pointer transition-all"
+                   className="appearance-none pl-9 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-black uppercase tracking-widest text-slate-600 outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 focus:bg-white cursor-pointer transition-all"
                 >
                   <option value="priority">Prioridad (Datos)</option>
                   <option value="last_msg_desc">Última Actividad</option>
@@ -408,15 +418,15 @@ export const EnviosPage: React.FC = () => {
       </div>
 
       {/* === Logistics List === */}
-      <div className="w-full max-w-7xl mx-auto space-y-4 pb-20 relative z-10">
+      <div className="w-full mx-auto space-y-3 pb-20 relative z-10">
          {loading && clients.length === 0 ? (
            <div className="flex flex-col items-center justify-center py-32 space-y-4 opacity-50">
-              <RefreshCw className="w-10 h-10 animate-spin text-slate-700" />
+              <RepairLoader variant="icon" className="repair-loader--large" />
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-slate-400">Sincronizando Logística...</p>
            </div>
          ) : filtered.length > 0 ? (
-           <div className="grid grid-cols-1 gap-5">
-             {filtered.map((client) => {
+           <div className="grid grid-cols-1 gap-3">
+             {pagination.items.map((client) => {
                const ui = deriveEnvioUI(client);
                const { isComplete, missingFields } = checkGuiaDataComplete(client);
                const botActive = isBotOn(client.consentimiento_contacto);
@@ -424,47 +434,47 @@ export const EnviosPage: React.FC = () => {
                const isGestionadoDesdePlataforma = isEnvioGestionadoServientrega(client);
                const isSaving = savingRow === client.row_number;
                const canGenerateIda = isComplete && !safeText(client.guia_numero_ida);
+               const shippingOrigin = safeText(client.guia_ciudad) || safeText(client.ciudad) || 'Origen sin definir';
+               const shippingDestination = 'Bucaramanga';
                
                return (
                  <div 
                    key={client.row_number}
                    onClick={() => setViewClient(client)}
-                   className={`group relative bg-white/70 backdrop-blur-xl border border-white/40 shadow-xl rounded-[28px] overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 active:scale-[0.995] cursor-pointer animate-in fade-in slide-in-from-bottom-4 duration-500`}
+                   className="group wt-ops-card cursor-pointer animate-in fade-in slide-in-from-bottom-4"
                  >
                    {/* Status Strip */}
                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 transition-colors duration-500 ${isGestionado ? 'bg-emerald-500' : 'bg-slate-800'} ${!isGestionado && !isComplete ? 'bg-amber-400' : ''}`} />
 
-                   <div className="flex flex-col lg:flex-row items-stretch">
+                   <div className="wt-ops-card-layout">
                      
                      {/* LEFT: Origin-Destination Path */}
-                     <div className="flex flex-row lg:flex-col items-center justify-between lg:justify-center gap-4 p-5 lg:w-[180px] lg:bg-slate-50/40 lg:border-r border-white/20">
+                     <div className="wt-ops-card-rail">
                         <div className="flex flex-col items-center gap-2">
                            <div className="w-9 h-9 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center text-slate-700">
                              <MapPin size={16} />
                            </div>
-                           <span className="text-[9px] font-black uppercase tracking-tight text-slate-500 text-center truncate max-w-[120px]">
-                              {safeText(client.agenda_ciudad_sede) || 'Origen?'}
-                           </span>
+                           <span className="text-[8px] font-black uppercase tracking-[0.12em] text-slate-400">Origen</span>
+                           <span className="max-w-[108px] truncate text-center text-[9px] font-black uppercase tracking-tight text-slate-700" title={shippingOrigin}>{shippingOrigin}</span>
                         </div>
                         
-                        <div className="h-[20px] w-[2px] bg-gradient-to-b from-indigo-200 to-purple-200 hidden lg:block relative">
-                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white border border-indigo-400" />
+                        <div className="h-[20px] w-[2px] bg-gradient-to-b from-slate-300 to-slate-100 hidden lg:block relative">
+                           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-white border border-slate-400" />
                         </div>
                         <ArrowRight size={14} className="text-slate-300 lg:hidden" />
 
                         <div className="flex flex-col items-center gap-2">
-                           <div className={`w-9 h-9 rounded-xl bg-white shadow-sm border flex items-center justify-center ${safeText(client.guia_ciudad) ? 'text-slate-800 border-slate-200' : 'text-rose-400 border-rose-100'}`}>
+                           <div className="w-9 h-9 rounded-xl bg-white shadow-sm border border-slate-200 flex items-center justify-center text-slate-800">
                              <MapPin size={16} />
                            </div>
-                           <span className={`text-[9px] font-black uppercase tracking-tight text-center truncate max-w-[120px] ${safeText(client.guia_ciudad) ? 'text-slate-700' : 'text-rose-500 italic'}`}>
-                              {safeText(client.guia_ciudad) || 'Destino?'}
-                           </span>
+                           <span className="text-[8px] font-black uppercase tracking-[0.12em] text-slate-400">Destino</span>
+                           <span className="max-w-[108px] truncate text-center text-[9px] font-black uppercase tracking-tight text-slate-900">{shippingDestination}</span>
                         </div>
                      </div>
 
                      {/* CENTER: Main info & Shipment Numbers */}
-                     <div className="flex-1 p-6 flex flex-col justify-center min-w-0">
-                        <div className="flex items-start justify-between gap-4 mb-4">
+                     <div className="wt-ops-card-main">
+                        <div className="flex items-start justify-between gap-4 mb-3">
                            <div className="min-w-0 flex-1">
                                <div className="flex items-center gap-3 mb-1 flex-wrap">
                                   <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-slate-800 transition-colors truncate">
@@ -489,6 +499,14 @@ export const EnviosPage: React.FC = () => {
                                      <User className="w-3 h-3 text-slate-300" />
                                      <span className="font-mono text-[9px]">ID: {safeText(client.guia_cedula_id) || '---'}</span>
                                   </div>
+                                  <div className="wt-ops-chip">
+                                     <Clock className="w-3 h-3 text-slate-400" />
+                                     <span className="truncate">{formatTimeDate(client.last_msg || client.created)}</span>
+                                  </div>
+                                  <div className="wt-ops-chip">
+                                     <Truck className="w-3 h-3 text-slate-400" />
+                                     <span className="truncate">{safeText(client.guia_departamento_estado) || 'Departamento sin definir'}</span>
+                                  </div>
                                </div>
                            </div>
 
@@ -499,8 +517,8 @@ export const EnviosPage: React.FC = () => {
                         </div>
 
                         {/* Shipping Numbers Boxes */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           <div className={`p-4 rounded-2xl border transition-all relative group/box
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                           <div className={`p-3 rounded-xl border transition-all relative group/box
                               ${safeText(client.guia_numero_ida) 
                                 ? 'bg-slate-50 border-slate-200/50' 
                                 : 'bg-slate-50/50 border-slate-200/50 opacity-60'}
@@ -511,7 +529,7 @@ export const EnviosPage: React.FC = () => {
                               <div className="flex items-center justify-between">
                                  <div className="flex items-center gap-3">
                                     <Package className="w-4 h-4 text-slate-400" />
-                                    <p className="font-mono text-sm font-black text-indigo-900 tracking-wider">
+                                    <p className="font-mono text-sm font-black text-slate-800 tracking-wider">
                                        {safeText(client.guia_numero_ida) || 'POR ASIGNAR'}
                                     </p>
                                  </div>
@@ -519,18 +537,18 @@ export const EnviosPage: React.FC = () => {
                               </div>
                            </div>
 
-                           <div className={`p-4 rounded-2xl border transition-all relative group/box
+                           <div className={`p-3 rounded-xl border transition-all relative group/box
                               ${safeText(client.guia_numero_retorno) 
-                                ? 'bg-slate-50/30 border-purple-100/50' 
+                                ? 'bg-slate-50 border-slate-200/50'
                                 : 'bg-slate-50/50 border-slate-200/50 opacity-60'}
                            `}>
-                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-slate-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-purple-100 shadow-sm">
+                              <span className="absolute -top-2 left-4 px-1.5 py-0.5 bg-white text-slate-600 text-[8px] font-black uppercase tracking-widest rounded-lg border border-slate-200 shadow-sm">
                                  Guía de Retorno
                               </span>
                               <div className="flex items-center justify-between">
                                  <div className="flex items-center gap-3">
-                                    <Package className="w-4 h-4 text-purple-300" />
-                                    <p className="font-mono text-sm font-black text-purple-900 tracking-wider">
+                                    <Package className="w-4 h-4 text-slate-400" />
+                                    <p className="font-mono text-sm font-black text-slate-800 tracking-wider">
                                        {safeText(client.guia_numero_retorno) || 'SIN REGISTRO'}
                                     </p>
                                  </div>
@@ -541,34 +559,15 @@ export const EnviosPage: React.FC = () => {
                      </div>
 
                      {/* RIGHT: Meta info & Actions */}
-                     <div className={`w-full lg:w-[280px] p-6 lg:border-l border-white/20 flex flex-col justify-between gap-6 ${isGestionado ? 'bg-emerald-50/10' : 'bg-slate-50/10'}`}>
-                        <div className="space-y-3">
-                           <div className="flex flex-col gap-2">
-                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
-                                 <Clock size={12} className="text-indigo-400" />
-                                 <div className="flex flex-col overflow-hidden">
-                                    <span className="text-[8px] font-black text-indigo-400 uppercase tracking-widest leading-none mb-0.5">Última Actividad</span>
-                                    <span className="text-[9px] font-black uppercase tracking-wider truncate">{formatTimeDate(client.last_msg || client.created)}</span>
-                                 </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 text-slate-600">
-                                 <Truck size={12} className="text-indigo-400" />
-                                 <span className="text-[9px] font-black uppercase tracking-wider truncate">
-                                    {safeText(client.guia_departamento_estado) || 'Sin Dpto'}
-                                 </span>
-                              </div>
-                           </div>
-                        </div>
-
-                        <div className="flex flex-col gap-2">
+                     <div className={`wt-ops-card-aside ${isGestionado ? 'bg-emerald-50/20' : ''}`}>
+                        <div className="flex h-full flex-col justify-center gap-2">
                            {canGenerateIda ? (
                              <button
                                onClick={(e) => { e.stopPropagation(); handleGenerarGuia(client); }}
                                disabled={!!webhookLoading}
-                               className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white rounded-[18px] text-[10px] font-black uppercase tracking-[0.12em] transition-all hover:bg-slate-800 hover:-translate-y-0.5 border border-indigo-500 shadow-lg shadow-slate-900/20 active:scale-95 disabled:opacity-50"
+                               className="flex items-center justify-center gap-2 w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-[0.12em] transition-all hover:bg-slate-800 border border-slate-800 shadow-md shadow-slate-900/15 active:scale-95 disabled:opacity-50"
                              >
-                               {webhookLoading === client.whatsapp ? <RefreshCw className="w-4 h-4 animate-spin text-white/50" /> : <Send className="w-4 h-4" />}
+                               {webhookLoading === client.whatsapp ? <RepairLoader variant="icon" /> : <Send className="w-4 h-4" />}
                                GENERAR GUÍA RECOGIDA
                              </button>
                            ) : !safeText(client.guia_numero_ida) && !isGestionado ? (
@@ -629,7 +628,7 @@ export const EnviosPage: React.FC = () => {
            <div className="flex flex-col items-center justify-center py-32 text-center animate-in fade-in zoom-in duration-700 relative">
               <div className="w-24 h-24 rounded-[40px] bg-white shadow-2xl shadow-slate-200/50 flex items-center justify-center mb-8 border border-white relative group">
                  <div className="absolute inset-0 bg-slate-800 blur-3xl opacity-10 group-hover:opacity-20 transition-opacity" />
-                 <Truck className={`w-10 h-10 ${currentTab === 'PENDIENTES' ? 'text-indigo-400' : 'text-slate-300'} relative z-10`} />
+                 <Truck className={`w-10 h-10 ${currentTab === 'PENDIENTES' ? 'text-slate-500' : 'text-slate-300'} relative z-10`} />
               </div>
               <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
                   {currentTab === 'PENDIENTES' ? 'Logística al Día' : 'Sin Resultados'}

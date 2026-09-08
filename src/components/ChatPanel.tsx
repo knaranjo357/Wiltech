@@ -1,13 +1,34 @@
+import { RepairLoader } from './RepairLoader';
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint, MessageSquare, RefreshCw } from 'lucide-react';
+import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint, MessageSquare} from 'lucide-react';
 import { Client } from '../types/client';
 import { ApiService } from '../services/apiService';
 import { ChatBubble, ChatMsg } from './ChatBubble';
+
+const HISTORY_CACHE_TTL = 60 * 1000;
+const historyCache = new Map<string, { messages: ChatMsg[]; updatedAt: number }>();
+const pendingHistory = new Map<string, Promise<ChatMsg[]>>();
+
+const normalizeHistory = (response: any): ChatMsg[] =>
+  Array.isArray(response)
+    ? response.map((item, index) => ({
+        id: item?.id ?? index,
+        type:
+          item?.message?.type === 'human' ||
+          item?.message?.type === 'ai' ||
+          item?.message?.type === 'system'
+            ? item.message.type
+            : 'ai',
+        content: String(item?.message?.content ?? '').trim(),
+        createdAt: item?.createdAt ?? item?.timestamp ?? undefined,
+      }))
+    : [];
 
 export type ChatPanelProps = {
   client: Client;
   /** Se envía automáticamente con cada request si viene definido */
   source: string | null | undefined;
+  onBack?: () => void;
 };
 
 // Mantenemos el helper, pero ya no lo usaremos para bloquear la UI
@@ -25,7 +46,7 @@ const coerceNumber = (v: unknown): number | null => {
 const getRawSubscriberId = (c: any): unknown =>
   c?.subscriber_id ?? c?.subscriberId ?? c?.sub_id ?? null;
 
-export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
+export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) => {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,6 +69,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
 
   // Valor crudo (String | Number)
   const rawSubscriberId = getRawSubscriberId(client);
+  const conversationKey = `${source || 'directo'}:${client?.whatsapp || ''}:${String(rawSubscriberId ?? '')}`;
   
   // Display en UI
   const subscriberIdDisplay =
@@ -93,8 +115,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
   }, [input]);
 
   // --- Cargar historial ---
-  const loadConversation = async () => {
+  const loadConversation = async (force = false) => {
     if (!hasWhatsapp && !rawSubscriberId) return; 
+
+    const cached = historyCache.get(conversationKey);
+    if (cached) setMsgs(cached.messages);
+    if (!force && cached && Date.now() - cached.updatedAt < HISTORY_CACHE_TTL) {
+      setLoading(false);
+      setTimeout(() => inputRef.current?.focus(), 0);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -104,20 +134,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       if (source) body.source = source;
       if (!hasWhatsapp && rawSubscriberId) body.subscriber_id = rawSubscriberId;
 
-      const resp = await ApiService.post<any[]>('/conversacion', body);
-      const normalized: ChatMsg[] = Array.isArray(resp)
-        ? resp.map((it, idx) => ({
-            id: it?.id ?? idx,
-            type:
-              it?.message?.type === 'human' ||
-              it?.message?.type === 'ai' ||
-              it?.message?.type === 'system'
-                ? it.message.type
-                : 'ai',
-            content: String(it?.message?.content ?? '').trim(),
-            createdAt: it?.createdAt ?? it?.timestamp ?? undefined,
-          }))
-        : [];
+      let request = pendingHistory.get(conversationKey);
+      if (!request) {
+        request = ApiService.post<any[]>('/conversacion', body)
+          .then(normalizeHistory)
+          .finally(() => pendingHistory.delete(conversationKey));
+        pendingHistory.set(conversationKey, request);
+      }
+
+      const normalized = await request;
+      historyCache.set(conversationKey, { messages: normalized, updatedAt: Date.now() });
+      if (historyCache.size > 40) historyCache.delete(historyCache.keys().next().value!);
       setMsgs(normalized);
 
       stickToBottomRef.current = true;
@@ -125,14 +152,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       setTimeout(() => inputRef.current?.focus(), 0);
     } catch (e: any) {
       console.error('Error cargando chat:', e);
+      setError('No se pudo actualizar la conversación. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadConversation();
-  }, [client?.whatsapp, source]);
+    loadConversation(false);
+  }, [conversationKey]);
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -165,7 +193,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       }
 
       await ApiService.post('/enviarmensaje', body);
-      await loadConversation();
+      await loadConversation(true);
     } catch (e: any) {
       setError(e?.message || 'No se pudo enviar el mensaje');
       setMsgs((prev) => prev.filter((m) => m.id !== optimistic.id)); 
@@ -206,21 +234,22 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#4f46e5 0.5px, transparent 0.5px)', backgroundSize: '24px 24px' }} />
 
       {/* === Header === */}
-      <div className="relative z-10 px-6 py-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-white/70 backdrop-blur-xl">
-        <div className="flex items-center gap-4 min-w-0">
+      <div className="relative z-10 px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3 bg-white/90 backdrop-blur-xl">
+        {onBack && <button type="button" onClick={onBack} className="lg:hidden shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold" aria-label="Volver a la lista de conversaciones">← Chats</button>}
+        <div className="flex items-center gap-3 min-w-0">
           <div className="relative">
              <div className="absolute inset-0 bg-slate-800 blur-xl opacity-20" />
-             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-900 text-white flex items-center justify-center font-black shadow-xl shadow-indigo-100 relative z-10 border border-white/20">
+             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-zinc-700 to-black text-white flex items-center justify-center text-sm font-black shadow-md shadow-black/10 relative z-10 border border-white/20">
                <span>{client?.nombre?.trim()?.[0]?.toUpperCase() || 'C'}</span>
              </div>
           </div>
           
           <div className="min-w-0">
-            <h3 className="text-lg font-black text-slate-900 leading-tight truncate tracking-tight">
+            <h3 className="text-base font-black text-slate-900 leading-tight truncate tracking-tight">
               {client?.nombre || 'Cliente sin nombre'}
             </h3>
             
-            <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500 font-black uppercase tracking-[0.1em] flex-wrap">
+            <div className="flex items-center gap-1.5 mt-1 text-[9px] text-slate-500 font-black uppercase tracking-[0.08em] flex-wrap">
               {/* Phone Badge */}
               <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                  <MessageCircle className="w-3 h-3 text-emerald-500" />
@@ -250,12 +279,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
         </div>
 
         <button
-          onClick={loadConversation}
+          onClick={() => loadConversation(true)}
           disabled={!hasContactMethod || loading}
-          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-400 hover:text-slate-800 hover:border-slate-200 shadow-sm transition-all active:scale-95 disabled:opacity-50"
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-950 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
           title="Actualizar conversación"
         >
-          <Repeat2 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? <RepairLoader variant="icon" /> : <Repeat2 className="w-5 h-5" />}
         </button>
       </div>
 
@@ -263,7 +292,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       <div className="flex-1 relative overflow-hidden bg-[#F8F9FC]/50 backdrop-blur-sm">
         <div
           ref={scrollRef}
-          className="absolute inset-0 overflow-y-auto p-6 space-y-6 overscroll-contain custom-scrollbar"
+          className="absolute inset-0 overflow-y-auto p-4 space-y-3 overscroll-contain custom-scrollbar"
         >
           {!hasContactMethod && (
             <div className="flex gap-4 p-5 rounded-3xl bg-red-50/80 backdrop-blur-sm border border-red-100 text-red-800 text-sm mx-auto max-w-md shadow-xl animate-in fade-in slide-in-from-top-4">
@@ -280,8 +309,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
           {loading && msgs.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-4 text-slate-400">
                <div className="relative">
-                  <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
-                  <MessageCircle className="absolute inset-0 m-auto w-5 h-5 text-slate-700/50" />
+                  <RepairLoader variant="icon" className="repair-loader--large" />
                </div>
                <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Cargando Conversación</span>
             </div>
@@ -324,16 +352,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
       </div>
 
       {/* === Composer === */}
-      <div className="relative z-10 p-6 bg-white border-t border-slate-100">
+      <div className="relative z-10 p-4 bg-white border-t border-slate-100">
         <div className="max-w-4xl mx-auto w-full relative">
            <div className="relative group transition-all duration-300">
               <textarea
                 ref={inputRef}
+                aria-label="Mensaje para el cliente"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={!hasContactMethod ? 'Canal de comunicación inactivo...' : 'Escribe tu respuesta aquí...'}
-                disabled={!hasContactMethod}
-                className={`w-full bg-slate-50 border rounded-3xl px-6 py-5 pr-20 text-[14px] leading-relaxed focus:outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white focus:border-slate-600 transition-all resize-none max-h-[180px] font-medium
+                disabled={!hasContactMethod || sending}
+                className={`w-full bg-slate-50 border rounded-2xl px-4 py-3.5 pr-16 text-[14px] leading-relaxed focus:outline-none focus:ring-4 focus:ring-slate-700/5 focus:bg-white focus:border-slate-600 transition-all resize-none max-h-[150px] font-medium
                    ${!hasContactMethod
                       ? 'border-slate-100 text-slate-300 cursor-not-allowed opacity-50' 
                       : 'border-slate-200 text-slate-900 placeholder-slate-400 shadow-sm'
@@ -342,21 +371,23 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
                 rows={1}
                 onKeyDown={(e) => {
                   if ((e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) {
+                    if (e.nativeEvent.isComposing) return;
                     e.preventDefault();
                     if (canSend) sendMessage();
                   }
                 }}
               />
               
-              <div className="absolute right-3 bottom-3">
+              <div className="absolute right-2 bottom-2">
                  <button
                     type="button"
+                    aria-label="Enviar mensaje"
                     onClick={sendMessage}
                     disabled={!canSend}
-                    className="w-12 h-12 flex items-center justify-center bg-slate-900 text-white hover:bg-slate-900 rounded-2xl transition-all duration-300 shadow-xl hover:shadow-slate-900/20 disabled:opacity-20 disabled:shadow-none active:scale-90"
+                    className="w-10 h-10 flex items-center justify-center bg-slate-950 text-white hover:bg-slate-800 rounded-xl transition-all duration-200 shadow-md disabled:opacity-20 disabled:shadow-none active:scale-90"
                  >
                     {sending ? (
-                       <RefreshCw className="w-5 h-5 animate-spin" />
+                       <RepairLoader variant="icon" />
                     ) : (
                        <Send className="w-5 h-5" />
                     )}
@@ -365,7 +396,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source }) => {
            </div>
 
            {/* Footer Info */}
-           <div className="flex items-center justify-between px-2 mt-4">
+           <div className="flex items-center justify-between px-1 mt-2">
               <div className="flex items-center gap-3">
                  <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fuente:</span>

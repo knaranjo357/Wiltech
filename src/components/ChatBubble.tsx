@@ -14,6 +14,8 @@ export type ChatMsg = {
 const escapeHtml = (raw: string) =>
   raw
     .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
@@ -26,7 +28,7 @@ const linkify = (raw: string, isMyMessage: boolean) => {
 
   return raw.replace(urlRegex, (url) => {
     const href = url.startsWith('http') ? url : `https://${url}`;
-    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="${linkClass} font-medium break-all">${escapeHtml(url)}</a>`;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="${linkClass} font-medium break-all">${url}</a>`;
   });
 };
 
@@ -91,7 +93,7 @@ export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
         <div className="shrink-0 flex flex-col justify-end pb-1">
           <div className={`w-8 h-8 rounded-2xl flex items-center justify-center shadow-lg border transition-transform group-hover:scale-110
             ${isAgent 
-              ? 'bg-gradient-to-br from-indigo-500 to-indigo-700 border-indigo-400/30 text-white' 
+              ? 'bg-gradient-to-br from-zinc-700 to-black border-white/10 text-white'
               : 'bg-white border-slate-200 text-slate-400'
             }`}
           >

@@ -1,8 +1,15 @@
+import { countryFetch } from './countryRequest';
 // services/apiService.ts
 import { AuthService } from './authService';
+import { RequestCache } from '../utils/requestCache';
+export interface ReadOptions { ttl?: number; force?: boolean }
 
 export class ApiService {
   private static readonly BASE_URL = 'https://n8n.alliasoft.com/webhook/wiltech';
+
+  private static cache = new RequestCache();
+  private static cacheSession: string | null = null;
+  static invalidateCache() { this.cache.clear(); }
 
   private static getHeaders(): HeadersInit {
     const token = AuthService.getToken();
@@ -16,6 +23,7 @@ export class ApiService {
   private static async handle<T>(response: Response): Promise<T> {
     if (response.status === 401 || response.status === 403) {
       // Sesión inválida/expirada: limpiar y enviar a login
+      this.invalidateCache();
       AuthService.logout();
       // Opcional: si tienes router, usa navigate('/login')
       window.location.href = '/login';
@@ -30,8 +38,16 @@ export class ApiService {
     return response.json() as Promise<T>;
   }
 
-  static async get<T>(endpoint: string): Promise<T> {
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
+  static async get<T>(endpoint: string, options: ReadOptions = {}): Promise<T> {
+    const session = JSON.stringify([AuthService.getToken(), AuthService.getPaisSede()]);
+    if (session !== this.cacheSession) {
+      this.invalidateCache();
+      this.cacheSession = session;
+    }
+    if (options.ttl && options.ttl > 0) {
+      return this.cache.get(endpoint, () => this.get<T>(endpoint), options.ttl, options.force);
+    }
+    const response = await countryFetch(`${this.BASE_URL}${endpoint}`, {
       method: 'GET',
       headers: this.getHeaders(),
       mode: 'cors',
@@ -39,60 +55,39 @@ export class ApiService {
     return this.handle<T>(response);
   }
 
-  static async post<T>(endpoint: string, data: any): Promise<T> {
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify(data),
-      mode: 'cors',
-    });
-    return this.handle<T>(response);
+  private static async mutate<T>(endpoint: string, init: RequestInit): Promise<T> {
+    this.invalidateCache();
+    try {
+      const response = await countryFetch(`${this.BASE_URL}${endpoint}`, { ...init, mode: 'cors' });
+      return await this.handle<T>(response);
+    } finally {
+      // Also invalidate on network failure: the server may have accepted the write.
+      this.invalidateCache();
+    }
   }
 
-  static async put<T>(endpoint: string, data: any): Promise<T> {
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: JSON.stringify(data),
-      mode: 'cors',
-    });
-    return this.handle<T>(response);
+  static post<T>(endpoint: string, data: unknown): Promise<T> {
+    return this.mutate<T>(endpoint, { method: 'POST', headers: this.getHeaders(), body: JSON.stringify(data) });
   }
 
-  static async delete<T>(endpoint: string, data?: any): Promise<T> {
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
-      method: 'DELETE',
-      headers: this.getHeaders(),
-      ...(data ? { body: JSON.stringify(data) } : {}),
-      mode: 'cors',
-    });
-    return this.handle<T>(response);
+  static put<T>(endpoint: string, data: unknown): Promise<T> {
+    return this.mutate<T>(endpoint, { method: 'PUT', headers: this.getHeaders(), body: JSON.stringify(data) });
   }
 
-  /** Si necesitas subir archivos (FormData) sin 'Content-Type' automático */
-  static async postForm<T>(endpoint: string, form: FormData): Promise<T> {
+  static delete<T>(endpoint: string, data?: unknown): Promise<T> {
+    return this.mutate<T>(endpoint, { method: 'DELETE', headers: this.getHeaders(), ...(data === undefined ? {} : { body: JSON.stringify(data) }) });
+  }
+
+  static postForm<T>(endpoint: string, form: FormData): Promise<T> {
+    return this.postFile<T>(endpoint, form);
+  }
+
+  static postFile<T>(endpoint: string, form: FormData, headers: Record<string, string> = {}): Promise<T> {
     const token = AuthService.getToken();
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
+    return this.mutate<T>(endpoint, {
       method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
       body: form,
-      mode: 'cors',
     });
-    return this.handle<T>(response);
-  }
-
-  /** Carga binaria con cabeceras de negocio para webhooks n8n/S3. */
-  static async postFile<T>(endpoint: string, form: FormData, headers: Record<string, string> = {}): Promise<T> {
-    const token = AuthService.getToken();
-    const response = await fetch(`${this.BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...headers,
-      },
-      body: form,
-      mode: 'cors',
-    });
-    return this.handle<T>(response);
   }
 }

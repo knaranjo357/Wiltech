@@ -2,18 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+.repair-loader-label { font-size: 12px; color: #a1a1aa; }
+.repair-loader.repair-loader--panel {
+  min-height: 16rem;
+  width: 100%;
+  background: transparent;
+  color: #27272a;
+}
+.repair-loader--panel .repair-loader-label { color: #71717a; }
+.repair-loader.repair-loader--icon {
+  display: inline-flex;
+  min-height: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  gap: 0;
+  flex-shrink: 0;
+  vertical-align: middle;
+  background: transparent;
+  color: inherit;
+}
+.repair-loader.repair-loader--icon svg { width: 100%; height: 100%; }
+.repair-loader.repair-loader--icon.repair-loader--large { width: 100px; height: 100px; color: #27272a; }
+
+.login-field > input[type] { padding-left: 3rem; padding-right: 1rem; min-height: 3.25rem; }
+.login-field > input.login-password-input[type] { padding-right: 3.5rem; }
+
 /* =========================
    Design System Tokens
    ========================= */
 :root {
   /* Brand Colors — Black/Charcoal system */
-  --wt-primary: 15 15 15;            /* #0f0f0f near-black */
-  --wt-primary-light: 38 38 38;      /* #262626 dark-charcoal */
-  --wt-accent: 60 60 60;             /* #3c3c3c mid-dark */
-  --wt-surface: 248 250 252;         /* slate-50 */
+  --wt-black: 10 10 11;
+  --wt-ink: 24 24 27;
+  --wt-primary: 10 10 11;
+  --wt-primary-light: 39 39 42;
+  --wt-accent: 82 82 91;
+  --wt-surface: 246 247 249;
+  --wt-surface-raised: 255 255 255;
+  --wt-line: 228 228 231;
+  --wt-muted: 113 113 122;
 
   /* Radius */
-  --radius: 0.75rem;
+  --radius: 0.875rem;
   --wt-radius-sm: 0.5rem;
   --wt-radius-md: 0.75rem;
   --wt-radius-lg: 1rem;
@@ -28,12 +59,12 @@
   --wt-duration-slow: 300ms;
 
   /* Shadows */
-  --wt-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.04);
-  --wt-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.08), 0 1px 2px -1px rgb(0 0 0 / 0.06);
-  --wt-shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.10), 0 2px 4px -2px rgb(0 0 0 / 0.07);
-  --wt-shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.10), 0 4px 6px -4px rgb(0 0 0 / 0.06);
-  --wt-shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.10), 0 8px 10px -6px rgb(0 0 0 / 0.05);
-  --wt-shadow-float: 0 8px 30px rgb(0 0 0 / 0.09);
+  --wt-shadow-xs: 0 1px 2px rgb(10 10 11 / 0.04);
+  --wt-shadow-sm: 0 1px 2px rgb(10 10 11 / 0.04), 0 8px 24px -20px rgb(10 10 11 / 0.24);
+  --wt-shadow-md: 0 2px 4px rgb(10 10 11 / 0.04), 0 16px 36px -24px rgb(10 10 11 / 0.32);
+  --wt-shadow-lg: 0 10px 30px -16px rgb(10 10 11 / 0.22), 0 2px 8px rgb(10 10 11 / 0.05);
+  --wt-shadow-xl: 0 30px 70px -32px rgb(10 10 11 / 0.42), 0 8px 20px -12px rgb(10 10 11 / 0.16);
+  --wt-shadow-float: 0 20px 50px -32px rgb(10 10 11 / 0.34), 0 2px 8px rgb(10 10 11 / 0.05);
 
   /* Active nav item shadows */
   --wt-shadow-nav: 0 4px 14px rgb(0 0 0 / 0.25);
@@ -50,8 +81,8 @@
   100% { background-position: 200% 0; }
 }
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px) }
-  to   { opacity: 1; transform: translateY(0) }
+  from { opacity: 0 }
+  to   { opacity: 1 }
 }
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(12px) }
@@ -83,12 +114,28 @@
    BASE
    ========================= */
 @layer base {
-  html { @apply scroll-smooth; color-scheme: light; }
-  *, *::before, *::after { @apply antialiased; }
+  html { @apply scroll-smooth; color-scheme: light; background: rgb(var(--wt-surface)); }
+  *, *::before, *::after { @apply antialiased; box-sizing: border-box; }
 
   body {
-    @apply bg-slate-50 text-slate-900 selection:bg-slate-900/10 selection:text-slate-900;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    @apply m-0 min-w-[320px] text-slate-900 selection:bg-black selection:text-white;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background:
+      radial-gradient(circle at 100% 0%, rgb(255 255 255 / 0.9), transparent 30rem),
+      rgb(var(--wt-surface));
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+
+  #root { min-height: 100vh; min-height: 100dvh; }
+
+  button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]) { cursor: pointer; }
+  button, input, textarea, select { font: inherit; }
+  button:focus-visible, a:focus-visible, [role="button"]:focus-visible {
+    @apply outline-none ring-2 ring-slate-950 ring-offset-2 ring-offset-white;
   }
 
   /* Tipografía */
@@ -111,19 +158,25 @@
   input[type="number"],
   input[type="url"],
   input[type="tel"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
   textarea,
   select {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm
+    @apply w-full rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-sm
            placeholder:text-slate-400
-           focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600
+           focus:outline-none focus:ring-4 focus:ring-slate-950/[0.07] focus:border-slate-500
            transition-all duration-200;
+  }
+  input:disabled, textarea:disabled, select:disabled {
+    @apply cursor-not-allowed bg-slate-100/80 text-slate-400 shadow-none;
   }
 
   /* Scrollbar */
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-slate-200/80 hover:bg-slate-300/80;
+    @apply rounded-full bg-slate-300/80 hover:bg-slate-400/80;
     border: 2px solid transparent;
     background-clip: content-box;
   }
@@ -134,10 +187,35 @@
    ========================= */
 @layer components {
 
+  .wt-workspace {
+    background: rgb(var(--wt-surface));
+    color: rgb(var(--wt-ink));
+  }
+  .wt-page-title {
+    @apply text-xl sm:text-2xl font-bold tracking-tight leading-tight text-slate-950;
+    font-style: normal;
+    text-transform: none;
+  }
+  .wt-page-heading {
+    @apply rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5;
+    box-shadow: var(--wt-shadow-sm);
+  }
+  .wt-pagination {
+    @apply relative flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/80 bg-white px-4 py-3;
+  }
+  .wt-skip-link {
+    @apply fixed left-4 top-4 z-[300] -translate-y-24 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 shadow-lg focus:translate-y-0;
+  }
+  .wt-section-card { scroll-margin-top: 10rem; }
+  .wt-section-card[data-collapsed="true"] {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 92px;
+  }
+
   /* Page container estandarizado */
   .wt-page {
     @apply min-h-screen w-full font-sans text-slate-800;
-    background: linear-gradient(135deg, rgb(var(--wt-surface)) 0%, #f1f5f9 50%, #f8fafc 100%);
+    background: rgb(var(--wt-surface));
   }
 
   /* Header flotante de página */
@@ -145,8 +223,8 @@
     @apply sticky top-0 z-40 w-full;
   }
   .wt-header-inner {
-    @apply bg-white/85 backdrop-blur-xl rounded-2xl shadow-[var(--wt-shadow-float)]
-           border border-white/60 p-4 ring-1 ring-slate-900/[0.04];
+    @apply bg-white/90 backdrop-blur-xl rounded-2xl shadow-[var(--wt-shadow-float)]
+           border border-slate-200/80 p-4 ring-1 ring-white;
   }
 
   /* Contenedor con padding fluido */
@@ -156,31 +234,52 @@
 
   /* Tarjeta Premium */
   .card {
-    @apply rounded-2xl border border-slate-200/70 bg-white shadow-[var(--wt-shadow-sm)]
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[var(--wt-shadow-sm)]
            transition-all duration-200;
   }
   .card-hover {
-    @apply hover:shadow-[var(--wt-shadow-md)] hover:-translate-y-0.5
-           hover:border-slate-200 active:translate-y-0;
+    @apply hover:shadow-[var(--wt-shadow-md)] hover:-translate-y-px
+           hover:border-slate-300/80 active:translate-y-0;
   }
   .card-body { @apply p-5 sm:p-6; }
 
+  /* Superficie operativa compartida: Agenda, Asistencia y Envíos. */
+  .wt-ops-card {
+    @apply relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white
+           shadow-[var(--wt-shadow-sm)] transition duration-200
+           hover:border-slate-300 hover:shadow-[var(--wt-shadow-md)];
+  }
+  .wt-ops-card-layout { @apply flex flex-col items-stretch lg:flex-row; }
+  .wt-ops-card-rail {
+    @apply flex flex-row items-center justify-between gap-3 border-slate-100 bg-slate-50/70 p-4
+           lg:w-[136px] lg:shrink-0 lg:flex-col lg:justify-center lg:border-r;
+  }
+  .wt-ops-card-main { @apply flex min-w-0 flex-1 flex-col justify-center p-4 md:p-5; }
+  .wt-ops-card-aside {
+    @apply flex w-full flex-col justify-between gap-3 border-slate-100 bg-slate-50/60 p-4
+           lg:w-[280px] lg:shrink-0 lg:border-l;
+  }
+  .wt-ops-chip {
+    @apply inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50
+           px-2.5 py-1 text-[10px] font-bold text-slate-600;
+  }
+
   /* Botones */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium
-           shadow-sm transition-all duration-200
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+           shadow-sm transition-all duration-200 select-none
            focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2
            disabled:opacity-50 disabled:pointer-events-none
-           active:scale-[0.97];
+           active:translate-y-px active:scale-[0.99];
   }
   .btn-primary {
-    @apply btn bg-slate-900 text-white hover:bg-slate-800
-           shadow-lg shadow-slate-900/20 hover:shadow-slate-900/30
+    @apply btn bg-black text-white hover:bg-zinc-800
+           shadow-lg shadow-black/15 hover:shadow-black/25
            focus-visible:ring-slate-900;
   }
   .btn-secondary {
     @apply btn bg-white text-slate-700 border border-slate-200
-           hover:bg-slate-50 hover:border-slate-300
+           hover:bg-slate-50 hover:border-slate-400
            focus-visible:ring-slate-400;
   }
   .btn-ghost {
@@ -238,7 +337,7 @@
     @apply card card-hover p-5 flex flex-col gap-2;
   }
   .wt-kpi-value {
-    @apply text-3xl font-bold tracking-tight text-slate-900;
+    @apply text-3xl font-black tracking-[-0.04em] text-slate-950;
   }
   .wt-kpi-label {
     @apply text-xs font-semibold text-slate-400 uppercase tracking-wider;
@@ -249,16 +348,16 @@
     @apply w-full text-left text-sm;
   }
   .wt-table thead {
-    @apply bg-slate-50/80 border-b border-slate-100;
+    @apply bg-slate-50/95 border-b border-slate-200/80;
   }
   .wt-table th {
-    @apply px-5 py-3.5 font-semibold text-slate-500 uppercase tracking-wider text-[11px];
+    @apply px-5 py-3.5 font-bold text-slate-500 uppercase tracking-[0.12em] text-[10px];
   }
   .wt-table tbody {
-    @apply divide-y divide-slate-50;
+    @apply divide-y divide-slate-100;
   }
   .wt-table tbody tr {
-    @apply hover:bg-slate-50/80 transition-colors;
+    @apply hover:bg-slate-50 transition-colors;
   }
   .wt-table td {
     @apply px-5 py-4;
@@ -295,20 +394,21 @@
 
   /* Modal overlay */
   .wt-overlay {
-    @apply fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm
-           flex items-center justify-center p-4
-           fade-in;
+    @apply fixed inset-0 z-[200] bg-black/70 backdrop-blur-md
+           flex items-center justify-center p-3 sm:p-6
+           fade-in overscroll-contain;
   }
   .wt-modal {
-    @apply bg-white w-full rounded-2xl shadow-2xl overflow-hidden
-           transform transition-all ring-1 ring-black/5
-           fade-in;
+    @apply bg-white w-full rounded-2xl sm:rounded-3xl shadow-[var(--wt-shadow-xl)] overflow-hidden
+           transform transition-all ring-1 ring-white/20
+           fade-scale;
+    max-height: calc(100dvh - 1.5rem);
   }
   .wt-modal-header {
-    @apply px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50;
+    @apply px-5 sm:px-6 py-4 border-b border-slate-200/80 flex justify-between items-center bg-white/95 backdrop-blur-xl;
   }
   .wt-modal-body {
-    @apply p-6 sm:p-8;
+    @apply overflow-y-auto p-5 sm:p-8;
   }
 
   /* Empty State */
@@ -334,12 +434,14 @@
 
   /* Unification classes */
   .page-container {
-    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 fade-in;
+    @apply relative isolate w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-5 sm:py-7 lg:py-8 fade-in;
+    min-height: calc(100dvh - 3.5rem);
   }
   
   .header-bar {
-    @apply sticky top-0 z-30 bg-white/80 backdrop-blur-md shadow-sm border-b border-slate-200/60
-           px-4 py-3 sm:px-6 flex items-center justify-between transition-all duration-200;
+    @apply sticky top-[4.5rem] md:top-4 z-30 bg-white shadow-[var(--wt-shadow-sm)]
+           rounded-2xl border border-slate-200/80 px-4 py-4 sm:p-5
+           flex items-center justify-between transition-all duration-200;
   }
 
   .shimmer-skeleton {
@@ -363,6 +465,55 @@
   .wt-nav-active-icon {
     color: #ffffff;
   }
+
+  /* Agente IA: editor y vista previa sin depender de typography plugins. */
+  .wt-agent-editor {
+    border-radius: 0;
+  }
+  .wt-agent-editor:focus {
+    box-shadow: inset 3px 0 0 rgb(15 23 42);
+  }
+
+  .agent-markdown {
+    @apply text-sm leading-7 text-slate-700;
+    overflow-wrap: anywhere;
+  }
+  .agent-markdown > *:first-child { margin-top: 0; }
+  .agent-markdown > *:last-child { margin-bottom: 0; }
+  .agent-markdown h1 {
+    @apply mb-4 mt-7 border-b border-slate-200 pb-3 text-2xl font-black tracking-tight text-slate-950;
+  }
+  .agent-markdown h2 {
+    @apply mb-3 mt-6 text-xl font-extrabold tracking-tight text-slate-950;
+  }
+  .agent-markdown h3 {
+    @apply mb-2 mt-5 text-base font-extrabold text-slate-900;
+  }
+  .agent-markdown h4,
+  .agent-markdown h5,
+  .agent-markdown h6 {
+    @apply mb-2 mt-4 text-sm font-bold text-slate-900;
+  }
+  .agent-markdown p { @apply my-3 leading-7; }
+  .agent-markdown strong { @apply font-extrabold text-slate-900; }
+  .agent-markdown ul { @apply my-3 list-disc space-y-1.5 pl-6; }
+  .agent-markdown ol { @apply my-3 list-decimal space-y-1.5 pl-6; }
+  .agent-markdown li::marker { @apply font-bold text-slate-400; }
+  .agent-markdown blockquote {
+    @apply my-4 rounded-r-xl border-l-4 border-slate-900 bg-slate-50 px-4 py-3 italic text-slate-600;
+  }
+  .agent-markdown code {
+    @apply rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[0.88em] font-semibold text-slate-800;
+  }
+  .agent-markdown pre {
+    @apply my-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-slate-100 shadow-inner;
+  }
+  .agent-markdown pre code { @apply bg-transparent p-0 text-slate-100; }
+  .agent-markdown hr { @apply my-6 border-slate-200; }
+  .agent-markdown a { @apply font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4; }
+  .agent-markdown table { @apply my-4 w-full border-collapse overflow-hidden rounded-xl text-left text-xs; }
+  .agent-markdown th { @apply border border-slate-200 bg-slate-100 px-3 py-2 font-extrabold text-slate-900; }
+  .agent-markdown td { @apply border border-slate-200 px-3 py-2 align-top; }
 }
 
 /* =========================
@@ -417,4 +568,24 @@
   /* Scrollbar hide shorthand */
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+@media (min-width: 768px) {
+  .page-container { min-height: 100dvh; }
+}
+
+@media (max-width: 640px) {
+  .wt-modal { max-height: calc(100dvh - 0.75rem); }
+  .wt-overlay { padding: 0.375rem; }
+  .wt-table th, .wt-table td { padding-left: 1rem; padding-right: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

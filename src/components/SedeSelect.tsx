@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Check, ChevronDown, MapPin } from 'lucide-react';
-
-const PREDEFINED_SEDES = [
-  'Bogotá',
-  'Barrancabermeja',
-  'Barranquilla',
-  'Bucaramanga',
-  'Medellín'
-];
+import { useCountryConfig } from '../hooks/useCountryConfig';
+import { cityKey, normalizeCity } from '../utils/countryConfig';
 
 interface SedeSelectProps {
   value: string;
@@ -22,6 +16,7 @@ export const SedeSelect: React.FC<SedeSelectProps> = ({
   className = '',
   placeholder = 'Selecciona o escribe una sede...'
 }) => {
+  const { config } = useCountryConfig();
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(value);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,8 +48,8 @@ export const SedeSelect: React.FC<SedeSelectProps> = ({
   };
 
   // Filter options based on typed input
-  const filteredOptions = PREDEFINED_SEDES.filter(opt =>
-    opt.toLowerCase().includes(inputValue.toLowerCase())
+  const filteredOptions = config.ciudades.filter(opt =>
+    cityKey(opt).includes(cityKey(inputValue))
   );
 
   return (
@@ -65,11 +60,19 @@ export const SedeSelect: React.FC<SedeSelectProps> = ({
           value={inputValue}
           onChange={handleInputChange}
           onFocus={() => setIsOpen(true)}
+          aria-label={placeholder}
+          onBlur={event => {
+            if (containerRef.current?.contains(event.relatedTarget)) return;
+            const normalized = normalizeCity(inputValue, config.ciudades);
+            setInputValue(normalized); onChange(normalized); setIsOpen(false);
+          }}
           placeholder={placeholder}
           className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all pl-3 pr-10 py-2.5"
         />
         <button
           type="button"
+          aria-label="Mostrar ciudades disponibles"
+          aria-expanded={isOpen}
           onClick={() => setIsOpen(!isOpen)}
           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none"
         >

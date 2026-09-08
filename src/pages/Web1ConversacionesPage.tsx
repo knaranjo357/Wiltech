@@ -1,128 +1,16 @@
+import { RepairLoader } from '../components/RepairLoader';
+import { countryFetch } from '../services/countryRequest';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
 // src/pages/Web1ConversacionesPage.tsx
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue, useCallback, memo } from 'react';
-import { RefreshCw, Search, MessageSquare, ArrowUpDown, Bot, User, MoreHorizontal, AlertCircle, Hash, Globe, Zap } from 'lucide-react';
+import { RefreshCw, Search, ArrowUpDown, Bot, User, AlertCircle, Hash, Globe, Zap } from 'lucide-react';
 import { Client } from '../types/client';
 import { ClientService } from '../services/clientService';
+import { ConversationDataService } from '../services/conversationDataService';
 import { formatDate } from '../utils/clientHelpers';
 import { ChatPanel } from '../components/ChatPanel';
 import { ClientModal } from '../components/ClientModal';
-
-/** ================== COMPONENTE AGENTE N8N (FORZADO MODO CLARO) ================== */
-const N8nChatWidget = memo(() => {
-  useEffect(() => {
-    // 1. Cargar fuentes Google Fonts (Montserrat)
-    const fontLink = document.createElement('link');
-    fontLink.href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Lexend:wght@400;600&display=swap";
-    fontLink.rel = "stylesheet";
-    document.head.appendChild(fontLink);
-
-    // 2. Cargar hoja de estilos base de n8n
-    const styleLink = document.createElement('link');
-    styleLink.href = "https://cdn.jsdelivr.net/npm/@n8n/chat/dist/style.css";
-    styleLink.rel = "stylesheet";
-    document.head.appendChild(styleLink);
-
-    // 3. Inyectar script del chat
-    const script = document.createElement('script');
-    script.type = 'module';
-    script.innerHTML = `
-      import { createChat } from 'https://cdn.jsdelivr.net/npm/@n8n/chat/dist/chat.bundle.es.js';
-      
-      createChat({
-        webhookUrl: 'https://n8n.alliasoft.com/webhook/b4d44bd0-9b8c-46da-97a1-108d15203166/chat',
-        mode: 'window', 
-        showWelcomeScreen: false,
-        defaultLanguage: 'es',
-        initialMessages: [
-            '¡Hola! Bienvenid@.',
-            '¿En qué puedo ayudarte hoy?'
-        ],
-        i18n: {
-            es: {
-                title: 'Wiltech',
-                subtitle: '',
-                footer: 'Powered by Xactus', 
-                getStarted: 'Comenzar Chat',
-                inputPlaceholder: 'Escribe tu mensaje aquí...',
-            },
-        },
-      });
-    `;
-    document.body.appendChild(script);
-
-    return () => {
-      document.body.removeChild(script);
-      document.head.removeChild(styleLink);
-      document.head.removeChild(fontLink);
-    };
-  }, []);
-
-  return (
-    <style>{`
-      /* =========================================
-         FORZAR TEMA CLARO (LIGHT MODE)
-         ========================================= */
-      :root {
-          /* Colores Base de Marca */
-          --brand-primary: #013e7b;
-          --brand-accent: #5C95FF;
-          --white: #FFFFFF;
-          
-          /* Colores Específicos del Tema Claro */
-          --light-bg: #FFFFFF;
-          --light-gray-bg: #F0F2F5; /* Gris estilo Messenger */
-          --text-main: #1c1e21;
-          --text-muted: #65676B;
-          --border-color: #e0e0e0;
-
-          /* =========================================
-             VARIABLES N8N (Mapeo Directo a Claro)
-             ========================================= */
-          
-          --chat--font-family: 'Montserrat', sans-serif;
-          
-          /* Colores Principales */
-          --chat--color-primary: var(--brand-accent);
-          --chat--color-secondary: var(--brand-primary);
-          --chat--color-dark: var(--light-gray-bg);
-          --chat--color-light: var(--white);
-          
-          /* Ventana Principal (Fondo Blanco) */
-          --chat--window--background: var(--light-bg);
-          
-          /* Cabecera (Azul Marca) */
-          --chat--header--background: var(--brand-primary);
-          --chat--header--color: var(--white);
-          
-          /* Mensajes del BOT (Gris claro con texto negro) */
-          --chat--message--bot--background: var(--light-gray-bg);
-          --chat--message--bot--color: #000000;
-          --chat--message--bot--border: 1px solid var(--border-color);
-          
-          /* Mensajes del USUARIO (Azul con texto blanco) */
-          --chat--message--user--background: var(--brand-primary);
-          --chat--message--user--color: var(--white);
-          
-          /* Área de Input (Fondo Blanco y Input Gris) */
-          --chat--input-footer--background: var(--light-bg); 
-          --chat--input--background: var(--light-gray-bg);
-          --chat--input--color: #000000;
-          --chat--input--placeholder-color: var(--text-muted);
-          
-          /* Botón Flotante */
-          --chat--toggle--background: var(--brand-primary);
-          --chat--toggle--hover--background: var(--brand-accent);
-          --chat--toggle--icon-color: var(--white);
-          
-          /* Dimensiones y Capas */
-          --chat--window--width: 10000px;
-          --chat--window--height: 10000px;
-          --chat--border-radius: 16px;
-          --chat--z-index: 9999; 
-      }
-    `}</style>
-  );
-});
 
 /** ================== Tipos y Normalización ================== */
 
@@ -140,7 +28,7 @@ type ChatRow = {
   subscriber_id: number | null;
 };
 
-interface ExtendedClient extends Omit<Client, 'created' | 'last_msg' | 'consentimiento_contacto' | 'modelo' | 'ciudad' | 'source'> {
+interface ExtendedClient extends Omit<Client, 'created' | 'last_msg' | 'consentimiento_contacto' | 'modelo' | 'ciudad' | 'source' | 'guia_ciudad' | 'asignado_a' | 'subscriber_id'> {
   modelo?: string | null;
   ciudad?: string | null;
   guia_ciudad?: string | null;
@@ -156,7 +44,6 @@ type SortOrder = 'asc' | 'desc';
 type SortKey = 'created' | 'last_msg';
 
 /** ================== Utilidades ================== */
-const PAGE_SIZE = 80;
 const TARGET_SOURCE = 'web1';
 
 const normalizeText = (v: unknown) =>
@@ -250,18 +137,24 @@ const RowItem = memo(({
   return (
     <div
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       role="button"
       tabIndex={0}
-      className={`group relative w-full p-4 rounded-3xl border transition-all duration-300 cursor-pointer flex items-start gap-4 select-none mb-2
+      className={`group relative w-full p-3 rounded-2xl border transition-all duration-200 cursor-pointer flex items-start gap-3 select-none
         ${active 
-          ? 'bg-white border-blue-500 shadow-2xl shadow-blue-100 scale-[1.02] z-10 ring-1 ring-blue-50' 
-          : 'bg-white/40 backdrop-blur-sm border-transparent hover:bg-white/80 hover:border-slate-200 hover:shadow-xl'
+          ? 'bg-slate-950 border-slate-950 shadow-lg z-10'
+          : 'bg-white border-transparent hover:border-slate-200 hover:shadow-sm'
         }
       `}
     >
       <div className="relative shrink-0">
-         <div className={`w-12 h-12 rounded-[18px] flex items-center justify-center text-sm font-black border shadow-sm transition-all duration-300 ${
-            active ? 'bg-slate-900 text-white border-slate-900 rotate-3' : 'bg-white text-slate-400 border-slate-100 group-hover:bg-blue-50 group-hover:text-blue-600'
+         <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black border transition-all duration-200 ${
+            active ? 'bg-white text-slate-950 border-white' : 'bg-slate-50 text-slate-500 border-slate-100 group-hover:text-black'
          }`}>
             <Globe className="w-5 h-5" />
          </div>
@@ -276,17 +169,17 @@ const RowItem = memo(({
          )}
       </div>
 
-      <div className="min-w-0 flex-1 space-y-1.5">
+      <div className="min-w-0 flex-1 space-y-1">
         <div className="flex justify-between items-start gap-2">
-          <h3 className={`truncate text-[15px] font-black leading-tight tracking-tight ${active ? 'text-slate-900' : 'text-slate-700'}`}>
+          <h3 className={`truncate text-sm font-extrabold leading-tight tracking-tight ${active ? 'text-white' : 'text-slate-800'}`}>
             {row.nombre}
           </h3>
-          <span className={`text-[10px] whitespace-nowrap font-black uppercase tracking-widest ${active ? 'text-blue-600' : 'text-slate-400'}`}>
+          <span className={`text-[9px] whitespace-nowrap font-black uppercase tracking-wider ${active ? 'text-slate-300' : 'text-slate-400'}`}>
             {timeDisplay}
           </span>
         </div>
 
-        <div className="flex flex-col gap-0.5 text-xs font-bold text-slate-500">
+        <div className={`flex flex-col gap-0.5 text-[11px] font-bold ${active ? 'text-slate-300' : 'text-slate-500'}`}>
            <span className="font-mono truncate opacity-60 flex items-center gap-1.5">
              <Hash size={12} className="text-slate-300" /> {row.asignado_a}
            </span>
@@ -294,16 +187,16 @@ const RowItem = memo(({
         </div>
 
         <div className="flex items-center gap-2 pt-0.5">
-          <span className="inline-flex px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-widest border bg-blue-50 text-blue-700 border-blue-100/50">
-            WEB 1
+          <span className={`inline-flex px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider border ${active ? 'bg-white/10 text-white border-white/10' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+            WEB
           </span>
         </div>
       </div>
 
-      <div className={`absolute right-3 top-1/2 -translate-y-1/2 flex gap-1.5 transition-all duration-300 ${active ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'}`}>
+      <div className={`absolute right-2.5 bottom-2.5 flex gap-1 transition-all duration-200 ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
         <button 
            onClick={onOpenDialog} 
-           className="w-8 h-8 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-900 hover:text-white text-slate-400 rounded-xl shadow-xl transition-all active:scale-90" 
+           className="w-7 h-7 flex items-center justify-center bg-white border border-slate-200 hover:bg-slate-100 text-slate-500 rounded-lg transition-all active:scale-90" 
            title="Ficha del Cliente" 
            disabled={busy}
         >
@@ -311,7 +204,7 @@ const RowItem = memo(({
         </button>
         <button 
            onClick={onToggleBot} 
-           className={`w-8 h-8 flex items-center justify-center bg-white border border-slate-200 rounded-xl shadow-xl transition-all active:scale-90 ${
+           className={`w-7 h-7 flex items-center justify-center bg-white border border-slate-200 rounded-lg transition-all active:scale-90 ${
                botActive 
                ? 'hover:bg-red-50 hover:text-red-500' 
                : 'hover:bg-emerald-50 hover:text-emerald-600'
@@ -324,8 +217,8 @@ const RowItem = memo(({
       </div>
       
       {busy && (
-        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center rounded-3xl z-20">
-           <RefreshCw className="w-6 h-6 text-blue-600 animate-spin" />
+        <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center rounded-2xl z-20">
+           <RepairLoader variant="icon" />
         </div>
       )}
     </div>
@@ -333,7 +226,7 @@ const RowItem = memo(({
 });
 
 /** ================== Componente Principal ================== */
-export const Web1ConversacionesPage: React.FC = () => {
+export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void }> = ({ onOpenConversations }) => {
   const [allRows, setAllRows] = useState<ChatRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -342,29 +235,27 @@ export const Web1ConversacionesPage: React.FC = () => {
   const deferredSearch = useDeferredValue(searchText);
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [sortKey, setSortKey] = useState<SortKey>('created');
-  const [page, setPage] = useState(1);
 
   const [selectedRow, setSelectedRow] = useState<ChatRow | null>(null);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [viewClient, setViewClient] = useState<Client | null>(null);
   const [savingRowId, setSavingRowId] = useState<number | null>(null);
   
   const listRef = useRef<HTMLDivElement | null>(null);
 
   // --- Carga de Datos ---
-  const fetchList = useCallback(async (restoreScroll = false) => {
+  const fetchList = useCallback(async (restoreScroll = false, force = false) => {
     const scrollTop = listRef.current?.scrollTop ?? 0;
     setLoading(true);
     setError(null);
     
     try {
-      const data = await ClientService.getClients();
+      const data = await ConversationDataService.getClients({ force });
       const rawClients = Array.isArray(data) ? (data as unknown as ExtendedClient[]) : [];
       const rows = dedupeByAsignadoA(rawClients);
       setAllRows(rows);
 
-      if (!selectedRow && rows.length > 0) {
-        setSelectedRow(rows[0]);
-      }
+      setSelectedRow((current) => current || rows[0] || null);
     } catch (e: any) {
       setError(e?.message || 'Error cargando conversaciones web1');
     } finally {
@@ -375,7 +266,7 @@ export const Web1ConversacionesPage: React.FC = () => {
         });
       }
     }
-  }, [selectedRow]);
+  }, []);
 
   useEffect(() => { fetchList(); }, [fetchList]);
 
@@ -429,7 +320,7 @@ export const Web1ConversacionesPage: React.FC = () => {
     setSavingRowId(payload.row_number);
 
     const internalPayload: Partial<ChatRow> = {
-        nombre: payload.nombre,
+        nombre: payload.nombre ?? undefined,
         modelo: payload.modelo || null,
         consentimiento_contacto: payload.consentimiento_contacto !== undefined 
             ? normalizeConsent(payload.consentimiento_contacto as any) 
@@ -451,12 +342,13 @@ export const Web1ConversacionesPage: React.FC = () => {
       if (typeof (ClientService as any).updateClient === 'function') {
         await (ClientService as any).updateClient(payload);
       } else {
-        await fetch('/api/clients/update', {
+        await countryFetch('/api/clients/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       }
+      ConversationDataService.patchClient(payload);
       return true;
     } catch {
       fetchList(true); 
@@ -468,7 +360,7 @@ export const Web1ConversacionesPage: React.FC = () => {
 
   // --- Filtrado ---
   const filteredAndSorted = useMemo(() => {
-    let result = allRows;
+    let result = [...allRows];
     if (deferredSearch.trim()) {
       const q = normalizeText(deferredSearch);
       result = result.filter(r => 
@@ -488,10 +380,9 @@ export const Web1ConversacionesPage: React.FC = () => {
     return result;
   }, [allRows, deferredSearch, sortOrder, sortKey]);
 
-  useEffect(() => { setPage(1); }, [deferredSearch, sortKey, sortOrder]);
 
-  const displayRows = useMemo(() => filteredAndSorted.slice(0, page * PAGE_SIZE), [filteredAndSorted, page]);
-  const hasMore = displayRows.length < filteredAndSorted.length;
+  const pagination = usePagination(filteredAndSorted, JSON.stringify([deferredSearch, sortKey, sortOrder]));
+  const displayRows = pagination.items;
 
   const toggleBot = async (row: ChatRow, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -517,25 +408,20 @@ export const Web1ConversacionesPage: React.FC = () => {
   }, [selectedRow]);
 
   return (
-    <div className="h-[100dvh] bg-slate-50 flex flex-col lg:flex-row overflow-hidden font-sans text-slate-900 relative">
+    <div className="h-[calc(100dvh-4rem)] md:h-[100dvh] bg-slate-50 flex flex-col lg:flex-row overflow-hidden font-sans text-slate-900 relative">
       
-      {/* AGENTE N8N INCRUSTADO (MODO CLARO) */}
-      <N8nChatWidget />
-
       {/* Background Decorations */}
-      <div className="absolute top-[-10%] left-[-5%] w-[40%] h-[40%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-blue-600/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* SIDEBAR LIST */}
-      <aside className="w-full lg:w-[420px] xl:w-[480px] flex flex-col border-r border-slate-200/50 bg-white/40 backdrop-blur-3xl z-10 h-full relative">
-        <div className="px-6 py-5 border-b border-slate-100 flex flex-col gap-5 bg-white/60 backdrop-blur-xl sticky top-0 z-20">
+      <aside className={`w-full lg:w-[350px] xl:w-[380px] shrink-0 flex-col border-r border-slate-200 bg-white z-10 h-full relative ${mobileChatOpen ? 'hidden lg:flex' : 'flex'}`}>
+        <div className="px-4 py-3.5 border-b border-slate-100 flex flex-col gap-3 bg-white/95 backdrop-blur-xl sticky top-0 z-20">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-               <div className="w-10 h-10 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-xl">
-                  <Globe size={20} />
+               <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center shadow-sm">
+                  <Globe size={18} />
                </div>
                <div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight">Web 1</h2>
+                  <h1 className="wt-page-title !text-lg">Web</h1>
                   <div className="flex items-center gap-1.5">
                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{filteredAndSorted.length} Visitantes</span>
@@ -543,14 +429,22 @@ export const Web1ConversacionesPage: React.FC = () => {
                </div>
             </div>
             
-            <button 
-              onClick={() => fetchList(true)} 
-              disabled={loading} 
-              className="w-10 h-10 flex items-center justify-center rounded-2xl bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-100 shadow-xl transition-all active:scale-95 disabled:opacity-50"
-              title="Recargar"
-            >
-              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onOpenConversations}
+                className="h-9 px-3 rounded-xl bg-slate-950 text-white hover:bg-slate-800 text-[10px] font-black uppercase tracking-wider transition-all active:scale-95"
+              >
+                Chats
+              </button>
+              <button 
+                onClick={() => fetchList(true, true)} 
+                disabled={loading} 
+                className="w-9 h-9 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-slate-950 hover:border-slate-300 transition-all active:scale-95 disabled:opacity-50"
+                title="Recargar"
+              >
+                {loading ? <RepairLoader variant="icon" /> : <RefreshCw size={18} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -565,7 +459,7 @@ export const Web1ConversacionesPage: React.FC = () => {
               />
             </div>
 
-            <div className="flex gap-2 pb-1 overflow-x-auto no-scrollbar">
+            <div className="flex gap-2 overflow-x-auto no-scrollbar">
               <button 
                  onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')} 
                  className="flex items-center gap-2 px-4 py-2 text-[11px] font-black uppercase tracking-wider bg-white border border-slate-200/60 rounded-xl hover:bg-slate-50 text-slate-600 shadow-sm transition-all"
@@ -588,7 +482,7 @@ export const Web1ConversacionesPage: React.FC = () => {
           </div>
         </div>
 
-        <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar bg-slate-50/30">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-2.5 space-y-1 custom-scrollbar bg-slate-50/50">
           {error && (
             <div className="bg-red-50 border border-red-100 rounded-2xl p-4 flex items-center gap-3 text-red-800 text-xs font-bold uppercase tracking-wider animate-in fade-in slide-in-from-top-2 mb-4">
               <AlertCircle size={20} className="shrink-0 text-red-500" />
@@ -598,7 +492,7 @@ export const Web1ConversacionesPage: React.FC = () => {
 
           {loading && allRows.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-4">
-              <div className="w-12 h-12 border-4 border-blue-100 border-t-blue-500 rounded-full animate-spin" />
+              <RepairLoader variant="icon" className="repair-loader--large" />
               <span className="text-[10px] font-black uppercase tracking-[0.2em] animate-pulse">Buscando en Web 1...</span>
             </div>
           ) : displayRows.length === 0 ? (
@@ -618,7 +512,7 @@ export const Web1ConversacionesPage: React.FC = () => {
                   key={row.row_number}
                   row={row}
                   active={selectedRow?.row_number === row.row_number}
-                  onClick={() => setSelectedRow(row)}
+                  onClick={() => { setSelectedRow(row); setMobileChatOpen(true); }}
                   onOpenDialog={(e) => { e.stopPropagation(); setViewClient(rowToClient(row)); }}
                   onToggleBot={(e) => toggleBot(row, e)}
                   busy={savingRowId === row.row_number}
@@ -626,25 +520,18 @@ export const Web1ConversacionesPage: React.FC = () => {
                 />
               ))}
               
-              {hasMore && (
-                <button 
-                  onClick={() => setPage(p => p + 1)} 
-                  className="w-full py-6 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 hover:bg-white rounded-3xl transition-all border border-transparent hover:border-blue-100 hover:shadow-xl mt-4"
-                >
-                  <MoreHorizontal className="w-4 h-4 mx-auto mb-1" /> Cargar más
-                </button>
-              )}
+              <Pagination {...pagination} />
             </>
           )}
         </div>
       </aside>
 
       {/* CHAT MAIN AREA */}
-      <main className="flex-1 flex flex-col min-w-0 bg-white relative">
+      <main className={`flex-1 flex-col min-w-0 min-h-0 bg-white relative ${mobileChatOpen ? 'flex' : 'hidden lg:flex'}`}>
         {!selectedRow ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-500">
              <div className="w-32 h-32 bg-slate-50 border border-white rounded-[40px] shadow-2xl flex items-center justify-center mb-10 relative group">
-                <div className="absolute inset-0 bg-blue-500 blur-3xl opacity-5 group-hover:opacity-10 transition-opacity" />
+                <div className="absolute inset-0 bg-black blur-3xl opacity-5 group-hover:opacity-10 transition-opacity" />
                 <Globe className="w-12 h-12 text-blue-200 relative z-10" />
              </div>
              <h3 className="text-2xl font-black text-slate-900 mb-3 tracking-tight">Visitantes Web 1</h3>
@@ -654,7 +541,7 @@ export const Web1ConversacionesPage: React.FC = () => {
           </div>
         ) : (
           <div className="absolute inset-0 flex flex-col bg-white animate-in fade-in zoom-in-[0.99] duration-300">
-             {chatClient && <ChatPanel client={chatClient} source="web1" />}
+             {chatClient && <ChatPanel key={`${chatClient.row_number}:${chatClient.whatsapp}`} client={chatClient} source="web1" onBack={() => setMobileChatOpen(false)} />}
           </div>
         )}
       </main>

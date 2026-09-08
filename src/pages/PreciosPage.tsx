@@ -1,22 +1,20 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { RepairLoader } from '../components/RepairLoader';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
+import React, { useState, useMemo, useCallback, useEffect, useDeferredValue } from "react";
 import {
   Smartphone,
   Watch,
   Monitor,
   Tablet,
-  Zap,
-  Shield,
-  ArrowLeft,
   Search,
   Tag,
-  Filter,
-  ChevronRight,
   Database,
   RefreshCw,
   Sparkles,
   AlertCircle,
   Wrench,
-} from "lucide-react";
+} from 'lucide-react';
 import { PreciosService } from "../services/preciosService";
 import { ApiService } from "../services/apiService";
 import { PrecioItem } from "../types/precios";
@@ -28,8 +26,8 @@ const categories = [
   {
     name: "IPHONE",
     icon: Smartphone,
-    color: "bg-blue-600",
-    gradient: "from-slate-900 via-blue-900 to-slate-900",
+    color: "bg-black",
+    gradient: "from-black via-zinc-900 to-black",
     image:
       "https://images.pexels.com/photos/788946/pexels-photo-788946.jpeg?auto=compress&cs=tinysrgb&w=600",
   },
@@ -44,8 +42,8 @@ const categories = [
   {
     name: "PC",
     icon: Monitor,
-    color: "bg-violet-600",
-    gradient: "from-slate-900 via-violet-900 to-slate-900",
+    color: "bg-zinc-800",
+    gradient: "from-black via-zinc-800 to-black",
     image:
       "https://images.pexels.com/photos/2148217/pexels-photo-2148217.jpeg?auto=compress&cs=tinysrgb&w=600",
   },
@@ -56,22 +54,6 @@ const categories = [
     gradient: "from-slate-900 via-orange-900 to-slate-900",
     image:
       "https://images.pexels.com/photos/1334597/pexels-photo-1334597.jpeg?auto=compress&cs=tinysrgb&w=600",
-  },
-  {
-    name: "UGREEN",
-    icon: Zap,
-    color: "bg-amber-500",
-    gradient: "from-slate-900 via-amber-900 to-slate-900",
-    image:
-      "https://images.pexels.com/photos/163100/circuit-circuit-board-resistor-computer-163100.jpeg?auto=compress&cs=tinysrgb&w=600",
-  },
-  {
-    name: "PELICULAS DE SEGURIDAD",
-    icon: Shield,
-    color: "bg-cyan-600",
-    gradient: "from-slate-900 via-cyan-900 to-slate-900",
-    image:
-      "https://images.pexels.com/photos/1476321/pexels-photo-1476321.jpeg?auto=compress&cs=tinysrgb&w=600",
   },
 ];
 
@@ -114,6 +96,7 @@ export const PreciosPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [modalItem, setModalItem] = useState<PrecioItem | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const deferredSearch = useDeferredValue(searchTerm);
   const [showSecondPrices, setShowSecondPrices] = useState(false);
 
   // ✅ BOTÓN GLOBAL (UNA SOLA ACCIÓN)
@@ -209,12 +192,14 @@ export const PreciosPage: React.FC = () => {
 
   const filteredPrecios = useMemo(() => {
     if (!Array.isArray(precios)) return [];
-    if (!searchTerm) return precios;
-    const lowerQ = searchTerm.toLowerCase();
+    if (!deferredSearch) return precios;
+    const lowerQ = deferredSearch.toLowerCase();
     return precios.filter((item) =>
       Object.values(item).some((val) => String(val).toLowerCase().includes(lowerQ))
     );
-  }, [precios, searchTerm]);
+  }, [precios, deferredSearch]);
+
+  const pagination = usePagination(filteredPrecios, JSON.stringify([deferredSearch, selectedCategory]));
 
   if (showSecondPrices) return <PreciosSegundaPanel onBack={() => setShowSecondPrices(false)} />;
 
@@ -222,8 +207,6 @@ export const PreciosPage: React.FC = () => {
     <div className="page-container relative overflow-hidden flex flex-col space-y-8 min-h-[calc(100vh-100px)]">
 
       {/* Background Decorations */}
-      <div className="absolute top-[-10%] right-[-5%] w-[45%] h-[45%] bg-blue-500/5 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-5%] left-[-5%] w-[35%] h-[35%] bg-slate-800/5 blur-[100px] rounded-full pointer-events-none" />
 
       {/* Toasts (global) */}
       <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
@@ -245,7 +228,7 @@ export const PreciosPage: React.FC = () => {
 
       {/* HEADER DASHBOARD */}
       <div className="relative z-10 flex flex-col gap-8">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="wt-page-heading flex flex-col xl:flex-row xl:items-center justify-between gap-4">
           <div className="flex items-center gap-5">
             <div className="relative">
                <div className="absolute inset-0 bg-slate-900 blur-xl opacity-15 animate-pulse" />
@@ -254,7 +237,7 @@ export const PreciosPage: React.FC = () => {
                </div>
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 leading-tight tracking-tight">Catálogo de Precios</h1>
+              <h1 className="wt-page-title">Catálogo de Precios</h1>
               <div className="flex items-center gap-2 mt-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 <p className="text-[11px] text-slate-500 font-bold uppercase tracking-widest">Sincronizado con Google Sheets</p>
@@ -272,7 +255,7 @@ export const PreciosPage: React.FC = () => {
                 className="group flex items-center gap-3 px-5 py-3 rounded-2xl bg-slate-900 hover:bg-emerald-600 text-white font-bold shadow-xl hover:shadow-emerald-200 transition-all active:scale-[0.98] disabled:opacity-50"
               >
                 {syncingAgent ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <RepairLoader variant="icon" />
                 ) : (
                   <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
                 )}
@@ -297,7 +280,7 @@ export const PreciosPage: React.FC = () => {
                         : 'text-slate-500 hover:text-slate-700 hover:bg-white/60'}
                     `}
                   >
-                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-blue-600' : 'opacity-60'}`} />
+                    <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-black' : 'opacity-60'}`} />
                     {cat.name.replace(/_/g, " ")}
                   </button>
                 );
@@ -318,9 +301,9 @@ export const PreciosPage: React.FC = () => {
             <button
               onClick={() => fetchPrecios(selectedCategory)}
               disabled={loading}
-              className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-blue-600 hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
+              className="flex items-center justify-center w-11 h-11 rounded-2xl bg-white/60 backdrop-blur-sm border border-white/40 text-slate-500 hover:text-black hover:bg-white shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? <RepairLoader variant="icon" /> : <RefreshCw className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -331,8 +314,7 @@ export const PreciosPage: React.FC = () => {
         {loading ? (
           <div className="absolute inset-0 bg-white/40 backdrop-blur-md z-30 flex flex-col items-center justify-center space-y-6">
             <div className="relative">
-               <div className="w-16 h-16 border-4 border-slate-200 border-t-indigo-500 rounded-full animate-spin" />
-               <Database className="absolute inset-0 m-auto w-6 h-6 text-slate-700/50" />
+               <RepairLoader variant="icon" className="repair-loader--large" />
             </div>
             <div className="flex flex-col items-center gap-2">
               <span className="text-sm font-black text-slate-800 uppercase tracking-widest">Cargando Precios</span>
@@ -346,7 +328,7 @@ export const PreciosPage: React.FC = () => {
         ) : (
           <div className="overflow-auto flex-1 custom-scrollbar">
             {filteredPrecios.length > 0 ? (
-              <table className="w-full text-left border-collapse">
+              <table className="wt-table w-full text-left border-collapse">
                 <thead className="sticky top-0 z-30">
                   <tr className="bg-slate-900 text-white">
                     {columns.map((column, colIndex) => (
@@ -370,7 +352,7 @@ export const PreciosPage: React.FC = () => {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {filteredPrecios.map((item, index) => (
+                  {pagination.items.map((item, index) => (
                     <tr
                       key={item.row_number || index}
                       onClick={() => setModalItem(item)}
@@ -408,7 +390,7 @@ export const PreciosPage: React.FC = () => {
             ) : (
               <div className="flex flex-col items-center justify-center h-full py-24 text-center">
                 <div className="w-24 h-24 rounded-[40px] bg-slate-50 flex items-center justify-center mb-8 border border-white shadow-xl shadow-slate-200/50 relative group">
-                  <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-5 group-hover:opacity-10 transition-opacity" />
+                  <div className="absolute inset-0 bg-black blur-2xl opacity-5 group-hover:opacity-10 transition-opacity" />
                   <Database className="w-10 h-10 text-slate-200 relative z-10" />
                 </div>
                 <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">Sin Resultados</h3>
@@ -437,6 +419,8 @@ export const PreciosPage: React.FC = () => {
           <span className="opacity-60">{syncingAgent ? "Actualizando agente..." : "Catálogo actualizado"}</span>
         </div>
       </div>
+
+      {!loading && <Pagination {...pagination} />}
 
       <PrecioModal
         isOpen={!!modalItem}

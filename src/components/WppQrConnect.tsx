@@ -1,5 +1,7 @@
+import { RepairLoader } from './RepairLoader';
+import { countryFetch } from '../services/countryRequest';
 ﻿import React, { useEffect, useState } from "react";
-import { MapPin, RefreshCcw, CheckCircle2, QrCode } from "lucide-react";
+import { MapPin, RefreshCcw, CheckCircle2, QrCode } from 'lucide-react';
 
 // Definimos los IDs de las 8 conexiones
 type WppSourceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
@@ -37,7 +39,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
   const [errText, setErrText] = useState<string | null>(null);
 
   // Generar el endpoint dinámicamente basado en la pestaña activa
-  const currentEndpoint = `https://n8n.alliasoft.com/webhook/wiltech/wppconnect${activeTab}`;
+  const currentEndpoint = 'https://n8n.alliasoft.com/webhook/wiltech/wppconnect';
 
   const parseBase64 = (payload: any): string | null => {
     const obj = Array.isArray(payload) ? payload[0] : payload;
@@ -78,9 +80,10 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
       setConnectedNumber(null);
 
       const url = new URL(currentEndpoint);
+      url.searchParams.set('id_instancia', String(activeTab));
       url.searchParams.set("_", String(Date.now()));
 
-      const res = await fetch(url.toString(), { method: "GET", cache: "no-store" });
+      const res = await countryFetch(url.toString(), { method: "GET", cache: "no-store" });
 
       if (!res.ok) {
         handleFallback();
@@ -144,14 +147,14 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
             <div className="p-3 rounded-2xl bg-slate-900 text-white shadow-lg">
               <QrCode className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">Canales de WhatsApp</h2>
+            <h1 className="wt-page-title">Canales de WhatsApp</h1>
           </div>
           <button
             onClick={fetchQR}
             disabled={loading}
             className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-white hover:shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
-            <RefreshCcw className={`w-4 h-4 ${loading ? "animate-spin" : "group-hover:rotate-180 transition-transform duration-500"}`} />
+            {loading ? <RepairLoader variant="icon" /> : <RefreshCcw className={`w-4 h-4 ${loading ? "" : "group-hover:rotate-180 transition-transform duration-500"}`} />}
           </button>
         </div>
 
@@ -193,7 +196,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
         {imgSrc ? (
           <div className="flex flex-col items-center gap-8 animate-in fade-in zoom-in duration-700 relative z-10">
             <div className="p-8 bg-white rounded-[48px] shadow-2xl border border-slate-100/50 relative group">
-              <div className="absolute -inset-1 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-[52px] opacity-10 blur-xl group-hover:opacity-20 transition-opacity" />
+              <div className="absolute -inset-1 bg-gradient-to-br from-zinc-600 to-black rounded-[52px] opacity-10 blur-xl group-hover:opacity-20 transition-opacity" />
               <img
                 src={imgSrc}
                 alt="WhatsApp QR Code"
@@ -233,8 +236,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
         ) : (
           <div className="flex flex-col items-center gap-4 relative z-10">
             <div className="relative">
-               <div className="w-16 h-16 border-[6px] border-slate-200 rounded-full shadow-inner" />
-               <div className="absolute inset-0 w-16 h-16 border-[6px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
+               <RepairLoader variant="icon" className="repair-loader--large" />
             </div>
             <div className="text-center">
               <span className="text-slate-800 font-bold block">Verificando...</span>

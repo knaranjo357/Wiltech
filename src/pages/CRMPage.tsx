@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { RepairLoader } from '../components/RepairLoader';
+import { Pagination } from '../components/Pagination';
+import { usePagination } from '../hooks/usePagination';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { 
-  Search, Filter, Plus, Calendar, Smartphone, MapPin, 
-  MoreHorizontal, Edit3, MessageCircle, ChevronLeft, ChevronRight, 
+  Search, Calendar, MapPin, Edit3, MessageCircle, 
   Users, RefreshCw, Truck, CheckCircle2, X
 } from 'lucide-react';
 
@@ -55,13 +57,6 @@ const getInitials = (name: string) => {
   return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
 };
 
-const getRandomColor = (str: string) => {
-  const colors = ['bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700', 'bg-purple-100 text-slate-700', 'bg-orange-100 text-orange-700', 'bg-pink-100 text-pink-700'];
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-};
-
 /** 
  * ==============================================================================
  *  COMPONENTE CRM PAGE
@@ -74,24 +69,23 @@ export const CRMPage: React.FC = () => {
 
   // --- Estados de Filtros ---
   const [searchText, setSearchText] = useState('');
+  const deferredSearch = useDeferredValue(searchText);
   const [sedeFilter, setSedeFilter] = useState('ALL');
   const [sourceFilter, setSourceFilter] = useState('ALL');
   const [etapaFilter, setEtapaFilter] = useState('ALL');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
 
   // --- Paginación ---
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
 
   // --- UI & Modales ---
   const [modalClient, setModalClient] = useState<Client | null>(null);
   const [isNewClientOpen, setIsNewClientOpen] = useState(false);
 
   // 1. Carga de Datos (Idéntica a Resultados)
-  const loadData = async () => {
+  const loadData = async (force = true) => {
     setIsProcessing(true);
     try {
-      const data = await ClientService.getClients();
+      const data = await ClientService.getClients({ force });
       const list = Array.isArray(data) ? data : [];
       
       const optimized: OptimizedClient[] = list.map((c: any) => ({
@@ -116,7 +110,7 @@ export const CRMPage: React.FC = () => {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(false); }, []);
 
   // 2. Generación de Opciones de Filtro Dinámicas
   // sedeMap: normalizedKey -> display (primer valor canónico)
@@ -157,7 +151,7 @@ export const CRMPage: React.FC = () => {
   const filteredData = useMemo(() => {
     const tsFrom = dateRange.from ? parseToTimestamp(dateRange.from) : 0;
     const tsTo = dateRange.to ? parseToTimestamp(dateRange.to) + ONE_DAY - 1 : Infinity;
-    const normSearch = normalize(searchText);
+    const normSearch = normalize(deferredSearch);
     const normSedeFilter = normalize(sedeFilter);
     const normEtapaFilter = normalize(etapaFilter);
     const useDate = !!(dateRange.from || dateRange.to);
@@ -181,17 +175,9 @@ export const CRMPage: React.FC = () => {
       
       return true;
     });
-  }, [rawData, sedeFilter, sourceFilter, etapaFilter, searchText, dateRange]);
+  }, [rawData, sedeFilter, sourceFilter, etapaFilter, deferredSearch, dateRange]);
 
-  // 4. Paginación
-  const totalPages = Math.ceil(filteredData.length / pageSize);
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, currentPage, pageSize]);
-
-  // Reseteo de página al filtrar
-  useEffect(() => setCurrentPage(1), [filteredData.length]);
+  const pagination = usePagination(filteredData, JSON.stringify([sedeFilter, sourceFilter, etapaFilter, searchText, dateRange]));
 
   // Manejadores
   const handleUpdateClient = async (updated: Partial<Client>) => {
@@ -213,19 +199,19 @@ export const CRMPage: React.FC = () => {
     <div className="page-container space-y-6 flex flex-col">
       
       {/* Botón Flotante Nuevo Cliente */}
-      <NuevoCliente onCreated={loadData} floating={true} />
+      <NuevoCliente onCreated={() => void loadData()} floating={true} />
 
       {/* HEADER STICKY & FILTROS */}
-      <div className="header-bar rounded-2xl flex flex-col gap-4">
+      <div className="header-bar rounded-2xl flex flex-col gap-4 border-slate-200/80 shadow-sm">
           
           {/* Fila Superior: Título y Totales */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-black text-white flex items-center justify-center shadow-lg shadow-slate-900/30">
+              <div className="w-12 h-12 rounded-xl bg-slate-950 text-white flex items-center justify-center shadow-lg shadow-slate-900/15">
                 <Users className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Base de Contactos</h1>
+                <h1 className="wt-page-title">Base de Contactos</h1>
                 <p className="text-xs text-slate-700 font-bold uppercase tracking-wider mt-1.5 flex items-center gap-1">
                   {filteredData.length} contactos filtrados
                 </p>
@@ -235,11 +221,11 @@ export const CRMPage: React.FC = () => {
             {/* Stats Rápidos en Header */}
             <div className="flex gap-2 lg:gap-3 text-xs w-full md:w-auto">
                <div className="px-3 py-2 bg-slate-50 text-slate-700 rounded-xl font-medium border border-slate-200/60 flex items-center gap-2">
-                  <CheckCircle2 size={14} className="text-blue-500"/> 
+                  <CheckCircle2 size={14} className="text-slate-900"/>
                   <span>Agendados: <b className="text-slate-900">{filteredData.filter(c => c._tsAgenda > 0).length}</b></span>
                </div>
                <div className="px-3 py-2 bg-slate-50 text-slate-700 rounded-xl font-medium border border-slate-200/60 flex items-center gap-2">
-                  <Truck size={14} className="text-orange-500"/> 
+                  <Truck size={14} className="text-emerald-600"/>
                   <span>Con Envíos: <b className="text-slate-900">{filteredData.filter(c => c._isEnvio).length}</b></span>
                </div>
             </div>
@@ -298,18 +284,18 @@ export const CRMPage: React.FC = () => {
                <input type="date" value={dateRange.to} onChange={e => setDateRange({...dateRange, to: e.target.value})} className="px-3 py-2 text-sm outline-none text-gray-600 bg-transparent" />
             </div>
             
-            <button onClick={loadData} className="btn-secondary px-3 py-2" title="Recargar">
-              <RefreshCw size={18} className={isProcessing ? 'animate-spin' : ''} />
+            <button onClick={() => void loadData()} className="btn-secondary px-3 py-2" title="Recargar">
+              {isProcessing ? <RepairLoader variant="icon" /> : <RefreshCw size={18} />}
             </button>
           </div>
       </div>
 
       {/* CONTENIDO PRINCIPAL: TABLA */}
       <div className="w-full mx-auto">
-        <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
           {isProcessing && filteredData.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 p-10">
-               <div className="w-10 h-10 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+               <RepairLoader variant="icon" className="repair-loader--large" />
                <span className="text-gray-400 font-medium">Sincronizando clientes...</span>
             </div>
           ) : filteredData.length === 0 ? (
@@ -335,20 +321,18 @@ export const CRMPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedData.map((client) => {
+                    {pagination.items.map((client) => {
                       const initials = getInitials(client.nombre || '?');
-                      const avatarColor = getRandomColor(client.nombre || '?');
-                      
                       return (
                         <tr 
                           key={client.row_number} 
                           onClick={() => setModalClient(client)}
-                          className="group hover:bg-gray-50/50 transition-colors cursor-pointer"
+                          className="group hover:bg-slate-50/70 transition-colors cursor-pointer"
                         >
                           {/* Cliente */}
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-3.5">
                             <div className="flex items-center gap-3">
-                              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor}`}>
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 bg-slate-950 text-white shadow-sm">
                                 {initials}
                               </div>
                               <div>
@@ -366,18 +350,18 @@ export const CRMPage: React.FC = () => {
                           </td>
 
                           {/* Contacto */}
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-3.5">
                             <button 
                               onClick={(e) => handleWhatsApp(e, safeText(client.whatsapp))}
-                              className="group/btn flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-all text-gray-600 hover:text-green-700 w-fit"
+                              className="group/btn flex max-w-[220px] items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-all text-slate-600 hover:text-emerald-700"
                             >
                               <MessageCircle size={14} className="text-green-500 group-hover/btn:scale-110 transition-transform"/>
-                              <span className="font-mono text-xs font-medium">{formatWhatsApp(client.whatsapp as any) || 'Sin número'}</span>
+                              <span className="truncate font-mono text-xs font-medium" title={formatWhatsApp(client.whatsapp as any)}>{formatWhatsApp(client.whatsapp as any) || 'Sin número'}</span>
                             </button>
                           </td>
 
                           {/* Ubicación */}
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-3.5">
                             <div className="flex flex-col gap-0.5">
                                <div className="flex items-center gap-1.5 text-gray-800 font-medium">
                                  <MapPin size={12} className="text-gray-400"/>
@@ -388,7 +372,7 @@ export const CRMPage: React.FC = () => {
                           </td>
 
                           {/* Etapa */}
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-3.5">
                             <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getEtapaColor(client.estado_etapa as any)}`}>
                               {(client.estado_etapa || 'SIN_ETAPA').replace(/_/g, ' ')}
                             </span>
@@ -400,10 +384,10 @@ export const CRMPage: React.FC = () => {
                           </td>
 
                           {/* Fecha */}
-                          <td className="px-6 py-4">
+                          <td className="px-5 py-3.5">
                             {client._tsAgenda > 0 ? (
                               <div className="flex items-center gap-2 text-gray-700">
-                                <Calendar size={14} className="text-indigo-400"/>
+                                <Calendar size={14} className="text-slate-400"/>
                                 <span className="font-medium">{formatDate(client.fecha_agenda as string)}</span>
                               </div>
                             ) : (
@@ -415,8 +399,8 @@ export const CRMPage: React.FC = () => {
                           </td>
 
                           {/* Acciones */}
-                          <td className="px-6 py-4 text-center">
-                             <button className="p-2 text-gray-400 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors">
+                          <td className="px-5 py-3.5 text-center">
+                             <button aria-label={`Editar ${client.nombre || 'cliente'}`} className="p-2 text-gray-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
                                <Edit3 size={16} />
                              </button>
                           </td>
@@ -427,41 +411,7 @@ export const CRMPage: React.FC = () => {
                 </table>
               </div>
 
-              {/* Footer Paginación */}
-              <div className="bg-white border-t border-gray-100 px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-                 <div className="text-xs text-gray-500 font-medium">
-                    Página <span className="text-gray-900">{currentPage}</span> de <span className="text-gray-900">{totalPages}</span>
-                 </div>
-                 
-                 <div className="flex items-center gap-2">
-                    <select 
-                      value={pageSize} 
-                      onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}
-                      className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-slate-700"
-                    >
-                      <option value={20}>20 / pág</option>
-                      <option value={50}>50 / pág</option>
-                      <option value={100}>100 / pág</option>
-                    </select>
-
-                    <div className="flex bg-slate-100 rounded-full p-1">
-                       <button 
-                         onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                         disabled={currentPage === 1}
-                         className="px-3 py-1.5 rounded-full hover:bg-white disabled:pointer-events-none disabled:opacity-50 transition-colors text-slate-700 data-[active=true]:shadow-sm"
-                       >
-                         <ChevronLeft size={16} />
-                       </button>
-                       <button 
-                         onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                         disabled={currentPage === totalPages}
-                         className="px-3 py-1.5 rounded-full hover:bg-white disabled:pointer-events-none disabled:opacity-50 transition-colors text-slate-700 data-[active=true]:shadow-sm"
-                       >
-                         <ChevronRight size={16} />
-                       </button>
-                    </div>
-                 </div>
-              </div>
+              <Pagination {...pagination} />
             </>
           )}
         </div>

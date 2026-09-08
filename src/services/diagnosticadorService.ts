@@ -1,18 +1,30 @@
-import { ApiService } from './apiService';
+import { ApiService, type ReadOptions } from './apiService';
+import { AuthService } from './authService';
+import { selectAgentDocument, validatePromptIdentity } from '../utils/agentDocument';
+import { normalizeFlowRows } from '../utils/diagnosticFlow';
 import type { FlowData, FlowConfig, EquipoSegunda, Diagnostico, DiagnosticoMultimedia } from '../types/diagnosticador';
 
 export const flowApi = {
   getAll: async (flowName?: string): Promise<FlowData[]> => {
     const query = flowName ? `?flow_name=${encodeURIComponent(flowName)}` : '';
-    return ApiService.get<FlowData[]>(`/diagnosticador/diagrama_diagnosticador${query}`);
+    const country = AuthService.getPaisSede();
+    return normalizeFlowRows(await ApiService.get<FlowData[]>(`/diagnosticador/diagrama_diagnosticador${query}`), country);
   },
 
   create: async (flowName: string, configuracion: FlowConfig): Promise<FlowData> => {
-    return ApiService.post<FlowData>('/diagnosticador/diagrama_diagnosticador', { flow_name: flowName, configuracion });
+    const country = AuthService.getPaisSede();
+    const response = await ApiService.post<FlowData>('/diagnosticador/diagrama_diagnosticador', { flow_name: flowName, configuracion });
+    const created = normalizeFlowRows(response, country)[0];
+    if (!created) throw new Error('No se recibió el diagrama creado para este país.');
+    return created;
   },
 
   update: async (id: number, flowName: string, configuracion: FlowConfig): Promise<FlowData> => {
-    return ApiService.put<FlowData>('/diagnosticador/diagrama_diagnosticador', { id, flow_name: flowName, configuracion });
+    const country = AuthService.getPaisSede();
+    const response = await ApiService.put<FlowData>('/diagnosticador/diagrama_diagnosticador', { id, flow_name: flowName, configuracion });
+    const saved = normalizeFlowRows(response, country)[0];
+    if (!saved || saved.id !== id || saved.flow_name !== flowName) throw new Error('No se confirmó el diagrama actualizado.');
+    return saved;
   },
 
   delete: async (id: number, flowName: string): Promise<void> => {
@@ -21,11 +33,14 @@ export const flowApi = {
 };
 
 export const agenteApi = {
-  getSystemMessage: async () => {
-    const response = await ApiService.get<any[]>('/diagnosticador/system_message_agente');
-    return response[0];
+  getSystemMessage: async (options: ReadOptions = {}) => {
+    const response = await ApiService.get<any[]>('/diagnosticador/system_message_agente', { ttl: 60_000, ...options });
+    const prompt = selectAgentDocument(response, AuthService.getPaisSede()).prompt;
+    if (!prompt) throw new Error('No se recibió el prompt de diagnóstico para el país activo.');
+    return prompt;
   },
-  updateSystemMessage: async (data: { row_number: number, system_message: string }) => {
+  updateSystemMessage: async (data: { row_number: number, system_message: string, pais_sede: string }) => {
+    validatePromptIdentity(data, AuthService.getPaisSede());
     return ApiService.put<any>('/diagnosticador/system_message_agente', data);
   },
   chat: async (payload: { mensaje: string, sessionId: string, historial: any[], informacion_contexto: any }) => {

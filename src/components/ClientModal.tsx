@@ -1,10 +1,11 @@
+import { RepairLoader } from './RepairLoader';
 ﻿// src/components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X, Phone, Calendar, MapPin, User, Smartphone, FileText, Settings, DollarSign, UserCheck,
   Copy, MessageCircle, ShieldCheck, ClipboardList, Building2, ClipboardCheck,
-  Truck, Edit2, Save, Bot, CheckCircle, AlertCircle, Fingerprint, Clock, Mail, Percent,
+  Truck, Edit2, Save, Bot, CheckCircle, Fingerprint, Clock, Mail, Percent,
   ShoppingBag, MessageSquare, LayoutDashboard, ExternalLink, ChevronRight, Wrench, Play
 } from 'lucide-react';
 import { Client } from '../types/client';
@@ -18,8 +19,12 @@ import {
 import { ChatPanel } from './ChatPanel';
 import { isBotOn, safeBigIntStr, safeText as safeStr } from '../utils/textUtils';
 import { SedeSelect } from './SedeSelect';
+import { StageAutocomplete } from './StageAutocomplete';
 import { ReparacionService } from '../services/reparacionService';
 import type { Reparacion } from '../types/reparacion';
+import { useCountryConfig } from '../hooks/useCountryConfig';
+import { canAccessCountryPage, normalizeCity } from '../utils/countryConfig';
+import { AuthService } from '../services/authService';
 
 interface ClientModalProps {
   isOpen: boolean;
@@ -72,6 +77,8 @@ const TABS: { id: TabID; label: string; icon: React.ComponentType<any> }[] = [
 ];
 
 export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, client, onUpdate }) => {
+  const { config } = useCountryConfig();
+  const canRepair = canAccessCountryPage('reparaciones', AuthService.getCurrentUser()?.role, config);
   const shouldRender = Boolean(isOpen && client);
   const c = (client ?? {}) as Client;
   const overlayRef = useRef<HTMLDivElement | null>(null);
@@ -93,7 +100,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   }, [shouldRender, c]);
 
   useEffect(() => {
-    if (!shouldRender || !c.row_number) return;
+    if (!shouldRender || !c.row_number || !canRepair) return;
     setRepairLoading(true);
     ReparacionService.getByClient(c.row_number)
       .then(setRepairs)
@@ -102,7 +109,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
         setRepairs([]);
       })
       .finally(() => setRepairLoading(false));
-  }, [shouldRender, c.row_number]);
+  }, [shouldRender, c.row_number, canRepair]);
 
   // Close / Esc logic
   useEffect(() => {
@@ -160,6 +167,10 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     try {
       setSaving(true);
       const fullPayload: Partial<Client> = { ...editData, row_number: c.row_number };
+      for (const key of ['ciudad', 'guia_ciudad', 'agenda_ciudad_sede'] as const) {
+        const value = fullPayload[key];
+        if (typeof value === 'string') fullPayload[key] = normalizeCity(value, config.ciudades);
+      }
       const ok = await onUpdate(fullPayload);
       if (ok) {
         notifyGlobalUpdate({ ...c, ...fullPayload });
@@ -310,12 +321,14 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   };
 
   const openRepairDiagnostic = (repair: Reparacion) => {
+    if (!canRepair) return;
     onClose();
     window.history.pushState(null, '', `/reparaciones?modo=diagnostico&id_reparacion=${repair.id}`);
     window.dispatchEvent(new PopStateEvent('popstate'));
   };
 
   const handleCreateRepair = async () => {
+    if (!canRepair) return;
     setRepairLoading(true);
     try {
       const repair = await ReparacionService.create({
@@ -375,7 +388,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             {/* Cliente Info */}
             <div className="flex items-center gap-4 min-w-0">
               <div className="relative shrink-0">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-slate-900 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-slate-900/20 border-2 border-white ring-1 ring-slate-200">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-zinc-700 to-black flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-black/20 border-2 border-white ring-1 ring-slate-200">
                   {initials}
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></div>
@@ -414,7 +427,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                      disabled={saving}
                      className="btn-primary px-6"
                    >
-                     {saving ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"/> : <Save className="w-4 h-4" />}
+                     {saving ? <RepairLoader variant="icon" /> : <Save className="w-4 h-4" />}
                      <span>Guardar</span>
                    </button>
                  </>
@@ -422,7 +435,8 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                  <>
                    <button
                      onClick={() => repairs[0] ? openRepairDiagnostic(repairs[0]) : void handleCreateRepair()}
-                     disabled={repairLoading}
+                     disabled={repairLoading || !canRepair}
+                     hidden={!canRepair}
                      className="btn-primary px-4"
                      title={repairs[0] ? 'Continuar reparación existente' : 'Crear ingreso y realizar diagnóstico'}
                    >
@@ -504,7 +518,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
           {/* === TABS NAVIGATION === */}
           <div className="px-4 sm:px-6 py-3 flex overflow-x-auto border-b border-slate-100 no-scrollbar bg-white">
             <div className="wt-filter-group">
-            {TABS.map((tab) => {
+            {TABS.filter(tab => tab.id !== 'reparaciones' || canRepair).map((tab) => {
               const isActive = activeTab === tab.id;
               const counts = getTabCounts(tab.id);
 
@@ -573,7 +587,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                         ['Evidencias', repair.multimedia?.length || 0],
                       ].map(([label, value]) => (
                         <div key={String(label)} className="bg-white p-4">
-                          <span className="block text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+                          <span className="block text-[8px] font-black uppercase tracking-widest text-slate-400">{String(label)}</span>
                           <strong className="mt-1 block truncate text-xs text-slate-800">{String(value)}</strong>
                         </div>
                       ))}
@@ -591,9 +605,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 max-w-7xl mx-auto pb-10">
 
                 {sectionsToRender.map((section, idx) => (
-                  <div key={`${section.title}-${idx}`} className="card overflow-hidden h-fit flex flex-col relative">
+                  <div key={`${section.title}-${idx}`} className="card overflow-visible h-fit flex flex-col relative">
                     {/* Section Header */}
-                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white rounded-t-2xl">
                         <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-xl shadow-sm ${section.iconColor.replace('bg-', 'bg-')}`}>
                                 <section.icon className="w-5 h-5" />
@@ -603,7 +617,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                     </div>
 
                     {/* Section Body */}
-                    <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
+                    <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6 rounded-b-2xl">
                       {section.fields.map((field, j) => {
                         const value = getVal(field.key);
                         const isEmpty = !safeStr(value);
@@ -625,7 +639,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                             {isEditing ? (
                                 /* === Edit Mode === */
                                 <div className="wt-input-wrap">
-                                  {field.key === 'estado_envio' ? (
+                                  {field.key === 'estado_etapa' ? (
+                                    <StageAutocomplete
+                                      value={value}
+                                      onChange={(nextValue) => setVal('estado_etapa', nextValue as any)}
+                                    />
+                                  ) : field.key === 'estado_envio' ? (
                                     <div className="relative">
                                         <select
                                             value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
@@ -638,8 +657,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                         </select>
                                         <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 rotate-90 pointer-events-none"/>
                                     </div>
-                                  ) : field.type === 'sede' ? (
+                                  ) : field.type === 'sede' || field.key === 'ciudad' || field.key === 'guia_ciudad' ? (
                                     <SedeSelect
+                                      placeholder={`Selecciona o escribe ${field.label.toLowerCase()}`}
                                       value={value ?? ''}
                                       onChange={(v) => setVal(field.key, v)}
                                     />

@@ -17,7 +17,10 @@ import {
 import '@xyflow/react/dist/style.css';
 import { flowApi, agenteApi, equiposSegundaApi } from '../services/diagnosticadorService';
 import type { FlowData, FlowStep, EquipoSegunda } from '../types/diagnosticador';
-import { ArrowLeft, Trash2, X, PlusCircle, Hash, Type, List, AlertCircle, Bot, Sparkles, ClipboardList, Search, Edit3, Plus, Loader, PanelRightClose, PanelRightOpen, MousePointer2 } from 'lucide-react';
+import { normalizeFlowConfig, withEmptyCountryFlows } from '../utils/diagnosticFlow';
+import { AuthService } from '../services/authService';
+import { RepairLoader } from '../components/RepairLoader';
+import { ArrowLeft, Trash2, X, PlusCircle, Hash, Type, List, AlertCircle, Bot, ClipboardList, Search, Edit3, Plus, PanelRightClose, PanelRightOpen, MousePointer2 } from 'lucide-react';
 
 // --- Helper to slugify labels ---
 const slugify = (text: string) => text.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '_').replace(/^-+|-+$/g, '');
@@ -175,7 +178,8 @@ function AdminInner() {
   // --- AI Agent States ---
   const [isAgentModalOpen, setIsAgentModalOpen] = useState(false);
   const [systemMessage, setSystemMessage] = useState('');
-  const [rowNumber, setRowNumber] = useState(1);
+  const [rowNumber, setRowNumber] = useState<number | null>(null);
+  const [promptCountry, setPromptCountry] = useState<string | null>(null);
 
   // --- Precios Segunda States ---
   const [isPricesModalOpen, setIsPricesModalOpen] = useState(false);
@@ -278,16 +282,19 @@ function AdminInner() {
   }, [isInspectorOpen]);
 
   const loadFlows = async () => {
+    setLoading(true);
     try {
       const data = await flowApi.getAll();
-      const fixedFlows = (data || []).filter(flow => Number(flow.id) === 1 || Number(flow.id) === 2).sort((a, b) => Number(a.id) - Number(b.id));
+      const fixedFlows = withEmptyCountryFlows(data, AuthService.getPaisSede());
       setFlows(fixedFlows);
       if (fixedFlows.length > 0) {
         selectFlow(fixedFlows[0]);
       }
       else setLoading(false);
     } catch (error) {
+      setFlows([]); setActiveFlow(null); setNodes([]); setEdges([]);
       setLoading(false);
+      openModal('Error de carga', error instanceof Error ? error.message : 'No se pudieron cargar los diagramas.', closeModal, 'alert');
     }
   };
 
@@ -329,6 +336,7 @@ function AdminInner() {
       if (data) {
         setSystemMessage(data.system_message);
         setRowNumber(data.row_number);
+        setPromptCountry(data.pais_sede);
       }
     } catch (error) {
       console.error('Error loading system message:', error);
@@ -336,6 +344,7 @@ function AdminInner() {
   };
 
   const selectFlow = (flow: FlowData) => {
+    setSelectedNodeId(null);
     setActiveFlow(flow);
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
@@ -565,7 +574,10 @@ function AdminInner() {
       }));
 
       let updatedConfig = { ...activeFlow.configuracion, steps: updatedSteps };
-      await flowApi.update(activeFlow.id, activeFlow.flow_name || activeFlow.configuracion.name, updatedConfig);
+      const flowName = activeFlow.flow_name || activeFlow.configuracion.flow_id;
+      const saved = activeFlow.isNew ? await flowApi.create(flowName, updatedConfig) : await flowApi.update(activeFlow.id, flowName, updatedConfig);
+      setFlows(previous => previous.map(flow => flow.id === activeFlow.id ? saved : flow));
+      selectFlow(saved);
       openModal('¡Publicado!', 'El diagrama y las posiciones se han guardado con éxito.', () => closeModal(), 'alert');
     } catch (error) {
       openModal('Error', 'No se pudieron guardar los cambios.', () => closeModal(), 'alert');
@@ -589,13 +601,7 @@ function AdminInner() {
 
   const handleSaveTextDiagram = () => {
     try {
-      const parsedConfig = JSON.parse(textDiagramConfig);
-      if (!parsedConfig || typeof parsedConfig !== 'object') {
-        throw new Error('Configuración inválida');
-      }
-      if (!Array.isArray(parsedConfig.steps)) {
-        throw new Error('La propiedad "steps" debe ser un arreglo');
-      }
+      const parsedConfig = normalizeFlowConfig(JSON.parse(textDiagramConfig), activeFlow?.flow_name ?? 'diagnostico');
 
       selectFlow({
         ...activeFlow!,
@@ -611,7 +617,8 @@ function AdminInner() {
   const handleSaveAgent = async () => {
     try {
       setSaving(true);
-      await agenteApi.updateSystemMessage({ row_number: rowNumber, system_message: systemMessage });
+      if (rowNumber === null || !promptCountry) throw new Error('Recarga el prompt antes de guardar.');
+      await agenteApi.updateSystemMessage({ row_number: rowNumber, pais_sede: promptCountry, system_message: systemMessage });
       openModal('¡Agente Actualizado!', 'El mensaje del sistema para la IA ha sido guardado.', () => closeModal(), 'alert');
       setIsAgentModalOpen(false);
     } catch (error) {
@@ -621,10 +628,10 @@ function AdminInner() {
     }
   };
 
-  if (loading) return <div className="h-screen md:h-[calc(100vh-3.5rem)] flex items-center justify-center font-black text-2xl italic animate-pulse">WILTECH...</div>;
+  if (loading) return <RepairLoader variant="panel" label="Cargando diagramas del país" />;
 
   return (
-    <div className="h-[calc(100vh-3.5rem)] md:h-screen flex flex-col bg-white text-black font-sans">
+    <div className="h-[calc(100dvh-4rem)] md:h-[100dvh] flex flex-col bg-white text-black font-sans">
       {/* Global Modals */}
       <CustomModal
         isOpen={modal.isOpen}
@@ -746,10 +753,10 @@ function AdminInner() {
                 <div className="flex-1 overflow-y-auto border border-gray-100 rounded-2xl">
                   {isPricesLoading && pricesList.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-gray-400 font-bold text-sm uppercase gap-2">
-                      <Loader className="animate-spin" size={18} /> Cargando precios...
+                      <RepairLoader variant="icon" /> Cargando precios...
                     </div>
                   ) : (
-                    <table className="w-full text-left border-collapse">
+                    <table className="wt-table w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                           <th className="p-4 text-[9px] font-black text-gray-400 uppercase tracking-widest">Equipo</th>
@@ -930,27 +937,28 @@ function AdminInner() {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-xl font-black tracking-tighter uppercase italic leading-none text-slate-850">Constructor Wiltech</h1>
-            <p className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mt-1">Diagrama Dinámico</p>
+            <h1 className="wt-page-title">Constructor Wiltech</h1>
+            <p className="text-xs text-slate-500 mt-1">{AuthService.getPaisSede()} · {activeFlow?.isNew ? 'Nuevo diagrama sin publicar' : 'Diagrama dinámico'}</p>
           </div>
           <select value={activeFlow?.id || ''} onChange={event => {
             const flow = flows.find(item => item.id === Number(event.target.value));
             if (flow) selectFlow(flow);
           }} className="max-w-56 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-xs font-bold outline-none">
-            {flows.map(flow => <option key={flow.id} value={flow.id}>{Number(flow.id) === 1 ? 'Diagnóstico' : Number(flow.id) === 2 ? 'Reparación' : flow.flow_name || flow.configuracion.name}</option>)}
+            {flows.map(flow => <option key={flow.id} value={flow.id}>{flow.flow_name === 'diagnostico' ? 'Diagnóstico' : flow.flow_name === 'reparacion' ? 'Reparación' : flow.configuracion.name}{flow.isNew ? ' (nuevo)' : ''}</option>)}
           </select>
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
           <button
             onClick={openTextDiagramModal}
+            disabled={!activeFlow}
             title="Editar diagrama como JSON" className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-100 bg-white text-gray-400 transition hover:bg-gray-50 hover:text-black"
           >
             <List size={16} />
           </button>
           <button
             onClick={saveFlow}
-            disabled={saving}
+            disabled={saving || !activeFlow}
             className="bg-black text-white px-8 py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all shadow-lg disabled:opacity-50 cursor-pointer"
           >
             {saving ? 'Publicando...' : 'Publicar'}

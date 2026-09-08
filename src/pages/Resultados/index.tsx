@@ -1,3 +1,4 @@
+import { RepairLoader } from '../../components/RepairLoader';
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { RefreshCw, BarChart2, Calendar } from 'lucide-react';
 import { KPICards } from './components/KPICards';
@@ -536,7 +537,7 @@ export const Resultados: React.FC = () => {
             <BarChart2 size={22} />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">Dashboard</h1>
+            <h1 className="wt-page-title">Dashboard</h1>
             <p className="text-xs text-slate-400 mt-0.5">Datos consolidados</p>
             <div className="wt-filter-group mt-2">
               {(['month', 'week', 'day'] as Granularity[]).map(g => (
@@ -566,7 +567,7 @@ export const Resultados: React.FC = () => {
           </div>
           <button onClick={load} disabled={isLoading}
             className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-xl text-sm font-semibold hover:bg-slate-700 disabled:opacity-50 transition-all">
-            <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+            {isLoading ? <RepairLoader variant="icon" /> : <RefreshCw size={14} />}
             Actualizar
           </button>
         </div>
@@ -576,7 +577,7 @@ export const Resultados: React.FC = () => {
       <div className="w-full space-y-6">
         {isLoading ? (
           <div className="h-64 flex flex-col items-center justify-center text-gray-400 gap-3">
-            <RefreshCw className="animate-spin" size={28} />
+            <RepairLoader variant="icon" className="repair-loader--large" />
             <p className="text-sm font-medium">Cargando datos...</p>
           </div>
         ) : error ? (

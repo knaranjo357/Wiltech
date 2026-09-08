@@ -1,3 +1,4 @@
+import { RepairLoader } from '../components/RepairLoader';
 // pages/AgentePage.tsx
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
@@ -16,11 +17,14 @@ import {
   ClipboardCheck,
   AlertTriangle,
   Tags,
-} from "lucide-react";
+} from 'lucide-react';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgenteService, type AgentSource } from "../services/agenteService";
 import { agenteApi } from "../services/diagnosticadorService";
+import { AuthService } from '../services/authService';
+import { selectAgentDocument } from '../utils/agentDocument';
+import type { SystemMessage } from '../types/precios';
 
 interface Section {
   id: string;
@@ -46,6 +50,7 @@ type AgentState = {
   dirty: boolean;
   lastLoadedText: string;
   rowNumber?: number;
+  promptRecord?: SystemMessage;
 };
 
 const uuid = () => crypto.randomUUID();
@@ -140,16 +145,17 @@ export const AgentePage: React.FC = () => {
           ? await agenteApi.getSystemMessage()
           : await AgenteService.getSystemMessage(tab.source!);
 
-        const fullText = key === 'diagnosticador'
-          ? data?.system_message ?? ""
-          : Array.isArray(data) && data.length > 0 ? data[0]?.system_message ?? "" : "";
+        const prompt = selectAgentDocument(data, AuthService.getPaisSede(), key === 'precios').prompt;
+        if (!prompt) throw new Error('No se recibió el prompt del país activo.');
+        const fullText = prompt.system_message;
 
         const parsed = parseTextToSections(fullText);
 
         setAgentState(key, {
           sections: parsed,
           lastLoadedText: fullText,
-          rowNumber: key === 'diagnosticador' ? Number(data?.row_number || 1) : undefined,
+          rowNumber: prompt.row_number,
+          promptRecord: prompt,
           dirty: false,
           error: null,
         });
@@ -170,11 +176,12 @@ export const AgentePage: React.FC = () => {
 
         const tab = TABS.find((t) => t.key === key)!;
         const textToSave = joinSectionsToText(st.sections);
+        if (!st.promptRecord) throw new Error('Recarga el prompt antes de guardar.');
 
         if (key === 'diagnosticador') {
-          await agenteApi.updateSystemMessage({ row_number: st.rowNumber || 1, system_message: textToSave });
+          await agenteApi.updateSystemMessage({ row_number: st.promptRecord.row_number, pais_sede: st.promptRecord.pais_sede, system_message: textToSave });
         } else {
-          await AgenteService.updateSystemMessage(textToSave, tab.source!);
+          await AgenteService.updateSystemMessage(textToSave, tab.source!, st.promptRecord);
         }
 
         setAgentState(key, {
@@ -274,7 +281,7 @@ export const AgentePage: React.FC = () => {
   };
 
   return (
-    <div className="w-full h-[100dvh] bg-slate-50 flex flex-col font-sans text-slate-900 overflow-hidden">
+    <div className="w-full h-[calc(100dvh-4rem)] md:h-[100dvh] bg-slate-50 flex flex-col font-sans text-slate-900 overflow-hidden">
       {/* Toasts */}
       <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
         {current.error && (
@@ -305,7 +312,7 @@ export const AgentePage: React.FC = () => {
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-xl font-extrabold text-slate-900 leading-none tracking-tight">
+                  <h1 className="wt-page-title">
                     Personalidad del Agente
                   </h1>
 
@@ -327,7 +334,7 @@ export const AgentePage: React.FC = () => {
                 className="btn-ghost"
                 title="Recargar configuración"
               >
-                <RefreshCw className={`w-5 h-5 ${current.loading ? "animate-spin" : ""}`} />
+                {current.loading ? <RepairLoader variant="icon" /> : <RefreshCw className="w-5 h-5" />}
               </button>
 
               <button
@@ -337,7 +344,7 @@ export const AgentePage: React.FC = () => {
                 title="Guardar (Ctrl + S)"
               >
                 {current.saving ? (
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <RepairLoader variant="icon" />
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
@@ -395,10 +402,7 @@ export const AgentePage: React.FC = () => {
       <main className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar">
         <div className="max-w-4xl mx-auto px-4 py-8 pb-40 space-y-5">
           {current.loading ? (
-            <div className="flex flex-col items-center justify-center py-32 text-slate-400 opacity-60 animate-pulse">
-              <Bot className="w-12 h-12 mb-4 text-slate-300" />
-              <p className="font-medium">Cargando instrucciones...</p>
-            </div>
+            <RepairLoader variant="panel" label="Cargando instrucciones" />
           ) : (
             <>
               {current.sections.length === 0 && (
@@ -455,7 +459,7 @@ const SectionCard: React.FC<{
   const level = headerMatch ? headerMatch[1].length : 0;
 
   const isMainTitle = level === 1;
-  const accentColor = isMainTitle ? "bg-blue-600" : level === 2 ? "bg-slate-800" : "bg-slate-400";
+  const accentColor = isMainTitle ? "bg-black" : level === 2 ? "bg-slate-700" : "bg-slate-300";
 
   return (
     <div
@@ -472,7 +476,7 @@ const SectionCard: React.FC<{
         onClick={() => setIsOpen(!isOpen)}
         className="group flex items-center justify-between p-4 cursor-pointer select-none relative bg-white"
       >
-        <div className={`wt-strip ${accentColor.replace('bg-', 'bg-')}`} style={{ backgroundColor: isMainTitle ? '#4f46e5' : level === 2 ? '#6366f1' : '#94a3b8' }} />
+        <div className={`wt-strip ${accentColor}`} />
 
         <div className="flex items-center gap-4 pl-4 min-w-0 flex-1">
           <div
