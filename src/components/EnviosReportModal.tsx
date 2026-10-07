@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Bar,
@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Client } from '../types/client';
+import { Pagination } from './Pagination';
+import { usePagination } from '../hooks/usePagination';
 import { isEnvioGestionadoServientrega, safeText } from '../utils/clientHelpers';
 import {
   getReportPeriod,
@@ -100,12 +102,17 @@ interface EnviosReportModalProps {
   clients: Client[];
   isOpen: boolean;
   onClose: () => void;
+  onOpenClient: (client: Client) => void;
+  isClientOpen: boolean;
 }
 
-export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, isOpen, onClose }) => {
+export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, isOpen, onClose, onOpenClient, isClientOpen }) => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [grouping, setGrouping] = useState<ReportGrouping>('month');
+  const [selectedPeriodKey, setSelectedPeriodKey] = useState('');
+  const [onlyPlatform, setOnlyPlatform] = useState(false);
+  const detailRef = useRef<HTMLDivElement>(null);
 
   const filteredClients = useMemo(() => {
     const hasDateRange = Boolean(dateFrom || dateTo);
@@ -158,9 +165,23 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
 
   const chartData = periodData.slice(-24);
   const groupingMeta = REPORT_GROUPING_META[grouping];
+  const selectedPeriod = periodData.find(period => period.key === selectedPeriodKey);
+  const detailClients = useMemo(() => filteredClients.filter(client => {
+    if (onlyPlatform && !isEnvioGestionadoServientrega(client)) return false;
+    if (!selectedPeriod) return true;
+    const createdAt = parseReportDate(client.created);
+    return createdAt !== null && getReportPeriod(createdAt, grouping).key === selectedPeriod.key;
+  }), [filteredClients, grouping, selectedPeriod, onlyPlatform]);
+  const pagination = usePagination(detailClients, JSON.stringify([dateFrom, dateTo, grouping, selectedPeriod?.key, onlyPlatform]));
+
+  const selectPeriod = (key: string, platformOnly = false) => {
+    setSelectedPeriodKey(key);
+    setOnlyPlatform(platformOnly);
+    detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   useEffect(() => {
-    if (!isOpen) return undefined;
+    if (!isOpen || isClientOpen) return undefined;
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -174,13 +195,13 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, isClientOpen, onClose]);
 
   if (!isOpen) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[160] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200 sm:p-6"
+      className={`fixed inset-0 z-[160] bg-slate-50 ${isClientOpen ? 'invisible pointer-events-none' : ''}`}
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -189,7 +210,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
       <section
         aria-label="Reporte de envíos"
         aria-modal="true"
-        className="flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-[28px] bg-slate-50 shadow-2xl ring-1 ring-black/10"
+        className="flex h-[100dvh] w-full flex-col overflow-hidden bg-slate-50"
         role="dialog"
       >
         <header className="relative shrink-0 overflow-hidden bg-gradient-to-br from-black via-zinc-900 to-zinc-800 px-5 pb-7 pt-5 sm:px-7">
@@ -222,13 +243,15 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
             dateFrom={dateFrom}
             dateTo={dateTo}
             grouping={grouping}
-            onDateFromChange={setDateFrom}
-            onDateToChange={setDateTo}
-            onGroupingChange={setGrouping}
+            onDateFromChange={(value) => { setDateFrom(value); setSelectedPeriodKey(''); }}
+            onDateToChange={(value) => { setDateTo(value); setSelectedPeriodKey(''); }}
+            onGroupingChange={(value) => { setGrouping(value); setSelectedPeriodKey(''); }}
             onReset={() => {
               setDateFrom('');
               setDateTo('');
               setGrouping('month');
+              setSelectedPeriodKey('');
+              setOnlyPlatform(false);
             }}
           />
 
@@ -241,7 +264,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               value={summary.total.toLocaleString('es-CO')}
             />
             <MetricCard
-              detail="Con estado ENVIO_GESTIONADO_SERVIENTREGA."
+              detail="Envíos identificados como gestionados desde la plataforma."
               icon={CheckCircle2}
               iconClassName="bg-emerald-50 text-emerald-600"
               label="Gestionados plataforma"
@@ -273,9 +296,10 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                   </div>
                   <p className="mt-1 text-[11px] font-medium text-slate-500">
                     {periodData.length > chartData.length
-                      ? `La gráfica muestra las últimas ${chartData.length} agrupaciones; el detalle contiene todo el rango.`
+                      ? `La gráfica muestra las últimas ${chartData.length} agrupaciones; puedes elegir cualquier período en el listado.`
                       : 'Datos agrupados por fecha de creación dentro del rango seleccionado.'}
                   </p>
+                  <p className="mt-1 text-xs font-semibold text-indigo-600">Haz clic en una barra para ver sus envíos. La barra verde muestra los gestionados desde la plataforma.</p>
                 </div>
                 <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
                   {periodData.length} {groupingMeta.plural}
@@ -306,8 +330,8 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                         labelStyle={{ color: '#334155', fontWeight: 800 }}
                       />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                      <Bar dataKey="envios" fill="#334155" name="Envíos registrados" radius={[7, 7, 0, 0]} />
-                      <Bar dataKey="gestionadosPlataforma" fill="#10b981" name="Gestionados plataforma" radius={[7, 7, 0, 0]} />
+                      <Bar dataKey="envios" fill="#334155" name="Envíos registrados" radius={[7, 7, 0, 0]} cursor="pointer" onClick={(_, index) => selectPeriod(chartData[index].key)} />
+                      <Bar dataKey="gestionadosPlataforma" fill="#10b981" name="Gestionados plataforma" radius={[7, 7, 0, 0]} cursor="pointer" onClick={(_, index) => selectPeriod(chartData[index].key, true)} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -332,44 +356,73 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                   style={{ width: `${Math.min(Math.max(summary.managementRate, 0), 100)}%` }}
                 />
               </div>
-              <p className="mt-3 text-[10px] font-bold text-slate-400">El indicador usa únicamente el estado de Servientrega solicitado.</p>
+              <p className="mt-3 text-[11px] text-slate-500">Las fechas corresponden a la creación del registro, no a la generación de la guía: esa fecha no está disponible.</p>
             </aside>
           </div>
 
-          {periodData.length > 0 && (
-            <div className="mt-5 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 sm:px-5">
+            <div ref={detailRef} className="mt-5 scroll-mt-4 overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-5">
                 <div>
-                  <h3 className="text-sm font-black text-slate-800">Detalle {groupingMeta.label.toLowerCase()}</h3>
-                  <p className="mt-1 text-[11px] font-medium text-slate-500">La gestión se identifica con el estado de plataforma.</p>
+                  <h3 className="text-sm font-black text-slate-800">Envíos y guías · {selectedPeriod?.label || 'Todo el rango'}</h3>
+                  <p role="status" className="mt-1 text-xs text-slate-500">{detailClients.length} registros{onlyPlatform ? ' gestionados desde la plataforma' : ''}. Abre un caso para consultar toda su información.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-xs font-semibold text-slate-600">
+                    Período
+                    <select aria-label="Período de los envíos" className="ml-2 rounded-lg border border-slate-200 p-2" value={selectedPeriod?.key || ''} onChange={event => setSelectedPeriodKey(event.target.value)}>
+                      <option value="">Todo el rango</option>
+                      {[...periodData].reverse().map(period => <option key={period.key} value={period.key}>{period.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
+                    <input type="checkbox" checked={onlyPlatform} onChange={event => setOnlyPlatform(event.target.checked)} />
+                    Solo gestionados plataforma
+                  </label>
                 </div>
               </div>
-              <div className="custom-scrollbar max-h-[260px] overflow-auto">
-                <table className="min-w-[650px] w-full text-left">
+              <div className="custom-scrollbar overflow-x-auto">
+                <table className="min-w-[1000px] w-full text-left">
                   <thead className="sticky top-0 bg-slate-50/95 text-[10px] font-black uppercase tracking-wider text-slate-400 backdrop-blur">
                     <tr>
-                      <th className="px-4 py-3 sm:px-5">{groupingMeta.singular}</th>
-                      <th className="px-4 py-3 text-right">Envíos</th>
-                      <th className="px-4 py-3 text-right">Gestionados</th>
-                      <th className="px-4 py-3 text-right sm:px-5">Tasa</th>
+                      <th className="px-4 py-3">Cliente / contacto</th>
+                      <th className="px-4 py-3">Creación del registro</th>
+                      <th className="px-4 py-3">Origen / dirección</th>
+                      <th className="px-4 py-3">Guía de ida</th>
+                      <th className="px-4 py-3">Guía de retorno</th>
+                      <th className="px-4 py-3">Gestión / estado</th>
+                      <th className="px-4 py-3">Caso</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
-                    {[...periodData].reverse().map((period) => (
-                      <tr className="transition-colors hover:bg-slate-50/70" key={period.key}>
-                        <td className="px-4 py-3 font-bold capitalize text-slate-700 sm:px-5">{period.label}</td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-600">{period.envios.toLocaleString('es-CO')}</td>
-                        <td className="px-4 py-3 text-right font-bold text-emerald-600">{period.gestionadosPlataforma.toLocaleString('es-CO')}</td>
-                        <td className="px-4 py-3 text-right sm:px-5">
-                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-black text-indigo-600">{formatPercent(period.porcentajeGestionado)}</span>
+                    {pagination.items.map((client) => (
+                      <tr className="transition-colors hover:bg-slate-50/70" key={client.row_number}>
+                        <td className="px-4 py-3 text-slate-700">
+                          <p className="font-bold">{safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}</p>
+                          <p className="mt-1 text-xs">{safeText(client.guia_telefono) || safeText(client.whatsapp) || 'Sin teléfono'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-600">{parseReportDate(client.created)?.toLocaleString('es-CO') || 'Sin fecha'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600">
+                          <p className="font-semibold">{safeText(client.guia_ciudad) || safeText(client.ciudad) || 'Sin ciudad'}</p>
+                          <p>{safeText(client.guia_departamento_estado)}</p>
+                          <p>{safeText(client.guia_direccion) || 'Sin dirección'}</p>
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">{safeText(client.guia_numero_ida) || 'Sin número registrado'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{safeText(client.guia_numero_retorno) || 'Sin número registrado'}</td>
+                        <td className="px-4 py-3 text-xs">
+                          <p className={isEnvioGestionadoServientrega(client) ? 'font-bold text-emerald-700' : 'text-slate-500'}>{isEnvioGestionadoServientrega(client) ? 'Gestionado plataforma' : 'Otra gestión / pendiente'}</p>
+                          <p className="mt-1 text-slate-500">{safeText(client.estado_envio) || safeText(client.estado_etapa) || 'Sin estado'}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button type="button" onClick={() => onOpenClient(client)} aria-label={`Abrir caso de ${safeText(client.guia_nombre_completo) || safeText(client.nombre) || client.row_number}`} className="whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">Abrir caso</button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {!detailClients.length && <p className="p-8 text-center text-sm text-slate-500">No hay envíos para esta selección.</p>}
               </div>
+              <Pagination {...pagination} />
             </div>
-          )}
         </div>
       </section>
     </div>,

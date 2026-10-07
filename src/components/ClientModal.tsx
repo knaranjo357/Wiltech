@@ -31,6 +31,7 @@ interface ClientModalProps {
   onClose: () => void;
   client: Client | null;
   onUpdate: (client: Partial<Client>) => Promise<boolean>;
+  initialTab?: TabID;
 }
 
 type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolean' | 'sede';
@@ -76,7 +77,7 @@ const TABS: { id: TabID; label: string; icon: React.ComponentType<any> }[] = [
   { id: 'chat', label: 'Chat', icon: MessageCircle },
 ];
 
-export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, client, onUpdate }) => {
+export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, client, onUpdate, initialTab = 'general' }) => {
   const { config } = useCountryConfig();
   const canRepair = canAccessCountryPage('reparaciones', AuthService.getCurrentUser()?.role, config);
   const shouldRender = Boolean(isOpen && client);
@@ -94,10 +95,10 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   // Init logic
   useEffect(() => {
     if (!shouldRender) return;
-    setActiveTab('general');
+    setActiveTab(initialTab);
     setIsEditing(false);
     setEditData(c);
-  }, [shouldRender, c]);
+  }, [shouldRender, c, initialTab]);
 
   useEffect(() => {
     if (!shouldRender || !c.row_number || !canRepair) return;

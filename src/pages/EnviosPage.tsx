@@ -653,6 +653,8 @@ export const EnviosPage: React.FC = () => {
         clients={clients}
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
+        onOpenClient={setViewClient}
+        isClientOpen={!!viewClient}
       />
       )}
       <ClientModal
@@ -660,6 +662,7 @@ export const EnviosPage: React.FC = () => {
         onClose={() => setViewClient(null)}
         client={viewClient}
         onUpdate={onUpdate}
+        initialTab={showReportModal ? 'logistica' : 'general'}
       />
     </div>
   );
