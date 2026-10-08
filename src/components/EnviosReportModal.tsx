@@ -85,7 +85,7 @@ const parseReportDate = (raw: unknown): Date | null => {
 
 const MetricCard = ({ icon: Icon, label, value, detail, iconClassName }: MetricCardProps) => (
   <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex flex-col-reverse items-start justify-between gap-2 sm:flex-row sm:gap-3">
       <div>
         <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
         <p className="mt-2 text-3xl font-black tracking-tight text-slate-900">{value}</p>
@@ -201,7 +201,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-[160] bg-slate-50 ${isClientOpen ? 'invisible pointer-events-none' : ''}`}
+      className={`wt-shipping-report fixed inset-0 z-[160] bg-slate-50 ${isClientOpen ? 'invisible pointer-events-none' : ''}`}
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -213,16 +213,16 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
         className="flex h-[100dvh] w-full flex-col overflow-hidden bg-slate-50"
         role="dialog"
       >
-        <header className="relative shrink-0 overflow-hidden bg-gradient-to-br from-black via-zinc-900 to-zinc-800 px-5 pb-7 pt-5 sm:px-7">
+        <header className="relative shrink-0 overflow-hidden bg-gradient-to-br from-black via-zinc-900 to-zinc-800 p-4 sm:px-7 sm:pb-7 sm:pt-5">
           <div className="absolute -right-8 -top-10 h-44 w-44 rounded-full bg-indigo-400/20 blur-3xl" />
           <div className="absolute bottom-0 left-1/3 h-20 w-56 rounded-full bg-white/5 blur-3xl" />
           <div className="relative flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-lg shadow-black/20">
+              <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-white shadow-lg shadow-black/20 sm:flex">
                 <BarChart3 className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200">Control logístico</p>
+                <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 sm:block">Control logístico</p>
                 <h2 className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">Reporte de envíos</h2>
                 <p className="mt-1 text-xs font-medium text-slate-300">Actividad registrada y gestiones realizadas desde la plataforma.</p>
               </div>
@@ -255,7 +255,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
             }}
           />
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <MetricCard
               detail="Registros que hoy pertenecen al flujo de logística."
               icon={Truck}
@@ -343,7 +343,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               )}
             </div>
 
-            <aside className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
+            <aside className="hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm xl:block">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">
                 <CheckCircle2 className="h-5 w-5" />
               </div>
@@ -365,11 +365,12 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Envíos y guías · {selectedPeriod?.label || 'Todo el rango'}</h3>
                   <p role="status" className="mt-1 text-xs text-slate-500">{detailClients.length} registros{onlyPlatform ? ' gestionados desde la plataforma' : ''}. Abre un caso para consultar toda su información.</p>
+                  <p className="mt-1 text-xs text-slate-500">Se usa la fecha de creación del registro; la fecha de generación de la guía no está disponible.</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <label className="text-xs font-semibold text-slate-600">
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto">
+                  <label className="flex w-full min-w-0 flex-col gap-2 text-xs font-semibold text-slate-600 sm:w-auto sm:flex-row sm:items-center">
                     Período
-                    <select aria-label="Período de los envíos" className="ml-2 rounded-lg border border-slate-200 p-2" value={selectedPeriod?.key || ''} onChange={event => setSelectedPeriodKey(event.target.value)}>
+                    <select aria-label="Período de los envíos" className="rounded-lg border border-slate-200 p-2" value={selectedPeriod?.key || ''} onChange={event => setSelectedPeriodKey(event.target.value)}>
                       <option value="">Todo el rango</option>
                       {[...periodData].reverse().map(period => <option key={period.key} value={period.key}>{period.label}</option>)}
                     </select>
@@ -380,7 +381,26 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                   </label>
                 </div>
               </div>
-              <div className="custom-scrollbar overflow-x-auto">
+              <div className="divide-y divide-slate-100 md:hidden">
+                {pagination.items.map(client => (
+                  <article key={client.row_number} className="space-y-3 p-4">
+                    <div>
+                      <h4 className="break-words text-sm font-bold text-slate-900">{safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}</h4>
+                      <p className="mt-1 text-xs text-slate-500">{safeText(client.guia_telefono) || safeText(client.whatsapp) || 'Sin teléfono'}</p>
+                      <p className={`mt-1 text-xs ${isEnvioGestionadoServientrega(client) ? 'font-semibold text-emerald-700' : 'text-slate-500'}`}>{isEnvioGestionadoServientrega(client) ? 'Gestionado plataforma' : 'Otra gestión / pendiente'}</p>
+                      <p className="mt-1 text-xs text-slate-500">{safeText(client.estado_envio) || safeText(client.estado_etapa) || 'Sin estado'}</p>
+                    </div>
+                    <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs">
+                      <div className="min-w-0"><dt className="text-slate-500">Guía de ida</dt><dd className="mt-1 break-all font-mono font-semibold">{safeText(client.guia_numero_ida) || 'Sin número'}</dd></div>
+                      <div className="min-w-0"><dt className="text-slate-500">Guía de retorno</dt><dd className="mt-1 break-all font-mono font-semibold">{safeText(client.guia_numero_retorno) || 'Sin número'}</dd></div>
+                      <div className="col-span-2"><dt className="text-slate-500">Origen / dirección</dt><dd className="mt-1 break-words">{[safeText(client.guia_ciudad) || safeText(client.ciudad), safeText(client.guia_departamento_estado), safeText(client.guia_direccion)].filter(Boolean).join(' · ') || 'Sin dirección'}</dd></div>
+                      <div className="col-span-2"><dt className="text-slate-500">Creación del registro</dt><dd className="mt-1">{parseReportDate(client.created)?.toLocaleString('es-CO') || 'Sin fecha'}</dd></div>
+                    </dl>
+                    <button type="button" onClick={() => onOpenClient(client)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700">Abrir caso</button>
+                  </article>
+                ))}
+              </div>
+              <div className="custom-scrollbar hidden overflow-x-auto md:block">
                 <table className="min-w-[1000px] w-full text-left">
                   <thead className="sticky top-0 bg-slate-50/95 text-[10px] font-black uppercase tracking-wider text-slate-400 backdrop-blur">
                     <tr>
@@ -419,8 +439,8 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                     ))}
                   </tbody>
                 </table>
-                {!detailClients.length && <p className="p-8 text-center text-sm text-slate-500">No hay envíos para esta selección.</p>}
               </div>
+              {!detailClients.length && <p className="p-8 text-center text-sm text-slate-500">No hay envíos para esta selección.</p>}
               <Pagination {...pagination} />
             </div>
         </div>

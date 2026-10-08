@@ -142,6 +142,7 @@ export const AgentePage: React.FC = () => {
   const country = AuthService.getPaisSede();
   const [documentOpen, setDocumentOpen] = useState(false);
   const [pricesOpen, setPricesOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [documentView, setDocumentView] = useState<'preview' | 'text'>('preview');
   const [sectionDisplay, setSectionDisplay] = useState<{ expanded: boolean; revision: number }>({ expanded: false, revision: 0 });
   const [activeTab, setActiveTab] = useState<AgentKey>("wiltech");
@@ -391,8 +392,8 @@ export const AgentePage: React.FC = () => {
   };
 
   return (
-    <div className="page-container min-h-screen space-y-5 pb-28 text-slate-900">
-      <div className="pointer-events-none absolute right-[-8%] top-[-5%] h-96 w-96 rounded-full bg-slate-900/[0.035] blur-3xl" />
+    <div className="page-container wt-agent-page min-w-0 min-h-screen space-y-4 sm:space-y-5 pb-28 text-slate-900">
+      <div className="pointer-events-none absolute right-0 top-0 h-96 w-96 max-w-full rounded-full bg-slate-900/[0.035] blur-3xl" />
 
       <div className="fixed left-1/2 top-20 z-[80] flex w-full max-w-md -translate-x-1/2 flex-col gap-2 px-4 pointer-events-none">
         {removedSection?.key === activeTab && (
@@ -433,7 +434,7 @@ export const AgentePage: React.FC = () => {
         )}
       </div>
 
-      <header className="header-bar">
+      <header className="header-bar max-lg:static">
         <div className="flex w-full flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white shadow-lg shadow-slate-900/15">
@@ -474,7 +475,7 @@ export const AgentePage: React.FC = () => {
               ) : (
                 <Save className="h-4 w-4" />
               )}
-              <span>{current.saving ? "Guardando" : "Guardar cambios"}</span>
+              <span>{current.saving ? "Guardando" : <>Guardar<span className="hidden sm:inline"> cambios</span></>}</span>
               <span className="hidden items-center gap-1 rounded-md bg-white/10 px-1.5 py-0.5 text-[9px] text-white/70 lg:inline-flex">
                 <Command className="h-2.5 w-2.5" />S
               </span>
@@ -484,12 +485,12 @@ export const AgentePage: React.FC = () => {
       </header>
 
       <div className="grid items-start gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
-        <aside className="space-y-4 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto custom-scrollbar">
+        <aside className="min-w-0 space-y-3 lg:space-y-4 lg:sticky lg:top-6 lg:max-h-[calc(100dvh-3rem)] lg:overflow-y-auto custom-scrollbar">
           <section className="card p-2">
             <div className="px-3 pb-2 pt-3">
               <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Agentes disponibles</p>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+            <div className="grid min-w-0 grid-cols-2 gap-2 pb-1 sm:grid-cols-4 lg:grid-cols-1">
               {TABS.map((tab) => {
                 const state = agents[tab.key];
                 const active = tab.key === activeTab;
@@ -499,19 +500,19 @@ export const AgentePage: React.FC = () => {
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
                     aria-current={active ? "page" : undefined}
-                    className={`group min-w-[210px] rounded-xl border p-3 text-left transition lg:min-w-0 ${
+                    className={`wt-agent-tab group min-w-0 rounded-xl border p-2.5 text-left transition lg:p-3 ${
                       active
                         ? "border-slate-950 bg-slate-950 text-white shadow-lg shadow-slate-900/15"
                         : "border-transparent bg-white text-slate-700 hover:border-slate-200 hover:bg-slate-50"
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${active ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500 group-hover:bg-white"}`}>
+                    <div className="flex items-center gap-2 lg:items-start lg:gap-3">
+                      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg lg:h-9 lg:w-9 ${active ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500 group-hover:bg-white"}`}>
                         {tab.icon}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="flex items-center justify-between gap-2">
-                          <strong className="block text-sm font-extrabold">{tab.label}</strong>
+                          <strong className="block break-words text-xs font-bold lg:text-sm lg:font-extrabold">{tab.label}</strong>
                           {state.loading ? (
                             <RepairLoader variant="icon" />
                           ) : state.dirty ? (
@@ -520,7 +521,7 @@ export const AgentePage: React.FC = () => {
                             <Check className={`h-3.5 w-3.5 ${active ? "text-emerald-300" : "text-emerald-500"}`} />
                           ) : null}
                         </span>
-                        <span className={`mt-0.5 block text-[11px] font-medium ${active ? "text-slate-300" : "text-slate-400"}`}>
+                        <span className={`mt-0.5 hidden text-[11px] font-medium lg:block ${active ? "text-slate-300" : "text-slate-400"}`}>
                           {tab.subtitle}
                         </span>
                       </span>
@@ -532,10 +533,15 @@ export const AgentePage: React.FC = () => {
           </section>
 
           <section className="card p-4">
-            <div className="flex items-center gap-2 text-slate-800">
+            <button type="button" onClick={() => setSummaryOpen(open => !open)} aria-expanded={summaryOpen} aria-controls="agent-document-summary" className="flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-bold text-slate-800 lg:hidden">
+              <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> Documento y herramientas</span>
+              <ChevronDown className={`h-4 w-4 shrink-0 transition ${summaryOpen ? 'rotate-180' : ''}`} />
+            </button>
+            <div className="hidden items-center gap-2 text-slate-800 lg:flex">
               <FileText className="h-4 w-4" />
               <h2 className="text-sm font-extrabold">Resumen del documento</h2>
             </div>
+            <div id="agent-document-summary" className={summaryOpen ? 'block' : 'hidden lg:block'}>
             <div className="mt-4 grid grid-cols-3 gap-2">
               <DocumentMetric label="Secciones" value={current.sections.length} />
               <DocumentMetric label="Palabras" value={wordCount} />
@@ -564,6 +570,7 @@ export const AgentePage: React.FC = () => {
             <div className="mt-3 flex items-center gap-2 text-[11px] font-medium text-slate-400">
               <Clock className="h-3.5 w-3.5" />
               <span>{current.lastSavedAt ? `Guardado a las ${current.lastSavedAt.toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}` : current.dirty ? "Hay cambios pendientes" : current.loadFailed ? "Sin conexión con el documento" : current.loaded ? "Documento sincronizado" : "Pendiente de cargar"}</span>
+            </div>
             </div>
           </section>
           {current.sections.length > 0 && (
@@ -605,8 +612,8 @@ export const AgentePage: React.FC = () => {
               <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700">{tabMeta.icon}</span>
-                    <div>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-700">{tabMeta.icon}</span>
+                    <div className="min-w-0">
                       <h2 className="text-lg font-extrabold leading-tight text-slate-950">Instrucciones de {tabMeta.label}</h2>
                       <p className="text-xs text-slate-500">Organiza las reglas por bloques claros y fáciles de mantener.</p>
                     </div>
@@ -872,7 +879,7 @@ const SectionCard: React.FC<{
           <ChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
         </button>
 
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className={`${open ? 'flex' : 'hidden sm:flex'} wt-section-actions shrink-0 items-center gap-0.5`}>
           <button type="button" onClick={() => onMove(section.id, -1)} disabled={index === 0} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-25" aria-label={`Subir ${title}`}><ArrowUp className="h-4 w-4" /></button>
           <button type="button" onClick={() => onMove(section.id, 1)} disabled={index === total - 1} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-25" aria-label={`Bajar ${title}`}><ArrowDown className="h-4 w-4" /></button>
           <button type="button" onClick={() => onDuplicate(section.id)} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-900" aria-label={`Duplicar ${title}`}><Copy className="h-4 w-4" /></button>
@@ -892,7 +899,7 @@ const SectionCard: React.FC<{
       {open && (
         <div className="border-t border-slate-100 bg-slate-50/70">
           <div className="flex flex-col gap-3 border-b border-slate-200/70 bg-white px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
-            <div className="inline-flex w-fit rounded-xl bg-slate-100 p-1">
+            <div className="wt-editor-modes inline-flex max-w-full rounded-xl bg-slate-100 p-1 sm:w-fit">
               <ModeButton active={mode === "edit"} onClick={() => setMode("edit")} icon={<AlignLeft className="h-3.5 w-3.5" />} label="Editar" />
               <ModeButton active={mode === "preview"} onClick={() => setMode("preview")} icon={<Eye className="h-3.5 w-3.5" />} label="Vista previa" />
               <ModeButton active={mode === "split"} onClick={() => setMode("split")} icon={<Columns2 className="h-3.5 w-3.5" />} label="Dividido" />
@@ -911,7 +918,7 @@ const SectionCard: React.FC<{
           <div className={mode === "split" ? "grid lg:grid-cols-2" : "block"}>
             {(mode === "edit" || mode === "split") && (
               <div className={mode === "split" ? "border-b border-slate-200 lg:border-b-0 lg:border-r" : ""}>
-                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-400">
+                <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-100 bg-slate-50 px-4 py-2 text-[10px] font-medium text-slate-500">
                   <span>Editor Markdown</span>
                   <span>Los cambios se guardan al pulsar Guardar</span>
                 </div>
@@ -920,7 +927,7 @@ const SectionCard: React.FC<{
                   aria-label={`Instrucciones de ${title}`}
                   value={section.content}
                   onChange={(event) => onUpdate(section.id, event.target.value)}
-                  className="wt-agent-editor min-h-[360px] w-full resize-y border-0 bg-white p-5 font-mono text-sm leading-7 text-slate-700 shadow-none outline-none focus:ring-0"
+                  className="wt-agent-editor min-h-[300px] sm:min-h-[360px] w-full resize-y border-0 bg-white p-3 sm:p-5 font-mono text-base sm:text-sm leading-7 text-slate-700 shadow-none outline-none focus:ring-0"
                   placeholder="Escribe las instrucciones del agente en Markdown..."
                   spellCheck={false}
                 />
@@ -933,7 +940,7 @@ const SectionCard: React.FC<{
                   <span>Vista previa del documento</span>
                   <Sparkles className="h-3.5 w-3.5" />
                 </div>
-                <div className="agent-markdown min-h-[320px] p-5 sm:p-6">
+                <div className="agent-markdown min-w-0 min-h-[240px] p-3 sm:min-h-[320px] sm:p-6">
                   <SectionPreview content={previewContent} />
                 </div>
               </div>

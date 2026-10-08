@@ -287,7 +287,7 @@ export const EnviosPage: React.FC = () => {
   };
 
   return (
-    <div className="page-container relative flex flex-col space-y-6 min-h-[calc(100vh-100px)] overflow-hidden">
+    <div className="page-container wt-shipping-page relative flex min-w-0 flex-col space-y-4 sm:space-y-6 min-h-[calc(100vh-100px)]">
       {error && <div role="alert" className="relative z-10 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
       
       {/* Background Decorations */}
@@ -313,8 +313,8 @@ export const EnviosPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-             <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/70 transition-all">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+             <div className="wt-shipping-tabs grid w-full grid-cols-3 bg-slate-100/80 p-1 rounded-xl border border-slate-200/70 sm:w-auto">
                 <button 
                   onClick={() => setCurrentTab('PENDIENTES')}
                   className={`px-5 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all duration-200 flex items-center gap-2
@@ -347,21 +347,21 @@ export const EnviosPage: React.FC = () => {
                 </button>
              </div>
 
-             {!loading && <Pagination {...pagination} />}
-
       {isAdmin && (
             <button
                onClick={() => setShowReportModal(true)}
-               className="flex h-11 items-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-md shadow-slate-900/15 transition hover:bg-slate-800 active:scale-95"
+               className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-slate-900 bg-slate-900 px-4 text-xs font-bold text-white shadow-md shadow-slate-900/15 transition hover:bg-slate-800 active:scale-95 sm:flex-none"
                type="button"
              >
                 <BarChart3 className="w-4 h-4" />
-                <span className="hidden sm:inline">Reportes</span>
+                <span>Reportes</span>
              </button>
             )}
              <button 
                onClick={() => void fetchClients()}
-               className="h-11 w-11 flex items-center justify-center bg-white shadow-sm border border-slate-200 rounded-xl text-slate-500 hover:text-slate-900 hover:border-slate-300 active:scale-95 transition group"
+               aria-label="Actualizar envíos"
+               disabled={loading}
+               className="h-11 w-11 shrink-0 flex items-center justify-center bg-white shadow-sm border border-slate-200 rounded-xl text-slate-500 hover:text-slate-900 hover:border-slate-300 active:scale-95 transition group disabled:opacity-50"
              >
                 {loading ? <RepairLoader variant="icon" /> : <RefreshCw className={`w-5 h-5 ${loading ? '' : 'group-hover:rotate-180 transition-transform duration-500'}`} />}
              </button>
@@ -382,8 +382,8 @@ export const EnviosPage: React.FC = () => {
              />
           </div>
 
-          <div className="flex flex-wrap gap-2.5">
-             <div className="relative group">
+          <div className="wt-shipping-filters grid min-w-0 gap-2.5 sm:grid-cols-2">
+             <div className="relative min-w-0 group">
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none transition-colors">
                   <MapPin size={14} />
                 </div>
@@ -398,7 +398,7 @@ export const EnviosPage: React.FC = () => {
                 <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
              </div>
 
-             <div className="relative group">
+             <div className="relative min-w-0 group">
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-slate-700 transition-colors">
                   <ArrowUpDown size={14} />
                 </div>
@@ -416,6 +416,8 @@ export const EnviosPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {!loading && <Pagination {...pagination} />}
 
       {/* === Logistics List === */}
       <div className="w-full mx-auto space-y-3 pb-20 relative z-10">
@@ -474,10 +476,10 @@ export const EnviosPage: React.FC = () => {
 
                      {/* CENTER: Main info & Shipment Numbers */}
                      <div className="wt-ops-card-main">
-                        <div className="flex items-start justify-between gap-4 mb-3">
-                           <div className="min-w-0 flex-1">
+                        <div className="flex flex-col items-start justify-between gap-3 mb-4 sm:flex-row sm:gap-4">
+                           <div className="wt-shipping-client-summary min-w-0 flex-1">
                                <div className="flex items-center gap-3 mb-1 flex-wrap">
-                                  <h3 className="text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-slate-800 transition-colors truncate">
+                                  <h3 className="break-words text-base sm:text-lg font-black text-slate-900 leading-tight tracking-tight group-hover:text-slate-800 transition-colors">
                                      {safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}
                                   </h3>
                                   <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest shadow-sm border flex items-center gap-1.5
@@ -510,7 +512,7 @@ export const EnviosPage: React.FC = () => {
                                </div>
                            </div>
 
-                           <div className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border flex items-center gap-1.5 whitespace-nowrap ${ui.classes}`}>
+                           <div className={`max-w-full px-2 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1.5 ${ui.classes}`}>
                               <StatusIcon uiKey={ui.key} />
                               {ENVIO_LABELS[ui.key]}
                            </div>
