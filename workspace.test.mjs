@@ -21,6 +21,48 @@ const agentDocument = load('src/utils/agentDocument.ts');
 const countryConfig = load('src/utils/countryConfig.ts');
 const diagnosticFlow = load('src/utils/diagnosticFlow.ts');
 
+test('hosted chat defaults stay isolated by country and allow overrides or disabling', () => {
+  const mexico = 'https://n8n.alliasoft.com/webhook/76edb881-62e9-403d-9b28-dcf419578e1e/chat';
+  const colombia = 'https://n8n.alliasoft.com/webhook/05f7a0cc-521d-464f-8072-663d257bc021/chat';
+  for (const name of ['Mexico', 'México', ' mexico ']) {
+    assert.equal(countryConfig.parseCountryConfig(null, name).chat_webhook_url, mexico);
+  }
+  assert.equal(countryConfig.parseCountryConfig({ modulos: { crm: true } }, 'Colombia').chat_webhook_url, colombia);
+  assert.equal(countryConfig.parseCountryConfig(null, 'Peru').chat_webhook_url, '');
+  assert.equal(countryConfig.parseCountryConfig({ chat_webhook_url: '' }, 'Mexico').chat_webhook_url, '');
+  assert.equal(countryConfig.parseCountryConfig('{"chat_webhook_url":" https://example.com/test/chat?mode=test "}', 'Colombia').chat_webhook_url, 'https://example.com/test/chat?mode=test');
+  for (const value of ['javascript:alert(1)', 'data:text/html,test', '//example.com/chat', 'invalid', 'https://user:secret@example.com/chat', 42]) {
+    assert.throws(() => countryConfig.parseCountryConfig({ chat_webhook_url: value }, 'Mexico'));
+  }
+});
+
+test('root saves the hosted URL in the active country configuration and preserves other fields', async () => {
+  let country = 'Mexico';
+  let root = true;
+  const writes = [];
+  const { CountryService } = load('src/services/countryService.ts', {
+    './apiService': { ApiService: {
+      put: async (endpoint, body) => writes.push({ method: 'PUT', endpoint, body }),
+      post: async (endpoint, body) => writes.push({ method: 'POST', endpoint, body }),
+    } },
+    './authService': { AuthService: { getPaisSede: () => country, isRoot: () => root } },
+    '../utils/countryConfig': countryConfig,
+  });
+  const record = { id: 2, pais_sede: 'Mexico' };
+  const config = countryConfig.parseCountryConfig({ chat_webhook_url: 'https://example.com/mexico/chat', ciudades: ['CDMX'], extra: { preserved: true } }, country);
+  await CountryService.save(record, config);
+  assert.deepEqual(writes[0], { method: 'PUT', endpoint: '/paises', body: { id_pais: 2, pais_sede: 'Mexico', configuracion: config } });
+  country = 'Colombia';
+  await assert.rejects(CountryService.save(record, config));
+  await CountryService.save(null, countryConfig.parseCountryConfig(null, country));
+  assert.equal(writes[1].method, 'POST');
+  assert.equal(writes[1].body.pais_sede, 'Colombia');
+  assert.match(writes[1].body.configuracion.chat_webhook_url, /05f7a0cc/);
+  root = false;
+  await assert.rejects(CountryService.save(null, config));
+  assert.equal(writes.length, 2);
+});
+
 test('assignable roles follow country modules, including shipping and legacy aliases', () => {
   const config = countryConfig.parseCountryConfig({ modulos: { crm: true, conversaciones: true, reparaciones: true } }, 'Mexico');
   for (const role of ['root', 'agenda', 'envios', 'web1', 'diagnosticador']) {

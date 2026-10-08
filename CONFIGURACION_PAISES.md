@@ -11,7 +11,8 @@ Solo root ve «Configurar país». POST crea una configuración cuando no existe
   "configuracion": {
     "version": 1,
     "modulos": { "crm": true, "agenda": true, "envios-colombia": false },
-    "ciudades": []
+    "ciudades": [],
+    "chat_webhook_url": "https://n8n.alliasoft.com/webhook/76edb881-62e9-403d-9b28-dcf419578e1e/chat"
   }
 }
 ```
@@ -19,6 +20,12 @@ Solo root ve «Configurar país». POST crea una configuración cuando no existe
 La pantalla guarda todos los módulos registrados. Las restricciones se aplican también a admin y root; root conserva siempre acceso a la configuración para reactivarlos. Con configuración null se habilitan los módulos existentes, excepto Envíos Colombia fuera de Colombia. Colombia propone Barrancabermeja, Barranquilla, Bogotá, Bucaramanga y Medellín; otros países comienzan sin ciudades hasta configurarlas.
 
 En n8n, POST y PUT deben comprobar el rol root a partir de la identidad autenticada, además de validar los países autorizados. `jwtAuth` por sí solo no comprueba ese rol. Los endpoints de negocio también deben validar los permisos y el país en el servidor; ocultar páginas no bloquea llamadas directas. Estos cambios de servidor no se han ejecutado desde este proyecto.
+
+## Chat de pruebas
+
+Root puede editar `configuracion.chat_webhook_url` en «Configurar país» y probar el enlace antes de guardar. «Probar chat» en Agente IA usa la URL guardada del país activo y abre el chat alojado en n8n en otra pestaña, sin iframe ni widget embebido. El enlace no envía el prompt que aún no se haya guardado.
+
+Si el campo no existe o es null, México (con o sin tilde) utiliza `https://n8n.alliasoft.com/webhook/76edb881-62e9-403d-9b28-dcf419578e1e/chat` y Colombia utiliza `https://n8n.alliasoft.com/webhook/05f7a0cc-521d-464f-8072-663d257bc021/chat`. Otros países comienzan sin enlace. Un valor vacío explícito desactiva el acceso al chat y no se sustituye por el valor inicial. Se aceptan URLs HTTP/HTTPS completas sin credenciales. Los endpoints existentes de países deben conservar y devolver este campo dentro del JSON `configuracion`.
 
 ## Diagramas
 

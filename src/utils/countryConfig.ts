@@ -19,6 +19,7 @@ export interface CountryConfig {
   version: number;
   modulos: Record<string, boolean>;
   ciudades: string[];
+  chat_webhook_url: string;
   [key: string]: unknown;
 }
 export const cityKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -28,6 +29,24 @@ export function cleanCities(cities: string[]): string[] {
   return [...unique.values()];
 }
 export const normalizeCity = (value: string, cities: string[]) => cities.find(city => cityKey(city) === cityKey(value)) ?? value.trim();
+
+const DEFAULT_CHAT_URLS: Record<string, string> = {
+  mexico: 'https://n8n.alliasoft.com/webhook/76edb881-62e9-403d-9b28-dcf419578e1e/chat',
+  colombia: 'https://n8n.alliasoft.com/webhook/05f7a0cc-521d-464f-8072-663d257bc021/chat',
+};
+
+export function normalizeChatWebhookUrl(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('La URL del chat debe ser un texto.');
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    const url = new URL(trimmed);
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error();
+    return url.href;
+  } catch {
+    throw new Error('Introduce una URL completa del chat que comience por https:// o http://, sin credenciales.');
+  }
+}
 
 export function parseCountryConfig(raw: unknown, country: string): CountryConfig {
   if (typeof raw === 'string') raw = raw.trim() ? JSON.parse(raw) : null;
@@ -43,6 +62,7 @@ export function parseCountryConfig(raw: unknown, country: string): CountryConfig
     ...data, version: 1,
     modulos: { ...modules, ...Object.fromEntries(COUNTRY_MODULES.map(module => [module.id, configured ? modules[module.id] === true : module.id !== 'envios-colombia' || country === 'Colombia'])) } as Record<string, boolean>,
     ciudades: cleanCities((data.ciudades as string[] | undefined) ?? defaults),
+    chat_webhook_url: normalizeChatWebhookUrl(data.chat_webhook_url ?? DEFAULT_CHAT_URLS[cityKey(country)] ?? ''),
   };
 }
 

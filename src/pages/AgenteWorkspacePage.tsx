@@ -32,13 +32,14 @@ import {
   X,
   Globe,
   Maximize2,
+  ExternalLink,
 } from 'lucide-react';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgenteService, type AgentSource } from "../services/agenteService";
 import { splitAgentSections } from '../utils/agentSections';
 import { agenteApi } from "../services/diagnosticadorService";
-import { AuthService } from '../services/authService';
+import { useCountryConfig } from '../hooks/useCountryConfig';
 import { ModalPortal } from '../components/ModalPortal';
 import { selectAgentDocument } from '../utils/agentDocument';
 import type { SystemMessage } from '../types/precios';
@@ -139,7 +140,7 @@ const TABS: AgentTab[] = [
 ];
 
 export const AgentePage: React.FC = () => {
-  const country = AuthService.getPaisSede();
+  const { country, config } = useCountryConfig();
   const [documentOpen, setDocumentOpen] = useState(false);
   const [pricesOpen, setPricesOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
@@ -455,6 +456,13 @@ export const AgentePage: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap">
+            {config.chat_webhook_url ? (
+              <a href={config.chat_webhook_url} target="_blank" rel="noopener noreferrer" className="btn-secondary flex-1 sm:flex-none" title={`Abrir el chat de ${country} en n8n`}>
+                <ExternalLink className="h-4 w-4" /> Probar chat
+              </a>
+            ) : (
+              <span className="text-xs text-slate-500">Chat sin configurar para {country}. Solicita la URL a root.</span>
+            )}
             <button
               type="button"
               onClick={handleReload}
