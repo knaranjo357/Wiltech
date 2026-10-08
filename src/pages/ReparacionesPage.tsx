@@ -1,7 +1,7 @@
 import { RepairLoader } from '../components/RepairLoader';
 import { Pagination } from '../components/Pagination';
 import { usePagination } from '../hooks/usePagination';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, RefreshCw, Eye, X, ClipboardCheck, Smartphone, User, MapPin, Wrench, Clock, ShieldCheck, Hash, Edit3, Save, Bot, Send, Image as ImageIcon} from 'lucide-react';
 import { ReparacionService } from '../services/reparacionService';
@@ -11,6 +11,7 @@ import type { FlowData } from '../types/diagnosticador';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Diagnosticador from './Diagnosticador';
+import { parseAgentResponse } from '../utils/agentResponse';
 
 const labelFor = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 
@@ -48,13 +49,13 @@ type DiagnosisItem = {
   key: string;
   label: string;
   type: string;
-  raw: any;
+  raw: unknown;
   visible: string;
   stepId: string | null;
   options: Array<{ label: string; value: string | boolean | number }>;
 };
 
-const visibleAnswer = (value: any, options: DiagnosisItem['options']) => {
+const visibleAnswer = (value: unknown, options: DiagnosisItem['options']) => {
   const values = Array.isArray(value) ? value : [value];
   return values.map(item => {
     const option = options.find(candidate => candidate.value === item);
@@ -95,13 +96,6 @@ const getStepTitle = (repair: Reparacion, flows: FlowData[]) => {
   return flow?.configuracion.steps.find(step => step.id === repair.paso_actual)?.title || repair.paso_actual || 'Sin definir';
 };
 
-const parseAgentResponse = (response: any): string => {
-  if (!response) return 'No se recibió respuesta del agente.';
-  const value = Array.isArray(response) ? response[0] : response;
-  const text = typeof value === 'string' ? value : value?.respuesta || value?.response || value?.output || value?.text || JSON.stringify(value);
-  return String(text).replace(/\\n/g, '\n');
-};
-
 const getRepairAgentContext = (repair: Reparacion, flows: FlowData[]) => ({
   instruccion: 'Responde como asistente técnico de esta reparación. Usa toda la información disponible y no inventes datos.',
   reparacion: { id: repair.id, numero_orden: repair.numero_orden, id_dispositivo: repair.id_dispositivo, id_diagrama: repair.id_diagrama, diagrama: repair.flow_name, version_diagrama: repair.version_diagrama, estado: repair.estado, estado_diagnostico: repair.estado_diagnostico, paso_actual: getStepTitle(repair, flows), tecnico_asignado: repair.tecnico_asignado, sede: repair.sede, prioridad: repair.prioridad, fecha_ingreso: repair.fecha_ingreso, fecha_promesa: repair.fecha_promesa, fecha_entrega: repair.fecha_entrega },
@@ -119,7 +113,7 @@ export default function ReparacionesPage() {
   const [error, setError] = useState('');
   const [flows, setFlows] = useState<FlowData[]>([]);
   const [editingAnswers, setEditingAnswers] = useState(false);
-  const [answerDraft, setAnswerDraft] = useState<Record<string, any>>({});
+  const [answerDraft, setAnswerDraft] = useState<Record<string, unknown>>({});
   const [answerSaving, setAnswerSaving] = useState(false);
   const [agentOpen, setAgentOpen] = useState(true);
   const [agentMessages, setAgentMessages] = useState<Array<{ sender: 'user' | 'agent'; text: string }>>([]);
@@ -156,15 +150,18 @@ export default function ReparacionesPage() {
 
   const pagination = usePagination(filtered, search);
 
+  const initializedSelection = useRef<{ id: number; flows: FlowData[] } | null>(null);
   useEffect(() => {
-    if (!selected) return;
+    if (!selected) { initializedSelection.current = null; return; }
+    if (initializedSelection.current?.id === selected.id && initializedSelection.current.flows === flows) return;
+    initializedSelection.current = { id: selected.id, flows };
     setAnswerDraft(Object.fromEntries(getDiagnosisItems(selected, flows).map(item => [item.key, item.raw])));
     setEditingAnswers(false);
     setAgentSessionId('reparacion_' + selected.id + '_' + Date.now());
     setAgentMessages([{ sender: 'agent', text: 'Hola. Ya tengo el contexto completo de esta reparación. Puedes preguntarme por el equipo, la falla, las respuestas del diagnóstico o las evidencias.' }]);
     setAgentInput('');
     setAgentOpen(true);
-  }, [selected?.id, flows]);
+  }, [selected, flows]);
 
   const saveDiagnosticAnswers = async () => {
     if (!selected) return;

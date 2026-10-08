@@ -23,7 +23,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { Client } from '../types/client';
 import { Pagination } from './Pagination';
 import { usePagination } from '../hooks/usePagination';
-import { isEnvioGestionadoServientrega, safeText } from '../utils/clientHelpers';
+import { isMexicoEnvioGestionado, mexicoText as safeText } from '../utils/enviosMexico';
 import {
   getReportPeriod,
   isDateWithinReportRange,
@@ -49,7 +49,7 @@ type MetricCardProps = {
 };
 
 const formatPercent = (value: number) =>
-  `${value.toLocaleString('es-CO', { maximumFractionDigits: 1 })}%`;
+  `${value.toLocaleString('es-MX', { maximumFractionDigits: 1 })}%`;
 
 const parseReportDate = (raw: unknown): Date | null => {
   if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? null : raw;
@@ -98,7 +98,7 @@ const MetricCard = ({ icon: Icon, label, value, detail, iconClassName }: MetricC
   </div>
 );
 
-interface EnviosReportModalProps {
+interface EnviosMexicoReportModalProps {
   clients: Client[];
   isOpen: boolean;
   onClose: () => void;
@@ -106,7 +106,7 @@ interface EnviosReportModalProps {
   isClientOpen: boolean;
 }
 
-export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, isOpen, onClose, onOpenClient, isClientOpen }) => {
+export const EnviosMexicoReportModal: React.FC<EnviosMexicoReportModalProps> = ({ clients, isOpen, onClose, onOpenClient, isClientOpen }) => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [grouping, setGrouping] = useState<ReportGrouping>('month');
@@ -125,7 +125,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
 
   const summary = useMemo(() => {
     const total = filteredClients.length;
-    const managedByPlatform = filteredClients.filter(isEnvioGestionadoServientrega).length;
+    const managedByPlatform = filteredClients.filter(isMexicoEnvioGestionado).length;
     const notManagedByPlatform = total - managedByPlatform;
     const managementRate = total ? (managedByPlatform / total) * 100 : 0;
 
@@ -149,7 +149,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
       };
 
       current.envios += 1;
-      if (isEnvioGestionadoServientrega(client)) current.gestionadosPlataforma += 1;
+      if (isMexicoEnvioGestionado(client)) current.gestionadosPlataforma += 1;
       buckets.set(key, current);
     });
 
@@ -167,7 +167,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
   const groupingMeta = REPORT_GROUPING_META[grouping];
   const selectedPeriod = periodData.find(period => period.key === selectedPeriodKey);
   const detailClients = useMemo(() => filteredClients.filter(client => {
-    if (onlyPlatform && !isEnvioGestionadoServientrega(client)) return false;
+    if (onlyPlatform && !isMexicoEnvioGestionado(client)) return false;
     if (!selectedPeriod) return true;
     const createdAt = parseReportDate(client.created);
     return createdAt !== null && getReportPeriod(createdAt, grouping).key === selectedPeriod.key;
@@ -208,7 +208,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
       }}
     >
       <section
-        aria-label="Reporte de envíos"
+        aria-label="Reporte de envíos México · DHL"
         aria-modal="true"
         className="flex h-[100dvh] w-full flex-col overflow-hidden bg-slate-50"
         role="dialog"
@@ -223,8 +223,8 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               </div>
               <div>
                 <p className="hidden text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200 sm:block">Control logístico</p>
-                <h2 className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">Reporte de envíos</h2>
-                <p className="mt-1 text-xs font-medium text-slate-300">Actividad registrada y gestiones realizadas desde la plataforma.</p>
+                <h2 className="mt-1 text-xl font-black tracking-tight text-white sm:text-2xl">Reporte de envíos México · DHL</h2>
+                <p className="mt-1 text-xs font-medium text-slate-300">Actividad y estados registrados.</p>
               </div>
             </div>
             <button
@@ -261,17 +261,17 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               icon={Truck}
               iconClassName="bg-slate-100 text-slate-700"
               label="Envíos registrados"
-              value={summary.total.toLocaleString('es-CO')}
+              value={summary.total.toLocaleString('es-MX')}
             />
             <MetricCard
-              detail="Envíos identificados como gestionados desde la plataforma."
+              detail="Envíos identificados como con estado gestionado registrado."
               icon={CheckCircle2}
               iconClassName="bg-emerald-50 text-emerald-600"
-              label="Gestionados plataforma"
-              value={summary.managedByPlatform.toLocaleString('es-CO')}
+              label="Gestionados registrados"
+              value={summary.managedByPlatform.toLocaleString('es-MX')}
             />
             <MetricCard
-              detail="Proporción de envíos gestionados desde la plataforma."
+              detail="Proporción de envíos con estado gestionado registrado."
               icon={Percent}
               iconClassName="bg-indigo-50 text-indigo-600"
               label="Tasa de gestión"
@@ -282,7 +282,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               icon={ClipboardCheck}
               iconClassName="bg-amber-50 text-amber-600"
               label="Pendientes / otros estados"
-              value={summary.notManagedByPlatform.toLocaleString('es-CO')}
+              value={summary.notManagedByPlatform.toLocaleString('es-MX')}
             />
           </div>
 
@@ -299,7 +299,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                       ? `La gráfica muestra las últimas ${chartData.length} agrupaciones; puedes elegir cualquier período en el listado.`
                       : 'Datos agrupados por fecha de creación dentro del rango seleccionado.'}
                   </p>
-                  <p className="mt-1 text-xs font-semibold text-indigo-600">Haz clic en una barra para ver sus envíos. La barra verde muestra los gestionados desde la plataforma.</p>
+                  <p className="mt-1 text-xs font-semibold text-indigo-600">Haz clic en una barra para ver sus envíos. La barra verde muestra los con estado gestionado registrado.</p>
                 </div>
                 <span className="w-fit rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-500">
                   {periodData.length} {groupingMeta.plural}
@@ -331,7 +331,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                       />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
                       <Bar dataKey="envios" fill="#334155" name="Envíos registrados" radius={[7, 7, 0, 0]} cursor="pointer" onClick={(_, index) => selectPeriod(chartData[index].key)} />
-                      <Bar dataKey="gestionadosPlataforma" fill="#10b981" name="Gestionados plataforma" radius={[7, 7, 0, 0]} cursor="pointer" onClick={(_, index) => selectPeriod(chartData[index].key, true)} />
+                      <Bar dataKey="gestionadosPlataforma" fill="#10b981" name="Gestionados registrados" radius={[7, 7, 0, 0]} cursor="pointer" onClick={(_, index) => selectPeriod(chartData[index].key, true)} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -349,7 +349,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               </div>
               <p className="mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Indicador principal</p>
               <p className="mt-1 text-4xl font-black tracking-tight text-slate-900">{formatPercent(summary.managementRate)}</p>
-              <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">de los envíos registrados ya fueron gestionados desde la plataforma.</p>
+              <p className="mt-2 text-xs font-medium leading-relaxed text-slate-600">de los envíos registrados ya fueron con estado gestionado registrado.</p>
               <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-black to-slate-500 transition-all duration-500"
@@ -364,7 +364,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-5">
                 <div>
                   <h3 className="text-sm font-black text-slate-800">Envíos y guías · {selectedPeriod?.label || 'Todo el rango'}</h3>
-                  <p role="status" className="mt-1 text-xs text-slate-500">{detailClients.length} registros{onlyPlatform ? ' gestionados desde la plataforma' : ''}. Abre un caso para consultar toda su información.</p>
+                  <p role="status" className="mt-1 text-xs text-slate-500">{detailClients.length} registros{onlyPlatform ? ' con estado gestionado registrado' : ''}. Abre un caso para consultar toda su información.</p>
                   <p className="mt-1 text-xs text-slate-500">Se usa la fecha de creación del registro; la fecha de generación de la guía no está disponible.</p>
                 </div>
                 <div className="flex w-full min-w-0 flex-wrap items-center gap-3 sm:w-auto">
@@ -377,7 +377,7 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                   </label>
                   <label className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
                     <input type="checkbox" checked={onlyPlatform} onChange={event => setOnlyPlatform(event.target.checked)} />
-                    Solo gestionados plataforma
+                    Solo gestionados registrados
                   </label>
                 </div>
               </div>
@@ -385,16 +385,16 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                 {pagination.items.map(client => (
                   <article key={client.row_number} className="space-y-3 p-4">
                     <div>
-                      <h4 className="break-words text-sm font-bold text-slate-900">{safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}</h4>
-                      <p className="mt-1 text-xs text-slate-500">{safeText(client.guia_telefono) || safeText(client.whatsapp) || 'Sin teléfono'}</p>
-                      <p className={`mt-1 text-xs ${isEnvioGestionadoServientrega(client) ? 'font-semibold text-emerald-700' : 'text-slate-500'}`}>{isEnvioGestionadoServientrega(client) ? 'Gestionado plataforma' : 'Otra gestión / pendiente'}</p>
-                      <p className="mt-1 text-xs text-slate-500">{safeText(client.estado_envio) || safeText(client.estado_etapa) || 'Sin estado'}</p>
+                      <h4 className="break-words text-sm font-bold text-slate-900">{safeText(client.guia_nombre_completo) || 'No registrado'}</h4>
+                      <p className="mt-1 text-xs text-slate-500">{safeText(client.guia_telefono) || 'No registrado'}</p>
+                      <p className={`mt-1 text-xs ${isMexicoEnvioGestionado(client) ? 'font-semibold text-emerald-700' : 'text-slate-500'}`}>{isMexicoEnvioGestionado(client) ? 'Gestionado registrado' : 'Otra gestión / pendiente'}</p>
+                      <p className="mt-1 text-xs text-slate-500">{safeText(client.estado_envio) || safeText(client.estado_etapa) || 'No registrado'}</p>
                     </div>
                     <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3 text-xs">
-                      <div className="min-w-0"><dt className="text-slate-500">Guía de ida</dt><dd className="mt-1 break-all font-mono font-semibold">{safeText(client.guia_numero_ida) || 'Sin número'}</dd></div>
-                      <div className="min-w-0"><dt className="text-slate-500">Guía de retorno</dt><dd className="mt-1 break-all font-mono font-semibold">{safeText(client.guia_numero_retorno) || 'Sin número'}</dd></div>
-                      <div className="col-span-2"><dt className="text-slate-500">Origen / dirección</dt><dd className="mt-1 break-words">{[safeText(client.guia_ciudad) || safeText(client.ciudad), safeText(client.guia_departamento_estado), safeText(client.guia_direccion)].filter(Boolean).join(' · ') || 'Sin dirección'}</dd></div>
-                      <div className="col-span-2"><dt className="text-slate-500">Creación del registro</dt><dd className="mt-1">{parseReportDate(client.created)?.toLocaleString('es-CO') || 'Sin fecha'}</dd></div>
+                      <div className="min-w-0"><dt className="text-slate-500">Guía de ida</dt><dd className="mt-1 break-all font-mono font-semibold">{safeText(client.guia_numero_ida) || 'No registrado'}</dd></div>
+                      <div className="min-w-0"><dt className="text-slate-500">Guía de retorno</dt><dd className="mt-1 break-all font-mono font-semibold">{safeText(client.guia_numero_retorno) || 'No registrado'}</dd></div>
+                      <div className="col-span-2"><dt className="text-slate-500">Origen / dirección</dt><dd className="mt-1 break-words">{[safeText(client.guia_ciudad), safeText(client.guia_departamento_estado), safeText(client.guia_direccion)].filter(Boolean).join(' · ') || 'No registrado'}</dd></div>
+                      <div className="col-span-2"><dt className="text-slate-500">Creación del registro</dt><dd className="mt-1">{parseReportDate(client.created)?.toLocaleString('es-MX') || 'No registrado'}</dd></div>
                     </dl>
                     <button type="button" onClick={() => onOpenClient(client)} className="min-h-11 w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-700">Abrir caso</button>
                   </article>
@@ -417,23 +417,23 @@ export const EnviosReportModal: React.FC<EnviosReportModalProps> = ({ clients, i
                     {pagination.items.map((client) => (
                       <tr className="transition-colors hover:bg-slate-50/70" key={client.row_number}>
                         <td className="px-4 py-3 text-slate-700">
-                          <p className="font-bold">{safeText(client.guia_nombre_completo) || safeText(client.nombre) || 'Sin nombre'}</p>
-                          <p className="mt-1 text-xs">{safeText(client.guia_telefono) || safeText(client.whatsapp) || 'Sin teléfono'}</p>
+                          <p className="font-bold">{safeText(client.guia_nombre_completo) || 'No registrado'}</p>
+                          <p className="mt-1 text-xs">{safeText(client.guia_telefono) || 'No registrado'}</p>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-600">{parseReportDate(client.created)?.toLocaleString('es-CO') || 'Sin fecha'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600">{parseReportDate(client.created)?.toLocaleString('es-MX') || 'No registrado'}</td>
                         <td className="px-4 py-3 text-xs text-slate-600">
-                          <p className="font-semibold">{safeText(client.guia_ciudad) || safeText(client.ciudad) || 'Sin ciudad'}</p>
-                          <p>{safeText(client.guia_departamento_estado)}</p>
-                          <p>{safeText(client.guia_direccion) || 'Sin dirección'}</p>
+                          <p className="font-semibold">{safeText(client.guia_ciudad) || 'No registrado'}</p>
+                          <p>{safeText(client.guia_departamento_estado) || 'No registrado'}</p>
+                          <p>{safeText(client.guia_direccion) || 'No registrado'}</p>
                         </td>
-                        <td className="px-4 py-3 font-mono text-xs">{safeText(client.guia_numero_ida) || 'Sin número registrado'}</td>
-                        <td className="px-4 py-3 font-mono text-xs">{safeText(client.guia_numero_retorno) || 'Sin número registrado'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{safeText(client.guia_numero_ida) || 'No registrado'}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{safeText(client.guia_numero_retorno) || 'No registrado'}</td>
                         <td className="px-4 py-3 text-xs">
-                          <p className={isEnvioGestionadoServientrega(client) ? 'font-bold text-emerald-700' : 'text-slate-500'}>{isEnvioGestionadoServientrega(client) ? 'Gestionado plataforma' : 'Otra gestión / pendiente'}</p>
-                          <p className="mt-1 text-slate-500">{safeText(client.estado_envio) || safeText(client.estado_etapa) || 'Sin estado'}</p>
+                          <p className={isMexicoEnvioGestionado(client) ? 'font-bold text-emerald-700' : 'text-slate-500'}>{isMexicoEnvioGestionado(client) ? 'Gestionado registrado' : 'Otra gestión / pendiente'}</p>
+                          <p className="mt-1 text-slate-500">{safeText(client.estado_envio) || safeText(client.estado_etapa) || 'No registrado'}</p>
                         </td>
                         <td className="px-4 py-3">
-                          <button type="button" onClick={() => onOpenClient(client)} aria-label={`Abrir caso de ${safeText(client.guia_nombre_completo) || safeText(client.nombre) || client.row_number}`} className="whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">Abrir caso</button>
+                          <button type="button" onClick={() => onOpenClient(client)} aria-label={`Abrir caso de ${safeText(client.guia_nombre_completo) || 'No registrado'}`} className="whitespace-nowrap rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">Abrir caso</button>
                         </td>
                       </tr>
                     ))}

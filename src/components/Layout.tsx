@@ -1,7 +1,7 @@
 import React, { ReactNode, useEffect, useState, useMemo } from "react";
 import { AuthService } from '../services/authService';
 import { useCountryConfig } from '../hooks/useCountryConfig';
-import { canAccessCountryPage } from '../utils/countryConfig';
+import { canAccessCountryPage, cityKey } from '../utils/countryConfig';
 import { useAuth } from "../hooks/useAuth";
 import { SessionReset } from './SessionReset';
 import {
@@ -90,8 +90,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   }, [user?.email]);
 
   const filteredNavItems = useMemo(() => {
-    return navigationItems.filter(item => canAccessCountryPage(item.id, user?.role, config));
-  }, [user, config]);
+    return navigationItems.filter(item => canAccessCountryPage(item.id, user?.role, config))
+      .map(item => item.id === 'envios' && cityKey(activeCountry) === 'mexico' ? { ...item, name: 'Envíos México' } : item);
+  }, [user, config, activeCountry]);
 
   // Agrupar items por grupo
   const groupedItems = useMemo(() => {
@@ -104,8 +105,8 @@ export const Layout: React.FC<LayoutProps> = ({ children, currentPage, onPageCha
   }, [filteredNavItems]);
 
   const currentNavItem = useMemo(
-    () => navigationItems.find((item) => item.id === (currentPage === 'web1' ? 'conversaciones' : currentPage)),
-    [currentPage],
+    () => filteredNavItems.find((item) => item.id === (currentPage === 'web1' ? 'conversaciones' : currentPage)),
+    [currentPage, filteredNavItems],
   );
 
   return (

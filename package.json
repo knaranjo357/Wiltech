@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "test": "node workspace.test.mjs",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.node.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "node workspace.test.mjs && node envios-mexico.test.mjs && node quality.test.mjs",
+    "check": "npm run lint && npm test && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

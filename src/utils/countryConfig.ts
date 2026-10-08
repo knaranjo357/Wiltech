@@ -7,6 +7,7 @@ export const COUNTRY_MODULES = [
   { id: 'web1', page: 'web1', label: 'Conversaciones web' },
   { id: 'asistencia', page: 'asistencia', label: 'Asistencia' },
   { id: 'envios-colombia', page: 'envios', label: 'Envíos Colombia' },
+  { id: 'envios-mexico', page: 'envios', label: 'Envíos México' },
   { id: 'resultados', page: 'resultados', label: 'Resultados' },
   { id: 'reparaciones', page: 'reparaciones', label: 'Reparaciones' },
   { id: 'diagnosticador', page: 'diagnosticador', label: 'Diagnosticador' },
@@ -15,11 +16,27 @@ export const COUNTRY_MODULES = [
   { id: 'usuarios', page: 'usuarios', label: 'Usuarios' },
 ] as const;
 
+export const WHATSAPP_LINE_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+export type WhatsappLineId = typeof WHATSAPP_LINE_IDS[number];
+
+export function normalizeWhatsappLines(value: unknown): WhatsappLineId[] {
+  if (!Array.isArray(value) || value.some(id => !Number.isInteger(id) || !WHATSAPP_LINE_IDS.includes(id))) {
+    throw new Error('Las líneas de WhatsApp deben ser una lista de números del 1 al 15.');
+  }
+  return [...new Set(value as WhatsappLineId[])].sort((a, b) => a - b);
+}
+
+export function selectWhatsappLine(lines: readonly WhatsappLineId[], saved: string | null, preferred: WhatsappLineId = 1): WhatsappLineId | null {
+  const candidate = Number(saved);
+  return lines.find(id => id === candidate) ?? (lines.includes(preferred) ? preferred : lines[0] ?? null);
+}
+
 export interface CountryConfig {
   version: number;
   modulos: Record<string, boolean>;
   ciudades: string[];
   chat_webhook_url: string;
+  whatsapp_lineas: WhatsappLineId[];
   [key: string]: unknown;
 }
 export const cityKey = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLowerCase();
@@ -60,17 +77,23 @@ export function parseCountryConfig(raw: unknown, country: string): CountryConfig
   const defaults = country === 'Colombia' ? ['Barrancabermeja', 'Barranquilla', 'Bogotá', 'Bucaramanga', 'Medellín'] : [];
   return {
     ...data, version: 1,
-    modulos: { ...modules, ...Object.fromEntries(COUNTRY_MODULES.map(module => [module.id, configured ? modules[module.id] === true : module.id !== 'envios-colombia' || country === 'Colombia'])) } as Record<string, boolean>,
+    modulos: { ...modules, ...Object.fromEntries(COUNTRY_MODULES.map(module => {
+      if (module.id === 'envios-mexico') return [module.id, cityKey(country) === 'mexico' && (configured ? modules[module.id] === true : true)];
+      // Mexico uses its own manual DHL workflow, even with a legacy Colombia flag.
+      if (module.id === 'envios-colombia' && cityKey(country) === 'mexico') return [module.id, false];
+      return [module.id, configured ? modules[module.id] === true : module.id !== 'envios-colombia' || country === 'Colombia'];
+    })) } as Record<string, boolean>,
     ciudades: cleanCities((data.ciudades as string[] | undefined) ?? defaults),
     chat_webhook_url: normalizeChatWebhookUrl(data.chat_webhook_url ?? DEFAULT_CHAT_URLS[cityKey(country)] ?? ''),
+    whatsapp_lineas: normalizeWhatsappLines(data.whatsapp_lineas ?? (cityKey(country) === 'mexico' ? [1, 2, 3, 4] : [...WHATSAPP_LINE_IDS])),
   };
 }
 
 export function canAccessCountryPage(page: string, roles: string | undefined, config: CountryConfig): boolean {
   const permissions = (roles ?? '').split(',').map(role => role.trim().toLowerCase());
   if (page === 'paises') return permissions.includes('root');
-  const module = COUNTRY_MODULES.find(module => module.page === page);
-  if (!module || config.modulos[module.id] !== true) return false;
+  const enabled = COUNTRY_MODULES.some(module => module.page === page && config.modulos[module.id] === true);
+  if (!enabled) return false;
   return permissions.includes('root') || permissions.includes('admin') || permissions.includes(page)
     || (page === 'conversaciones' && permissions.includes('web1'))
     || (page === 'reparaciones' && permissions.includes('diagnosticador'));
@@ -80,6 +103,5 @@ export function canAssignCountryRole(role: string, isRoot: boolean, config: Coun
   if (isRoot) return true;
   const normalized = role.trim().toLowerCase();
   if (normalized === 'admin') return true;
-  const module = COUNTRY_MODULES.find(module => module.page === normalized);
-  return !!module && config.modulos[module.id] === true;
+  return COUNTRY_MODULES.some(module => module.page === normalized && config.modulos[module.id] === true);
 }

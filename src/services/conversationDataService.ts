@@ -8,7 +8,7 @@ export const ConversationDataService = {
     const clients = await ClientService.getClients({ force: options.force, ttl: options.maxAge ?? 30_000 });
     return Array.isArray(clients) ? clients : [];
   },
-  patchClient(_patch: Partial<Client>) {
+  patchClient() {
     ApiService.invalidateCache();
   },
 };

@@ -9,6 +9,7 @@ const PreciosPage = lazy(() => import("./pages/PreciosPage").then((module) => ({
 const CRMPage = lazy(() => import("./pages/CRMPage").then((module) => ({ default: module.CRMPage })));
 const AgendaPage = lazy(() => import("./pages/AgendaPage").then((module) => ({ default: module.AgendaPage })));
 const EnviosPage = lazy(() => import("./pages/EnviosPage").then((module) => ({ default: module.EnviosPage })));
+const EnviosMexicoPage = lazy(() => import("./pages/EnviosMexicoPage").then((module) => ({ default: module.EnviosMexicoPage })));
 const Resultados = lazy(() => import("./pages/Resultados/index").then((module) => ({ default: module.Resultados })));
 const WppPage = lazy(() => import("./pages/WppPage").then((module) => ({ default: module.WppPage })));
 const AgentePage = lazy(() => import("./pages/AgenteWorkspacePage").then((module) => ({ default: module.AgentePage })));
@@ -20,8 +21,9 @@ const Diagnosticador = lazy(() => import("./pages/Diagnosticador"));
 const DiagnosticadorAdmin = lazy(() => import("./pages/DiagnosticadorAdmin"));
 const ReparacionesPage = lazy(() => import("./pages/ReparacionesPage"));
 
-import { CountryProvider, useCountryConfig } from './hooks/useCountryConfig';
-import { canAccessCountryPage, COUNTRY_MODULES } from './utils/countryConfig';
+import { useCountryConfig } from './hooks/useCountryConfig';
+import { CountryProvider } from './components/CountryProvider';
+import { canAccessCountryPage, cityKey, COUNTRY_MODULES } from './utils/countryConfig';
 import { AuthService } from './services/authService';
 import { RepairLoader } from './components/RepairLoader';
 const PaisesPage = lazy(() => import('./pages/PaisesPage'));
@@ -38,9 +40,9 @@ const pathToPage = Object.fromEntries(Object.entries(pageToPath).map(([page, pat
 
 function Workspace() {
   const { user } = useAuth();
-  const { config } = useCountryConfig();
+  const { config, country } = useCountryConfig();
   const [currentPage, setCurrentPage] = useState(() => pathToPage[window.location.pathname] ?? 'agenda');
-  const allowedPages = useMemo(() => [...COUNTRY_MODULES.map(module => module.page), 'paises'].filter(page => canAccessCountryPage(page, user?.role, config)), [config, user?.role]);
+  const allowedPages = useMemo(() => [...new Set([...COUNTRY_MODULES.map(module => module.page), 'paises'])].filter(page => canAccessCountryPage(page, user?.role, config)), [config, user?.role]);
   const canOpen = (page: string) => allowedPages.includes(page);
   useEffect(() => {
     const onPop = () => {
@@ -68,13 +70,13 @@ function Workspace() {
     window.history.pushState(null, '', pageToPath[page]);
   };
   const renderPage = () => {
-    if (!canOpen(currentPage)) return <div className="p-8 text-center text-slate-500">No hay módulos disponibles para tu usuario en este país. Contacta a root.</div>;
+    if (!canOpen(currentPage)) return <div className="p-8 text-center text-slate-500">No hay módulos disponibles para tu usuario en este país. Contacta al administrador.</div>;
     switch (currentPage) {
       case 'precios': return <PreciosPage />;
       case 'whatsapp': return <WppPage />;
       case 'crm': return <CRMPage />;
       case 'agenda': return <AgendaPage />;
-      case 'envios': return <EnviosPage />;
+      case 'envios': return cityKey(country) === 'mexico' ? <EnviosMexicoPage /> : <EnviosPage />;
       case 'resultados': return <Resultados />;
       case 'agente': return <AgentePage />;
       case 'conversaciones': return <ConversacionesPage onOpenWeb={() => handlePageChange('web1')} />;

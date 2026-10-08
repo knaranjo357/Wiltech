@@ -34,17 +34,17 @@ export const flowApi = {
 
 export const agenteApi = {
   getSystemMessage: async (options: ReadOptions = {}) => {
-    const response = await ApiService.get<any[]>('/diagnosticador/system_message_agente', { ttl: 60_000, ...options });
+    const response = await ApiService.get<unknown>('/diagnosticador/system_message_agente', { ttl: 60_000, ...options });
     const prompt = selectAgentDocument(response, AuthService.getPaisSede()).prompt;
     if (!prompt) throw new Error('No se recibió el prompt de diagnóstico para el país activo.');
     return prompt;
   },
   updateSystemMessage: async (data: { row_number: number, system_message: string, pais_sede: string }) => {
     validatePromptIdentity(data, AuthService.getPaisSede());
-    return ApiService.put<any>('/diagnosticador/system_message_agente', data);
+    return ApiService.put<unknown>('/diagnosticador/system_message_agente', data);
   },
-  chat: async (payload: { mensaje: string, sessionId: string, historial: any[], informacion_contexto: any }) => {
-    return ApiService.post<any>('/diagnosticador/agente_diagnosticador', payload);
+  chat: async (payload: { mensaje: string, sessionId: string, historial: unknown[], informacion_contexto: unknown }) => {
+    return ApiService.post<unknown>('/diagnosticador/agente_diagnosticador', payload);
   }
 };
 
@@ -63,6 +63,8 @@ export const equiposSegundaApi = {
   }
 };
 
+type DiagnosticRepairRow = Partial<Diagnostico> & { estado_diagnostico?: Diagnostico['estado'] };
+
 export const diagnosticoApi = {
   create: async (data: { id_reparacion?: number; id_diagrama: number; flow_name: string }): Promise<Diagnostico> => {
     const payload = {
@@ -73,8 +75,8 @@ export const diagnosticoApi = {
       estado_diagnostico: 'en_progreso',
     };
     const repair = data.id_reparacion
-      ? await ApiService.put<any>('/reparaciones', payload)
-      : await ApiService.post<any>('/reparaciones', payload);
+      ? await ApiService.put<DiagnosticRepairRow | DiagnosticRepairRow[]>('/reparaciones', payload)
+      : await ApiService.post<DiagnosticRepairRow | DiagnosticRepairRow[]>('/reparaciones', payload);
     const row = Array.isArray(repair) ? repair[0] : repair;
     if (!row?.id) {
       throw new Error(data.id_reparacion
@@ -85,8 +87,8 @@ export const diagnosticoApi = {
       ...row,
       id: row.id,
       id_reparacion: row.id,
-      id_diagrama: row.id_diagrama,
-      flow_name: row.flow_name,
+      id_diagrama: row.id_diagrama ?? data.id_diagrama,
+      flow_name: row.flow_name ?? data.flow_name,
       estado: row.estado_diagnostico || 'en_progreso',
       respuestas: row.respuestas || {},
       multimedia: row.multimedia || [],
@@ -104,8 +106,11 @@ export const diagnosticoApi = {
   upload: async (file: File, type: string): Promise<{ imagen_url: string }> => {
     const form = new FormData();
     form.append('upload_file', file);
-    const safeFilename = file.name.normalize('NFD').replace(/[^\x00-\x7F]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
-    return ApiService.postFile<{ imagen_url: string }>('/upload_file', form, { type, filename: safeFilename });
+    const safeFilename = Array.from(file.name.normalize('NFD')).filter(char => char.charCodeAt(0) <= 127).join('').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const response = await ApiService.postFile<{ imagen_url: string } | { imagen_url: string }[]>('/upload_file', form, { type, filename: safeFilename });
+    const uploaded = Array.isArray(response) ? response[0] : response;
+    if (!uploaded || typeof uploaded.imagen_url !== 'string' || !uploaded.imagen_url) throw new Error('El webhook no devolvió imagen_url');
+    return uploaded;
   },
 
   saveMedia: async (id: number, multimedia: DiagnosticoMultimedia[]): Promise<Diagnostico> =>

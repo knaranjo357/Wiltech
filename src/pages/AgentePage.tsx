@@ -141,7 +141,7 @@ export const AgentePage: React.FC = () => {
         setAgentState(key, { loading: true, error: null });
 
         const tab = TABS.find((t) => t.key === key)!;
-        const data: any = key === 'diagnosticador'
+        const data = key === 'diagnosticador'
           ? await agenteApi.getSystemMessage()
           : await AgenteService.getSystemMessage(tab.source!);
 
@@ -447,7 +447,7 @@ const SectionCard: React.FC<{
   index: number;
   onUpdate: (id: string, val: string) => void;
   onDelete: (id: string) => void;
-}> = ({ section, index, onUpdate, onDelete }) => {
+}> = ({ section, onUpdate, onDelete }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);

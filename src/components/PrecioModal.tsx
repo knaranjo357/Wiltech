@@ -23,10 +23,10 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
 
   // Título seguro (evita undefined)
   const title =
-    (item as any).MODELO ??
-    (item as any).modelo ??
-    (item as any).REFERENCIA ??
-    (item as any).referencia ??
+    item.MODELO ??
+    item.modelo ??
+    item.REFERENCIA ??
+    item.referencia ??
     'Detalle';
 
   // Render de valor a prueba de objetos/undefined
@@ -44,7 +44,7 @@ export const PrecioModal: React.FC<PrecioModalProps> = ({
         <div className="bg-zinc-950 px-5 py-5 text-white sm:px-7">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
-              <h2 className="text-xl font-black tracking-tight truncate">{title}</h2>
+              <h2 className="text-xl font-black tracking-tight truncate">{String(title)}</h2>
               <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-zinc-500 truncate">{categoryName}</p>
             </div>
             <button

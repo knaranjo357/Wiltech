@@ -57,7 +57,7 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
     for (const col of columns) {
       if (!visibleColumns.includes(col)) {
         onToggleColumn(col);
-        // eslint-disable-next-line no-await-in-loop
+        // Serialize column changes to preserve their order.
         await microTick();
       }
     }
@@ -67,7 +67,7 @@ export const ColumnSelector: React.FC<ColumnSelectorProps> = ({
     const current = [...visibleColumns]; // snapshot
     for (const col of current) {
       onToggleColumn(col);
-      // eslint-disable-next-line no-await-in-loop
+      // Serialize column changes to preserve their order.
       await microTick();
     }
   };

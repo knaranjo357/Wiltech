@@ -1,12 +1,12 @@
 import React from 'react';
 import { MapPin } from 'lucide-react';
 
-export const SOURCE_TO_SEDE: Record<string, string> = {
+const SOURCE_TO_SEDE: Record<string, string> = {
   Wiltech: 'Bogotá',
   WiltechBga: 'Bucaramanga',
 };
 
-export const SOURCE_OPTIONS: Array<{ value: string; label: string; hint?: string }> = [
+const SOURCE_OPTIONS: Array<{ value: string; label: string; hint?: string }> = [
   { value: 'Wiltech', label: 'Wiltech', hint: 'Bogotá' },
   { value: 'WiltechBga', label: 'WiltechBga', hint: 'Bucaramanga' },
 ];

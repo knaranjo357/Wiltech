@@ -27,6 +27,12 @@ Root puede editar `configuracion.chat_webhook_url` en «Configurar país» y pro
 
 Si el campo no existe o es null, México (con o sin tilde) utiliza `https://n8n.alliasoft.com/webhook/76edb881-62e9-403d-9b28-dcf419578e1e/chat` y Colombia utiliza `https://n8n.alliasoft.com/webhook/05f7a0cc-521d-464f-8072-663d257bc021/chat`. Otros países comienzan sin enlace. Un valor vacío explícito desactiva el acceso al chat y no se sustituye por el valor inicial. Se aceptan URLs HTTP/HTTPS completas sin credenciales. Los endpoints existentes de países deben conservar y devolver este campo dentro del JSON `configuracion`.
 
+## Líneas de WhatsApp
+
+Root selecciona las líneas visibles (1 a 15) en «Configurar país». Se guardan como `configuracion.whatsapp_lineas`, por ejemplo `[1, 3, 5, 8]`; la cantidad se obtiene de la lista. Si falta el campo o es null, Colombia muestra las 15 líneas y México las primeras cuatro (1, 2, 3 y 4). Otros países conservan las 15 existentes. Una lista vacía oculta todas y no consulta ningún QR. Ocultar una línea no desconecta su sesión en n8n.
+
+WhatsApp conserva la selección por país y solo consulta IDs habilitados, enviando `id_instancia` y `pais_sede`. Si la selección guardada ya no está habilitada, utiliza una línea visible. El backend de países debe conservar y devolver `whatsapp_lineas` dentro de `configuracion`.
+
 ## Diagramas
 
 GET `/wiltech/diagnosticador/diagrama_diagnosticador` lleva `pais_sede`. La aplicación identifica los diagramas por `flow_name` (`diagnostico` o `reparacion`), conservando el ID de cada registro. Para México, los registros 3 y 4 se editan mediante PUT con sus IDs respectivos, `flow_name`, `pais_sede` y `configuracion`. Una configuración null se presenta vacía y editable, sin copiar datos de Colombia. Si falta una fila, se prepara un borrador local y solo se crea al publicar. Las respuestas de creación y actualización deben devolver la fila con ID, flow_name y pais_sede.

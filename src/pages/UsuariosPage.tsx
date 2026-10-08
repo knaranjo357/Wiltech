@@ -113,7 +113,7 @@ export const UsuariosPage: React.FC = () => {
       });
 
       setUsers(sorted);
-    } catch (err) {
+    } catch {
       setError('Error cargando usuarios');
     } finally {
       setLoading(false);

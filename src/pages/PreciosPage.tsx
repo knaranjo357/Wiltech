@@ -17,12 +17,12 @@ import {
 } from 'lucide-react';
 import { PreciosService } from "../services/preciosService";
 import { ApiService } from "../services/apiService";
-import { PrecioItem } from "../types/precios";
+import { PrecioItem, CategoryType } from "../types/precios";
 import { PrecioModal } from "../components/PrecioModal";
 import PreciosSegundaPanel from "../components/PreciosSegundaPanel";
 
 // --- CONFIGURACIÓN VISUAL ---
-const categories = [
+const categories: { name: CategoryType; icon: typeof Smartphone; color: string; gradient: string; image: string }[] = [
   {
     name: "IPHONE",
     icon: Smartphone,
@@ -58,7 +58,7 @@ const categories = [
 ];
 
 /** Helper para formatear moneda y texto */
-const formatCell = (key: string, value: any) => {
+const formatCell = (key: string, value: unknown) => {
   if (value === null || value === undefined || value === "")
     return <span className="text-gray-300">-</span>;
 
@@ -91,7 +91,7 @@ const formatCell = (key: string, value: any) => {
 };
 
 export const PreciosPage: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState<string>(categories[0].name);
+  const [selectedCategory, setSelectedCategory] = useState<CategoryType>(categories[0].name);
   const [precios, setPrecios] = useState<PrecioItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalItem, setModalItem] = useState<PrecioItem | null>(null);
@@ -115,11 +115,11 @@ export const PreciosPage: React.FC = () => {
   }, []);
 
   const fetchPrecios = useCallback(
-    async (category: string) => {
+    async (category: CategoryType) => {
       setLoading(true);
       setPrecios([]);
       try {
-        const data = await PreciosService.getPrecios(category as any);
+        const data = await PreciosService.getPrecios(category);
         // Aseguramos que data sea un array para evitar crashes
         setPrecios(Array.isArray(data) ? data : []);
         if (!Array.isArray(data)) {
@@ -137,7 +137,7 @@ export const PreciosPage: React.FC = () => {
   );
 
   const handleCategorySelect = useCallback(
-    (categoryName: string) => {
+    (categoryName: CategoryType) => {
       setSelectedCategory(categoryName);
       setSearchTerm("");
       fetchPrecios(categoryName);
@@ -160,7 +160,7 @@ export const PreciosPage: React.FC = () => {
     try {
       setSyncingAgent(true);
       // Pasa por ApiService (incluye Bearer token)
-      await ApiService.post<any>("/actualizar-precios-agente", {});
+      await ApiService.post<unknown>("/actualizar-precios-agente", {});
       showSuccess("Precios del agente actualizados correctamente");
     } catch (err) {
       console.error("Error actualizando precios del agente:", err);

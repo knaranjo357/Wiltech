@@ -58,7 +58,7 @@ const isFutureLocal = (d: Date | null) => {
 const getDisplayTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const getDisplayFullDate = (d: Date) => d.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
 
-const formatMsgTime = (val?: string | number) => {
+const formatMsgTime = (val?: string | number | null) => {
   if (!val) return '';
   const d = new Date(typeof val === 'number' && val < 10000000000 ? val * 1000 : val);
   if (Number.isNaN(d.getTime())) return '';
@@ -72,9 +72,9 @@ const formatMsgTime = (val?: string | number) => {
 type DateFilter = 'today' | 'tomorrow' | 'history' | 'custom' | 'future';
 
 const getClientSede = (c: Client): string => {
-  const byAgenda = safeText((c as any).agenda_ciudad_sede);
+  const byAgenda = safeText(c.agenda_ciudad_sede);
   if (byAgenda) return byAgenda;
-  const src = safeText((c as any).source);
+  const src = safeText(c.source);
   if (src && SOURCE_TO_SEDE[src]) return SOURCE_TO_SEDE[src];
   return safeText(c.ciudad);
 };
@@ -238,7 +238,7 @@ export const AgendaPage: React.FC = () => {
     try {
       setLoading(true);
       const data = await ClientService.getAgendaClients({ force });
-      const withValidDate = (Array.isArray(data) ? data : []).filter((c) => Boolean(parseAgendaDate((c as any).fecha_agenda)));
+      const withValidDate = (Array.isArray(data) ? data : []).filter((c) => Boolean(parseAgendaDate(c.fecha_agenda)));
       setClients(withValidDate);
       setError(null);
     } catch (err) {
@@ -297,8 +297,8 @@ export const AgendaPage: React.FC = () => {
     }
 
     try {
-      if (typeof (ClientService as any).updateClient === 'function') {
-        await (ClientService as any).updateClient(payload);
+      if (typeof ClientService.updateClient === 'function') {
+        await ClientService.updateClient(payload);
       } else {
         await countryFetch('/api/clients/update', { 
           method: 'POST', 
@@ -307,7 +307,7 @@ export const AgendaPage: React.FC = () => {
         });
       }
       return true;
-    } catch (e) {
+    } catch {
       setClients(prevClients);
       setViewClient(prevView);
       alert('Error al guardar cambios.');
@@ -365,7 +365,7 @@ export const AgendaPage: React.FC = () => {
 
   const handleToggleAsistencia = async (client: Client, e: React.MouseEvent) => {
     e.stopPropagation();
-    const current = (client as any).asistio_agenda === true;
+    const current = client.asistio_agenda === true;
     await onUpdate({ row_number: client.row_number, asistio_agenda: !current });
   };
 
@@ -385,9 +385,9 @@ export const AgendaPage: React.FC = () => {
   };
 
   const handleOpenClient = (client: Client) => {
-    const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
+    const isWeb1 = safeText(client.source).toLowerCase() === 'web1';
     if (isWeb1) {
-      const webId = safeText((client as any).asignado_a) || safeText(client.whatsapp) || `row_${client.row_number}`;
+      const webId = safeText(client.asignado_a) || safeText(client.whatsapp) || `row_${client.row_number}`;
       setViewClient({ ...client, whatsapp: webId });
     } else {
       setViewClient(client);
@@ -406,7 +406,7 @@ export const AgendaPage: React.FC = () => {
       filtered = filtered.filter(c => 
         normalize(safeText(c.nombre)).includes(q) || 
         normalize(safeText(c.whatsapp)).includes(q) || 
-        normalize(safeText((c as any).asignado_a)).includes(q) || 
+        normalize(safeText(c.asignado_a)).includes(q) ||
         normalize(safeText(c.modelo)).includes(q)
       );
     }
@@ -414,39 +414,39 @@ export const AgendaPage: React.FC = () => {
   }, [clients, selectedSede, deferredSearch]);
 
   const stats = useMemo(() => ({
-    today: filteredClientsBase.filter((c) => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-    tomorrow: filteredClientsBase.filter((c) => isTomorrowLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-    history: filteredClientsBase.filter((c) => isPastLocal(parseAgendaDate((c as any).fecha_agenda))).length,
-    future: filteredClientsBase.filter((c) => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))).length,
+    today: filteredClientsBase.filter((c) => isTodayLocal(parseAgendaDate(c.fecha_agenda))).length,
+    tomorrow: filteredClientsBase.filter((c) => isTomorrowLocal(parseAgendaDate(c.fecha_agenda))).length,
+    history: filteredClientsBase.filter((c) => isPastLocal(parseAgendaDate(c.fecha_agenda))).length,
+    future: filteredClientsBase.filter((c) => isFutureLocal(parseAgendaDate(c.fecha_agenda))).length,
   }), [filteredClientsBase]);
 
 
   const finalDisplayClients = useMemo(() => {
     let filtered = [...filteredClientsBase];
     switch (dateFilter) {
-      case 'today': filtered = filtered.filter(c => isTodayLocal(parseAgendaDate((c as any).fecha_agenda))); break;
-      case 'tomorrow': filtered = filtered.filter(c => isTomorrowLocal(parseAgendaDate((c as any).fecha_agenda))); break;
-      case 'history': filtered = filtered.filter(c => isPastLocal(parseAgendaDate((c as any).fecha_agenda))); break;
-      case 'future': filtered = filtered.filter(c => isFutureLocal(parseAgendaDate((c as any).fecha_agenda))); break;
+      case 'today': filtered = filtered.filter(c => isTodayLocal(parseAgendaDate(c.fecha_agenda))); break;
+      case 'tomorrow': filtered = filtered.filter(c => isTomorrowLocal(parseAgendaDate(c.fecha_agenda))); break;
+      case 'history': filtered = filtered.filter(c => isPastLocal(parseAgendaDate(c.fecha_agenda))); break;
+      case 'future': filtered = filtered.filter(c => isFutureLocal(parseAgendaDate(c.fecha_agenda))); break;
       case 'custom':
         if (customDate) {
           const [y, m, d] = customDate.split('-').map(Number);
           const sel = new Date(y, (m ?? 1) - 1, d ?? 1);
           filtered = filtered.filter(c => {
-            const cd = parseAgendaDate((c as any).fecha_agenda);
+            const cd = parseAgendaDate(c.fecha_agenda);
             return cd && cd.getDate() === sel.getDate() && cd.getMonth() === sel.getMonth() && cd.getFullYear() === sel.getFullYear();
           });
         } else { filtered = []; }
         break;
     }
-    filtered.sort((a, b) => (parseAgendaDate((a as any).fecha_agenda)?.getTime() ?? 0) - (parseAgendaDate((b as any).fecha_agenda)?.getTime() ?? 0));
+    filtered.sort((a, b) => (parseAgendaDate(a.fecha_agenda)?.getTime() ?? 0) - (parseAgendaDate(b.fecha_agenda)?.getTime() ?? 0));
     if (dateFilter === 'history') filtered.reverse();
     return filtered;
   }, [filteredClientsBase, dateFilter, customDate]);
 
   const pagination = usePagination(finalDisplayClients, JSON.stringify([deferredSearch, selectedSede, dateFilter, customDate]));
 
-  const FilterTab = ({ id, label, count, icon: Icon }: any) => {
+  const FilterTab = ({ id, label, count, icon: Icon }: { id: DateFilter; label: string; count: number; icon: typeof Calendar }) => {
     const isActive = dateFilter === id;
     return (
       <button
@@ -483,6 +483,7 @@ export const AgendaPage: React.FC = () => {
       />
 
       <div className="page-container relative overflow-hidden flex flex-col space-y-6 min-h-[calc(100vh-100px)]">
+        {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>}
         
         {/* Background Decorations */}
 
@@ -566,16 +567,16 @@ export const AgendaPage: React.FC = () => {
           <>
             <div className="grid grid-cols-1 gap-3">
               {pagination.items.map((client) => {
-                const dateObj = parseAgendaDate((client as any).fecha_agenda);
-                const attended = (client as any).asistio_agenda === true;
+                const dateObj = parseAgendaDate(client.fecha_agenda);
+                const attended = client.asistio_agenda === true;
                 const isSaving = savingRow === client.row_number;
                 const isEtapaReagendar = safeText(client.estado_etapa).toLowerCase() === 'reagendar';
 
-                const lastMsg = (client as any).last_msg;
-                const lastMsgDate = (client as any).created; 
+                const lastMsg = client.last_msg;
+                const lastMsgDate = client.created;
                 
-                const isWeb1 = safeText((client as any).source).toLowerCase() === 'web1';
-                const contactDisplay = isWeb1 ? (safeText((client as any).asignado_a) || 'Visitante') : formatWhatsApp(safeText(client.whatsapp));
+                const isWeb1 = safeText(client.source).toLowerCase() === 'web1';
+                const contactDisplay = isWeb1 ? (safeText(client.asignado_a) || 'Visitante') : formatWhatsApp(safeText(client.whatsapp));
                 
                 return (
                   <div
@@ -644,7 +645,7 @@ export const AgendaPage: React.FC = () => {
                                     WEB
                                   </span>
                                )}
-                               <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-widest shadow-sm ${getEtapaColor(client.estado_etapa as any)}`}>
+                               <span className={`px-2.5 py-1 rounded-lg text-[9px] font-black border uppercase tracking-widest shadow-sm ${getEtapaColor(client.estado_etapa)}`}>
                                   {safeText(client.estado_etapa).replace(/_/g, ' ')}
                                </span>
                             </div>

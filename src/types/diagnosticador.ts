@@ -15,7 +15,7 @@ export interface FlowStepField {
 export interface MatchCondition {
   op: 'equals' | 'in';
   field: string;
-  value: any;
+  value: unknown;
 }
 
 export interface FlowBranch {
@@ -32,6 +32,7 @@ export interface FlowStepItemField {
 }
 
 export interface FlowStep {
+  position?: { x: number; y: number };
   id: string;
   next?: string;
   type: 'form' | 'decision' | 'repeater' | 'end';
@@ -55,6 +56,7 @@ export interface FlowConfig {
 }
 
 export interface FlowData {
+  steps?: FlowStep[];
   pais_sede?: string;
   isNew?: boolean;
   id: number;

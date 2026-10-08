@@ -176,7 +176,7 @@ export const AgentePage: React.FC = () => {
     try {
       setAgentState(key, { loading: true, error: null, success: false });
       const tab = TABS.find((item) => item.key === key)!;
-      const data: any = key === "diagnosticador"
+      const data = key === "diagnosticador"
         ? await agenteApi.getSystemMessage({ force })
         : await AgenteService.getSystemMessage(tab.source!, { force });
       const document = selectAgentDocument(data, country, key === 'precios');
@@ -461,7 +461,7 @@ export const AgentePage: React.FC = () => {
                 <ExternalLink className="h-4 w-4" /> Probar chat
               </a>
             ) : (
-              <span className="text-xs text-slate-500">Chat sin configurar para {country}. Solicita la URL a root.</span>
+              <span className="text-xs text-slate-500">Chat no disponible para {country}.</span>
             )}
             <button
               type="button"

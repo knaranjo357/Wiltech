@@ -96,10 +96,10 @@ export interface Client {
   guia_numero_ida: Nullable<string>;
   guia_numero_retorno: Nullable<string>;
 
-  asegurado: Nullable<string>;
+  asegurado: Nullable<string | boolean>;
   valor_seguro: Nullable<string | number>;
   created: Nullable<string>;
-  asistio_agenda:Nullable<Boolean>;
+  asistio_agenda:Nullable<boolean>;
   source: Nullable<string>;
   last_msg: Nullable<string>;
   estado_envio: Nullable<string>;

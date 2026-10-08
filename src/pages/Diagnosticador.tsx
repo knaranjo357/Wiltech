@@ -1,5 +1,6 @@
 import { RepairLoader } from '../components/RepairLoader';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { parseAgentResponse as parseChatResponse } from '../utils/agentResponse';
 import { flowApi, agenteApi, diagnosticoApi } from '../services/diagnosticadorService';
 import type { FlowData, FlowStepField, DiagnosticoMultimedia } from '../types/diagnosticador';
 import { ArrowLeft, ArrowRight, Bot, Cpu, CheckCircle2, RotateCcw, AlertCircle, CheckSquare, Square, Send, X, Zap, Upload, Image, Trash2, Pencil, Wrench } from 'lucide-react';
@@ -40,29 +41,6 @@ const CustomModal = ({ isOpen, title, message, onConfirm, onCancel, type = 'conf
   );
 };
 
-// --- Helper to parse API Chat webhook response ---
-const parseChatResponse = (response: any): string => {
-  if (!response) return 'No se recibió respuesta del agente.';
-  let text = '';
-  if (typeof response === 'string') {
-    text = response;
-  } else if (Array.isArray(response) && response.length > 0) {
-    const first = response[0];
-    if (first && typeof first === 'object') {
-      text = first.respuesta || first.response || first.output || first.text || JSON.stringify(first);
-    } else {
-      text = String(first);
-    }
-  } else if (typeof response === 'object') {
-    text = response.respuesta || response.response || response.output || response.text || JSON.stringify(response);
-  } else {
-    text = String(response);
-  }
-
-  // Reemplazar secuencias literales de \n por saltos de línea reales
-  return text.replace(/\\n/g, '\n');
-};
-
 type DiagnosticadorProps = {
   embedded?: boolean;
   processType?: 'diagnostico' | 'reparacion';
@@ -70,6 +48,23 @@ type DiagnosticadorProps = {
   onExit?: () => void;
   onSwitchProcess?: (type: 'diagnostico' | 'reparacion') => void;
   onRepairLinked?: (id: string) => void;
+};
+
+const getFlowSteps = (flow: FlowData | null) => flow?.steps || flow?.configuracion?.steps || [];
+
+const getVisibleAnswer = (field: FlowStepField | undefined, value: unknown) => {
+  if (field?.type === 'multimedia') {
+    const count = Array.isArray(value) ? value.length : 0;
+    return `${count} archivo${count === 1 ? '' : 's'} adjunto${count === 1 ? '' : 's'}`;
+  }
+  if (field?.type === 'select' || field?.type === 'multi_select') {
+    const values = Array.isArray(value) ? value : [value];
+    return values.map(item => field.options?.find(option => option.value === item)?.label ?? item).join(', ');
+  }
+  if (value === true || value === 'true') return 'Sí';
+  if (value === false || value === 'false') return 'No';
+  if (Array.isArray(value)) return value.join(', ');
+  return value ?? '';
 };
 
 export default function Diagnosticador({ embedded = false, processType = 'diagnostico', initialRepairId, onExit, onSwitchProcess, onRepairLinked }: DiagnosticadorProps) {
@@ -87,7 +82,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [currentStepId, setCurrentStepId] = useState<string | null>(null);
   const [currentFieldIndex, setCurrentFieldIndex] = useState<number>(0);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState(true);
   const [history, setHistory] = useState<Array<{ stepId: string, fieldIndex: number }>>([]);
 
@@ -147,17 +142,17 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
   }, [chatMessages, isChatOpen]);
 
   const getReadableContext = () => {
-    const readable: Record<string, any> = {};
+    const readable: Record<string, unknown> = {};
     if (!activeFlow) return formData;
 
-    const steps = (activeFlow as any).steps || activeFlow.configuracion?.steps || [];
+    const steps = activeFlow.steps || activeFlow.configuracion?.steps || [];
 
     Object.entries(formData).forEach(([key, val]) => {
-      let foundField: any = null;
+      let foundField: FlowStepField | null = null;
 
       for (const step of steps) {
         if (step.fields) {
-          const field = step.fields.find((f: any) => f.key === key);
+          const field = step.fields.find((f) => f.key === key);
           if (field) {
             foundField = field;
             break;
@@ -172,11 +167,11 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
         if (foundField.type === 'select' || foundField.type === 'multi_select') {
           if (Array.isArray(val)) {
             answerText = val.map(v => {
-              const opt = foundField.options?.find((o: any) => o.value === v);
+              const opt = foundField?.options?.find((o) => o.value === v);
               return opt ? opt.label : v;
             }).join(', ');
           } else {
-            const opt = foundField.options?.find((o: any) => o.value === val || (val === true && o.value === 'true') || (val === false && o.value === 'false'));
+            const opt = foundField?.options?.find((o) => o.value === val || (val === true && o.value === 'true') || (val === false && o.value === 'false'));
             if (opt) {
               answerText = opt.label;
             } else if (val === true) {
@@ -200,30 +195,15 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
     return readable;
   };
 
-  const getFieldMeta = (key: string) => {
+  const getFieldMeta = useCallback((key: string) => {
     for (const step of getFlowSteps(activeFlow)) {
       const field = step.fields?.find((item: FlowStepField) => item.key === key);
       if (field) return { field, stepId: step.id };
     }
     return null;
-  };
+  }, [activeFlow]);
 
-  const getVisibleAnswer = (field: FlowStepField | undefined, value: any) => {
-    if (field?.type === 'multimedia') {
-      const count = Array.isArray(value) ? value.length : 0;
-      return `${count} archivo${count === 1 ? '' : 's'} adjunto${count === 1 ? '' : 's'}`;
-    }
-    if (field?.type === 'select' || field?.type === 'multi_select') {
-      const values = Array.isArray(value) ? value : [value];
-      return values.map(item => field.options?.find(option => option.value === item)?.label ?? item).join(', ');
-    }
-    if (value === true || value === 'true') return 'Sí';
-    if (value === false || value === 'false') return 'No';
-    if (Array.isArray(value)) return value.join(', ');
-    return value ?? '';
-  };
-
-  const getDetailedResponses = (data: Record<string, any>) =>
+  const getDetailedResponses = useCallback((data: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(data).map(([key, value]) => {
       const meta = getFieldMeta(key);
       return [key, {
@@ -233,9 +213,9 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
         tipo: meta?.field.type || typeof value,
         step_id: meta?.stepId || null,
       }];
-    }));
+    })), [getFieldMeta]);
 
-  const unpackStoredResponses = (stored: Record<string, any>) =>
+  const unpackStoredResponses = (stored: Record<string, unknown>) =>
     Object.fromEntries(Object.entries(stored).map(([key, value]) => [
       key,
       value && typeof value === 'object' && !Array.isArray(value) && 'valor' in value ? value.valor : value,
@@ -307,11 +287,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
   const closeModal = () => setModal(prev => ({ ...prev, isOpen: false }));
   const openModal = (title: string, message: string, onConfirm: () => void, type: 'confirm' | 'alert' = 'confirm') => setModal({ isOpen: true, title, message, onConfirm, type });
 
-  useEffect(() => {
-    loadFlow();
-  }, [targetFlowName]);
-
-  const loadFlow = async () => {
+  const loadFlow = useCallback(async () => {
     try {
       const data = await flowApi.getAll();
       const availableFlows = data || [];
@@ -323,10 +299,9 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
     } finally {
       setLoading(false);
     }
-  };
+  }, [targetFlowName]);
 
-  const getFlowSteps = (flow: FlowData | null) =>
-    ((flow as any)?.steps || flow?.configuracion?.steps || []);
+  useEffect(() => { void loadFlow(); }, [loadFlow]);
 
   const startDiagnostic = async () => {
     const flow = flows.find(item => String(item.id) === selectedFlowId);
@@ -349,7 +324,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
       setRepairId(linkedRepairId);
       onRepairLinked?.(linkedRepairId);
       setActiveFlow(flow);
-      setFormData(unpackStoredResponses((diagnostic.respuestas || {}) as Record<string, any>));
+      setFormData(unpackStoredResponses((diagnostic.respuestas || {}) as Record<string, unknown>));
       setMediaByField((diagnostic.multimedia || []).reduce<Record<string, DiagnosticoMultimedia[]>>((grouped, media) => {
         if (!grouped[media.field_key]) grouped[media.field_key] = [];
         grouped[media.field_key].push(media);
@@ -367,13 +342,13 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
     }
   };
 
-  const getStep = (id: string | null) => {
+  const getStep = useCallback((id: string | null) => {
     if (!id || !activeFlow) return null;
-    const steps = (activeFlow as any).steps || activeFlow.configuracion?.steps || [];
-    return steps.find((s: any) => s.id === id);
-  };
+    const steps = activeFlow.steps || activeFlow.configuracion?.steps || [];
+    return steps.find((s) => s.id === id);
+  }, [activeFlow]);
 
-  const handleNext = (overriddenFormData?: Record<string, any>) => {
+  const handleNext = (overriddenFormData?: Record<string, unknown>) => {
     if (!currentStepId) return;
     const step = getStep(currentStepId);
     if (!step) return;
@@ -392,7 +367,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
 
     if (step.branches && step.branches.length > 0) {
       for (const branch of step.branches) {
-        const isMatch = branch.match.every((cond: any) => {
+        const isMatch = branch.match.every((cond) => {
           const val = dataToUse[cond.field];
           const nVal = (val === 'true' || val === true) ? true : (val === 'false' || val === false) ? false : val;
           const nCond = (cond.value === 'true' || cond.value === true) ? true : (cond.value === 'false' || cond.value === false) ? false : cond.value;
@@ -422,11 +397,12 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
     }
   };
 
-  const handleChange = (field: FlowStepField, val: any) => {
+  const handleChange = (field: FlowStepField, val: unknown) => {
     if (field.type === 'multi_select') {
-      const currentVals = formData[field.key] || [];
+      const currentValue = formData[field.key];
+      const currentVals: unknown[] = Array.isArray(currentValue) ? currentValue : [];
       const newVals = currentVals.includes(val)
-        ? currentVals.filter((v: any) => v !== val)
+        ? currentVals.filter((v: unknown) => v !== val)
         : [...currentVals, val];
       setFormData(prev => ({ ...prev, [field.key]: newVals }));
     } else {
@@ -456,7 +432,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
       }
     }, 600);
     return () => window.clearTimeout(timer);
-  }, [formData, currentStepId, diagnosticId, activeFlow]);
+  }, [formData, currentStepId, diagnosticId, activeFlow, getDetailedResponses, getStep]);
 
   const handleMediaUpload = async (field: FlowStepField, files: FileList | null) => {
     if (!files?.length || !diagnosticId) return;
@@ -464,8 +440,8 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
     try {
       const added: DiagnosticoMultimedia[] = [];
       for (const [index, file] of Array.from(files).entries()) {
-        const uploaded: any = await diagnosticoApi.upload(file, `diagnostico_${diagnosticId}_${field.key}`);
-        const archivoUrl = uploaded?.imagen_url || uploaded?.[0]?.imagen_url;
+        const uploaded = await diagnosticoApi.upload(file, `diagnostico_${diagnosticId}_${field.key}`);
+        const archivoUrl = uploaded.imagen_url;
         if (!archivoUrl) throw new Error('El webhook no devolvió imagen_url');
         added.push({
           id: Date.now() + index,
@@ -527,7 +503,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
         return (
           <input
             type={field.type}
-            value={value || ''}
+            value={String(value ?? '')}
             onChange={(e) => setFormData(prev => ({ ...prev, [field.key]: field.type === 'number' ? Number(e.target.value) : e.target.value }))}
             placeholder={field.placeholder || 'Escribe aquí...'}
             className="w-full p-5 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black outline-none transition-all font-bold text-base shadow-inner text-slate-800"
@@ -536,7 +512,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
       case 'textarea':
         return (
           <textarea
-            value={value || ''}
+            value={String(value ?? '')}
             onChange={(e) => setFormData(prev => ({ ...prev, [field.key]: e.target.value }))}
             placeholder={field.placeholder || 'Detalla tus observaciones...'}
             rows={4}
@@ -544,13 +520,13 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
           />
         );
       case 'select':
-      case 'multi_select':
+      case 'multi_select': {
         const isMulti = field.type === 'multi_select';
         return (
           <div className="grid grid-cols-1 gap-3">
             {field.options?.map((opt, i) => {
               const isSelected = isMulti
-                ? (value || []).includes(opt.value)
+                ? (Array.isArray(value) ? value : []).includes(opt.value)
                 : ((value === opt.value) || (value === 'true' && opt.value === true) || (value === 'false' && opt.value === false));
 
               return (
@@ -569,6 +545,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
             })}
           </div>
         );
+      }
       case 'multimedia': {
         const items = mediaByField[field.key] || [];
         return (
@@ -633,7 +610,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
 
   const currentStep = getStep(currentStepId);
   const flowStepsList = getFlowSteps(activeFlow);
-  const currentStepIndex = currentStepId ? flowStepsList.findIndex((s: any) => s.id === currentStepId) : -1;
+  const currentStepIndex = currentStepId ? flowStepsList.findIndex((s) => s.id === currentStepId) : -1;
   const currentStepFieldsCount = currentStep?.fields?.length || 0;
 
   if (loading) return <div className="h-[calc(100dvh-4rem)] md:h-[100dvh] flex items-center justify-center font-black text-xl animate-pulse italic">WILTECH...</div>;
@@ -741,7 +718,7 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
                 </div>
                 <h2 className="text-2xl font-black uppercase tracking-tighter italic mb-8 text-slate-800">Diagnóstico Listo</h2>
                 <div className="bg-gray-50 rounded-3xl p-8 text-left space-y-4 mb-8 border border-gray-100 max-h-[300px] overflow-y-auto">
-                  {Object.entries(getDetailedResponses(formData)).map(([key, detail]: [string, any]) => (
+                  {Object.entries(getDetailedResponses(formData)).map(([key, detail]) => (
                     <div key={key} className="border-b border-gray-200 pb-4 last:border-0">
                       <span className="mb-1 block text-[9px] font-black uppercase tracking-widest text-gray-400">{detail.pregunta}</span>
                       {detail.tipo === 'multimedia' ? (
@@ -796,11 +773,9 @@ export default function Diagnosticador({ embedded = false, processType = 'diagno
                           Atrás
                         </button>
                       )}
-                      {currentStep.type !== 'end' && (
                         <button onClick={() => handleNext()} className="flex-[2] flex items-center justify-center gap-3 bg-black text-white py-4 rounded-xl font-bold uppercase text-[9px] tracking-widest shadow-lg cursor-pointer">
                           Continuar <ArrowRight size={18} />
                         </button>
-                      )}
                     </div>
                   </div>
                 </div>

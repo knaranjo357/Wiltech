@@ -1,12 +1,13 @@
 import { RepairLoader } from './RepairLoader';
 import { countryFetch } from '../services/countryRequest';
-﻿import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { MapPin, RefreshCcw, CheckCircle2, QrCode } from 'lucide-react';
 
-// Definimos los IDs de las 8 conexiones
-type WppSourceId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15;
+import { selectWhatsappLine, type WhatsappLineId as WppSourceId } from '../utils/countryConfig';
 
 type WppQrConnectProps = {
+  country: string;
+  availableSources: WppSourceId[];
   /** Permite personalizar el nombre de cada número si se desea */
   labels?: Record<WppSourceId, string>;
   /** Números a mostrar cuando el endpoint falle (conectado OK) */
@@ -17,41 +18,46 @@ type WppQrConnectProps = {
 
 type ParsedStatus = { connected?: boolean; number?: string | null };
 
+const responseRecord = (payload: unknown): Record<string, unknown> => {
+  const value: unknown = Array.isArray(payload) ? payload[0] : payload;
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+};
+
 export const WppQrConnect: React.FC<WppQrConnectProps> = ({
+  country,
+  availableSources,
   labels,
   connectedNumbers,
   defaultSource = 1,
 }) => {
-  // Estado para la pestaña activa (1 al 15)
-  const [activeTab, setActiveTab] = useState<WppSourceId>(() => {
+  const storageKey = `wppqr:selectedSource:${country}`;
+  const [activeTab, setActiveTab] = useState<WppSourceId | null>(() => {
     try {
-      const saved = localStorage.getItem("wppqr:selectedSource");
-      const num = parseInt(saved || "");
-      if (num >= 1 && num <= 15) return num as WppSourceId;
-    } catch {}
-    return defaultSource;
+      return selectWhatsappLine(availableSources, localStorage.getItem(storageKey), defaultSource);
+    } catch { /* Use the country default when storage is unavailable. */ }
+    return selectWhatsappLine(availableSources, null, defaultSource);
   });
+  const requestId = useRef(0);
 
   const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [connectedNumber, setConnectedNumber] = useState<string | null>(null);
-  const [errText, setErrText] = useState<string | null>(null);
 
   // Generar el endpoint dinámicamente basado en la pestaña activa
   const currentEndpoint = 'https://n8n.alliasoft.com/webhook/wiltech/wppconnect';
 
-  const parseBase64 = (payload: any): string | null => {
-    const obj = Array.isArray(payload) ? payload[0] : payload;
+  const parseBase64 = useCallback((payload: unknown): string | null => {
+    const obj = responseRecord(payload);
     if (!obj) return null;
     const raw: unknown =
       obj.base64 ?? obj.image ?? obj.qr ?? obj.qr_code ?? obj.data ?? null;
     if (typeof raw !== "string" || raw.length === 0) return null;
     return raw.startsWith("data:image") ? raw : `data:image/png;base64,${raw}`;
-  };
+  }, []);
 
-  const parseStatus = (payload: any): ParsedStatus | null => {
-    const obj = Array.isArray(payload) ? payload[0] : payload;
+  const parseStatus = useCallback((payload: unknown): ParsedStatus | null => {
+    const obj = responseRecord(payload);
     if (!obj || typeof obj !== "object") return null;
 
     const isConnected =
@@ -69,12 +75,17 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
 
     if (isConnected || number) return { connected: isConnected, number };
     return null;
-  };
+  }, []);
 
-  const fetchQR = async () => {
+  const fetchQR = useCallback(async (signal?: AbortSignal) => {
+    if (activeTab === null || !availableSources.includes(activeTab)) return;
+    const handleFallback = () => {
+      setConnected(true);
+      setConnectedNumber(connectedNumbers?.[activeTab] || null);
+    };
+    const currentRequest = ++requestId.current;
     try {
       setLoading(true);
-      setErrText(null);
       setImgSrc(null);
       setConnected(null);
       setConnectedNumber(null);
@@ -83,20 +94,23 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
       url.searchParams.set('id_instancia', String(activeTab));
       url.searchParams.set("_", String(Date.now()));
 
-      const res = await countryFetch(url.toString(), { method: "GET", cache: "no-store" });
+      const res = await countryFetch(url.toString(), { method: "GET", cache: "no-store", signal });
+      if (currentRequest !== requestId.current || signal?.aborted) return;
 
       if (!res.ok) {
         handleFallback();
         return;
       }
 
-      let data: any = null;
+      let data: unknown = null;
       try {
         data = await res.json();
       } catch {
+        if (currentRequest !== requestId.current || signal?.aborted) return;
         handleFallback();
         return;
       }
+      if (currentRequest !== requestId.current || signal?.aborted) return;
 
       // 1) ¿Trae imagen?
       const src = parseBase64(data);
@@ -115,26 +129,24 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
       }
 
       handleFallback();
-    } catch (e) {
-      handleFallback();
+    } catch {
+      if (currentRequest === requestId.current && !signal?.aborted) handleFallback();
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current && !signal?.aborted) setLoading(false);
     }
-  };
-
-  const handleFallback = () => {
-    const fallbackNumber = (connectedNumbers && connectedNumbers[activeTab]) || null;
-    setConnected(true);
-    setConnectedNumber(fallbackNumber);
-    setErrText(null);
-  };
+  }, [activeTab, availableSources, connectedNumbers, currentEndpoint, parseBase64, parseStatus]);
 
   useEffect(() => {
-    localStorage.setItem("wppqr:selectedSource", String(activeTab));
-    fetchQR();
-  }, [activeTab]);
+    if (activeTab === null) return;
+    try { localStorage.setItem(storageKey, String(activeTab)); } catch { /* Storage may be disabled. */ }
+    const controller = new AbortController();
+    void fetchQR(controller.signal);
+    return () => { controller.abort(); };
+  }, [activeTab, storageKey, fetchQR]);
 
-  const sourceName = labels?.[activeTab] || `WhatsApp ${activeTab}`;
+  const sourceName = activeTab === null ? '' : labels?.[activeTab] || `WhatsApp ${activeTab}`;
+
+  if (activeTab === null) return <div className="card p-8 text-center"><h1 className="wt-page-title">Canales de WhatsApp · {country}</h1><p className="mt-4 text-slate-500">No hay líneas disponibles para este país.</p></div>;
 
   return (
     <div className="bg-white/70 backdrop-blur-xl border border-white shadow-2xl rounded-[40px] p-8 sm:p-10 max-w-5xl mx-auto overflow-hidden relative group/card">
@@ -147,10 +159,10 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
             <div className="p-3 rounded-2xl bg-slate-900 text-white shadow-lg">
               <QrCode className="w-5 h-5" />
             </div>
-            <h1 className="wt-page-title">Canales de WhatsApp</h1>
+            <div><h1 className="wt-page-title">Canales de WhatsApp</h1><p className="mt-1 text-sm text-slate-500">{country} · {availableSources.length} {availableSources.length === 1 ? 'línea disponible' : 'líneas disponibles'}</p></div>
           </div>
           <button
-            onClick={fetchQR}
+            onClick={() => void fetchQR()}
             disabled={loading}
             className="group flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 text-slate-500 hover:text-slate-800 hover:bg-white hover:shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
@@ -160,7 +172,7 @@ export const WppQrConnect: React.FC<WppQrConnectProps> = ({
 
         {/* Grid Selection */}
         <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-2">
-          {([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as WppSourceId[]).map((id) => {
+          {availableSources.map((id) => {
             const isActive = activeTab === id;
             return (
               <button

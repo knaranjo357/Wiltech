@@ -32,7 +32,7 @@ interface OptimizedClient extends Client {
 const SOURCE_EMPTY = 'Directo';
 
 // Lógica de detección de envío (Idéntica a Resultados)
-const hasLogisticsData = (c: any): boolean => {
+const hasLogisticsData = (c: Client): boolean => {
   return !!(
     safeText(c.guia_direccion) || safeText(c.guia_ciudad) || safeText(c.guia_numero_ida) || 
     safeText(c.guia_nombre_completo) || safeText(c.guia_cedula_id) || safeText(c.guia_numero_retorno) ||
@@ -40,7 +40,7 @@ const hasLogisticsData = (c: any): boolean => {
   );
 };
 
-const parseToTimestamp = (raw: any, offsetHours = 0): number => {
+const parseToTimestamp = (raw: string | number | null | undefined, offsetHours = 0): number => {
   if (!raw) return 0;
   const d = new Date(raw);
   if (isNaN(d.getTime())) return 0;
@@ -79,7 +79,6 @@ export const CRMPage: React.FC = () => {
 
   // --- UI & Modales ---
   const [modalClient, setModalClient] = useState<Client | null>(null);
-  const [isNewClientOpen, setIsNewClientOpen] = useState(false);
 
   // 1. Carga de Datos (Idéntica a Resultados)
   const loadData = async (force = true) => {
@@ -88,7 +87,7 @@ export const CRMPage: React.FC = () => {
       const data = await ClientService.getClients({ force });
       const list = Array.isArray(data) ? data : [];
       
-      const optimized: OptimizedClient[] = list.map((c: any) => ({
+      const optimized: OptimizedClient[] = list.map((c: Client) => ({
         ...c,
         _tsAgenda: parseToTimestamp(c.fecha_agenda),
         _tsCreated: parseToTimestamp(c.created, 5),
@@ -356,7 +355,7 @@ export const CRMPage: React.FC = () => {
                               className="group/btn flex max-w-[220px] items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 transition-all text-slate-600 hover:text-emerald-700"
                             >
                               <MessageCircle size={14} className="text-green-500 group-hover/btn:scale-110 transition-transform"/>
-                              <span className="truncate font-mono text-xs font-medium" title={formatWhatsApp(client.whatsapp as any)}>{formatWhatsApp(client.whatsapp as any) || 'Sin número'}</span>
+                              <span className="truncate font-mono text-xs font-medium" title={formatWhatsApp(client.whatsapp)}>{formatWhatsApp(client.whatsapp) || 'Sin número'}</span>
                             </button>
                           </td>
 
@@ -373,7 +372,7 @@ export const CRMPage: React.FC = () => {
 
                           {/* Etapa */}
                           <td className="px-5 py-3.5">
-                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getEtapaColor(client.estado_etapa as any)}`}>
+                            <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getEtapaColor(client.estado_etapa)}`}>
                               {(client.estado_etapa || 'SIN_ETAPA').replace(/_/g, ' ')}
                             </span>
                             {client._isEnvio && (

@@ -1,15 +1,17 @@
 import { RepairLoader } from './RepairLoader';
-﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Send, Repeat2, Copy, Check, ArrowDown, MessageCircle, AlertTriangle, Fingerprint, MessageSquare} from 'lucide-react';
 import { Client } from '../types/client';
 import { ApiService } from '../services/apiService';
 import { ChatBubble, ChatMsg } from './ChatBubble';
+import { AuthService } from '../services/authService';
+import { conversationCacheKey, resolveConversationIdentity } from '../utils/conversationIdentity';
 
 const HISTORY_CACHE_TTL = 60 * 1000;
 const historyCache = new Map<string, { messages: ChatMsg[]; updatedAt: number }>();
 const pendingHistory = new Map<string, Promise<ChatMsg[]>>();
 
-const normalizeHistory = (response: any): ChatMsg[] =>
+const normalizeHistory = (response: unknown): ChatMsg[] =>
   Array.isArray(response)
     ? response.map((item, index) => ({
         id: item?.id ?? index,
@@ -31,21 +33,6 @@ export type ChatPanelProps = {
   onBack?: () => void;
 };
 
-// Mantenemos el helper, pero ya no lo usaremos para bloquear la UI
-const coerceNumber = (v: unknown): number | null => {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'bigint') {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : null;
-  }
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-};
-
-// Toma el valor "crudo" para mostrar y para enviar (evita problemas de precisión con IDs largos)
-const getRawSubscriberId = (c: any): unknown =>
-  c?.subscriber_id ?? c?.subscriberId ?? c?.sub_id ?? null;
-
 export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) => {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState('');
@@ -61,15 +48,18 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Datos clave
-  const hasWhatsapp = Boolean(client?.whatsapp);
+  const identity = resolveConversationIdentity(client, source);
+  const hasWhatsapp = Boolean(identity.recipient);
   const phone = useMemo(
-    () => (client?.whatsapp ?? '').replace('@s.whatsapp.net', ''),
-    [client?.whatsapp]
+    () => identity.isWeb ? identity.recipient : identity.recipient.replace('@s.whatsapp.net', ''),
+    [identity.isWeb, identity.recipient]
   );
 
   // Valor crudo (String | Number)
-  const rawSubscriberId = getRawSubscriberId(client);
-  const conversationKey = `${source || 'directo'}:${client?.whatsapp || ''}:${String(rawSubscriberId ?? '')}`;
+  const rawSubscriberId = identity.subscriberId;
+  const conversationKey = conversationCacheKey(identity, AuthService.getPaisSede(), AuthService.getToken());
+  const activeConversation = useRef(conversationKey);
+  activeConversation.current = conversationKey;
   
   // Display en UI
   const subscriberIdDisplay =
@@ -78,7 +68,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
       : String(rawSubscriberId);
 
   // Validamos si tenemos ALGO con que enviar (WhatsApp O SubscriberID)
-  const hasContactMethod = hasWhatsapp || (rawSubscriberId !== null && rawSubscriberId !== undefined && rawSubscriberId !== '');
+  const hasContactMethod = identity.available;
 
   const scrollToBottom = (smooth = false) => {
     const el = scrollRef.current;
@@ -115,8 +105,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
   }, [input]);
 
   // --- Cargar historial ---
-  const loadConversation = async (force = false) => {
-    if (!hasWhatsapp && !rawSubscriberId) return; 
+  const loadConversation = useCallback(async (force = false) => {
+    if (!hasContactMethod) return;
 
     const cached = historyCache.get(conversationKey);
     if (cached) setMsgs(cached.messages);
@@ -129,14 +119,14 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
     try {
       setLoading(true);
       setError(null);
-      const body: any = { whatsapp: client.whatsapp };
+      const body: Record<string, unknown> = { whatsapp: identity.recipient };
       
-      if (source) body.source = source;
-      if (!hasWhatsapp && rawSubscriberId) body.subscriber_id = rawSubscriberId;
+      if (identity.source) body.source = identity.source;
+      if (!hasWhatsapp && rawSubscriberId !== null) body.subscriber_id = rawSubscriberId;
 
       let request = pendingHistory.get(conversationKey);
       if (!request) {
-        request = ApiService.post<any[]>('/conversacion', body)
+        request = ApiService.post<unknown>('/conversacion', body)
           .then(normalizeHistory)
           .finally(() => pendingHistory.delete(conversationKey));
         pendingHistory.set(conversationKey, request);
@@ -145,22 +135,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
       const normalized = await request;
       historyCache.set(conversationKey, { messages: normalized, updatedAt: Date.now() });
       if (historyCache.size > 40) historyCache.delete(historyCache.keys().next().value!);
+      if (activeConversation.current !== conversationKey) return;
       setMsgs(normalized);
 
       stickToBottomRef.current = true;
       requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom(false)));
       setTimeout(() => inputRef.current?.focus(), 0);
-    } catch (e: any) {
+    } catch (e) {
       console.error('Error cargando chat:', e);
-      setError('No se pudo actualizar la conversación. Intenta de nuevo.');
+      if (activeConversation.current === conversationKey) setError('No se pudo actualizar la conversación. Intenta de nuevo.');
     } finally {
-      setLoading(false);
+      if (activeConversation.current === conversationKey) setLoading(false);
     }
-  };
+  }, [hasContactMethod, conversationKey, identity.recipient, identity.source, hasWhatsapp, rawSubscriberId]);
 
   useEffect(() => {
+    activeConversation.current = conversationKey;
+    setMsgs([]);
+    setError(null);
+    setInput('');
+    setLoading(false);
     loadConversation(false);
-  }, [conversationKey]);
+    return () => { activeConversation.current = ''; };
+  }, [conversationKey, loadConversation]);
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -180,10 +177,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
     setError(null);
 
     try {
-      const finalSource = source || 'Directo';
+      const finalSource = identity.source || 'Directo';
 
-      const body: any = {
-        whatsapp: client.whatsapp,
+      const body: Record<string, unknown> = {
+        whatsapp: identity.recipient,
         mensaje: text,
         source: finalSource,
       };
@@ -194,8 +191,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
 
       await ApiService.post('/enviarmensaje', body);
       await loadConversation(true);
-    } catch (e: any) {
-      setError(e?.message || 'No se pudo enviar el mensaje');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo enviar el mensaje');
       setMsgs((prev) => prev.filter((m) => m.id !== optimistic.id)); 
       setInput(text); 
       inputRef.current?.focus();
@@ -213,7 +210,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
       await navigator.clipboard.writeText(phone);
       setCopiedPhone(true);
       setTimeout(() => setCopiedPhone(false), 1200);
-    } catch {}
+    } catch { /* Clipboard access may be denied by the browser. */ }
   };
 
   const copySubscriberId = async () => {
@@ -222,7 +219,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
       await navigator.clipboard.writeText(subscriberIdDisplay);
       setCopiedSub(true);
       setTimeout(() => setCopiedSub(false), 1200);
-    } catch {}
+    } catch { /* Clipboard access may be denied by the browser. */ }
   };
 
   const canSend = hasContactMethod && !!input.trim() && !sending;
@@ -253,7 +250,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
               {/* Phone Badge */}
               <div className="flex items-center gap-1.5 bg-white px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
                  <MessageCircle className="w-3 h-3 text-emerald-500" />
-                 <span className="font-mono">{phone || '—'}</span>
+                 <span className="font-mono break-all">{identity.isWeb && 'Sesión web: '}{phone || '—'}</span>
                  {phone && (
                     <button onClick={copyPhone} className="ml-1 hover:text-slate-800 transition-colors" title="Copiar">
                        {copiedPhone ? <Check className="w-3 h-3 text-emerald-600"/> : <Copy className="w-3 h-3"/>}
@@ -300,7 +297,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
               <div>
                 <p className="font-black uppercase tracking-wider text-xs mb-1">Contacto no disponible</p>
                 <p className="text-red-700/70 text-xs leading-relaxed">
-                  Este cliente no cuenta con WhatsApp ni Subscriber ID configurado.
+                  {identity.isWeb ? 'Esta conversación web no tiene un identificador de sesión en Asignado a.' : 'Este cliente no cuenta con WhatsApp ni Subscriber ID configurado.'}
                 </p>
               </div>
             </div>
@@ -401,7 +398,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ client, source, onBack }) 
                  <div className="flex items-center gap-1.5">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fuente:</span>
                     <span className="text-[10px] font-black text-slate-800 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200 shadow-sm">
-                       {source || 'Autodetección'}
+                       {identity.source || 'Autodetección'}
                     </span>
                  </div>
                  <div className="w-1 h-1 rounded-full bg-slate-200" />

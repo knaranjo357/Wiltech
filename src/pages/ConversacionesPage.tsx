@@ -2,7 +2,7 @@ import { RepairLoader } from '../components/RepairLoader';
 import { countryFetch } from '../services/countryRequest';
 import { Pagination } from '../components/Pagination';
 import { usePagination } from '../hooks/usePagination';
-﻿// src/pages/ConversacionesPage.tsx
+// src/pages/ConversacionesPage.tsx
 import React, { useEffect, useMemo, useRef, useState, useDeferredValue, useCallback, memo } from 'react';
 import { 
     RefreshCw, Search, MessageSquare, ArrowUpDown, Bot, User, Filter, 
@@ -65,7 +65,7 @@ const parseDateToTimestamp = (v: unknown): number => {
 // === LÓGICA DE NORMALIZACIÓN DEL BOT ===
 // Si es false o "false" -> APAGADO.
 // Cualquier otra cosa (null, undefined, "", true, "true") -> ENCENDIDO.
-const normalizeConsent = (val: any): boolean => {
+const normalizeConsent = (val: unknown): boolean => {
   if (val === false) return false;
   if (typeof val === 'string' && val.toLowerCase() === 'false') return false;
   return true; 
@@ -276,8 +276,8 @@ export const ConversacionesPage: React.FC<{ onOpenWeb?: () => void }> = ({ onOpe
       lastFetchRef.current = Date.now();
       
       setError(null);
-    } catch (e: any) {
-      if (!isSilent) setError(e?.message || 'Error cargando conversaciones');
+    } catch (e) {
+      if (!isSilent) setError(e instanceof Error ? e.message : 'Error cargando conversaciones');
     } finally {
       setLoading(false);
       setIsBackgroundUpdating(false);
@@ -292,7 +292,7 @@ export const ConversacionesPage: React.FC<{ onOpenWeb?: () => void }> = ({ onOpe
     }
   }, []);
 
-  useEffect(() => { fetchList(false); }, []);
+  useEffect(() => { void fetchList(false); }, [fetchList]);
 
   useEffect(() => {
     const refreshIfStale = () => {
@@ -357,20 +357,20 @@ export const ConversacionesPage: React.FC<{ onOpenWeb?: () => void }> = ({ onOpe
         ciudad: payload.ciudad || null,
         source: payload.source || null,
         consentimiento_contacto: payload.consentimiento_contacto !== undefined 
-            ? normalizeConsent(payload.consentimiento_contacto as any) 
+            ? normalizeConsent(payload.consentimiento_contacto)
             : undefined
     };
 
-    Object.keys(internalPayload).forEach(key => {
-        if ((internalPayload as any)[key] === undefined) delete (internalPayload as any)[key];
+    (Object.keys(internalPayload) as Array<keyof ChatRow>).forEach(key => {
+        if (internalPayload[key] === undefined) delete internalPayload[key];
     });
 
     setAllRows(prev => prev.map(r => r.row_number === payload.row_number ? { ...r, ...internalPayload } as ChatRow : r));
     setSelectedRow(curr => curr?.row_number === payload.row_number ? { ...curr, ...internalPayload } as ChatRow : curr);
     
     try {
-      if (typeof (ClientService as any).updateClient === 'function') {
-        await (ClientService as any).updateClient(payload);
+      if (typeof ClientService.updateClient === 'function') {
+        await ClientService.updateClient(payload);
       } else {
         await countryFetch('/api/clients/update', {
           method: 'POST',
@@ -378,7 +378,7 @@ export const ConversacionesPage: React.FC<{ onOpenWeb?: () => void }> = ({ onOpe
           body: JSON.stringify(payload),
         });
       }
-      ConversationDataService.patchClient(payload);
+      ConversationDataService.patchClient();
       return true;
     } catch {
       fetchList(true);

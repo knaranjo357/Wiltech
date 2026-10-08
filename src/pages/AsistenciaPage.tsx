@@ -79,8 +79,8 @@ export const AsistenciaPage: React.FC = () => {
       
       setViewClient(v => (v?.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v));
     };
-    window.addEventListener('client:updated', onExternalUpdate as any);
-    return () => window.removeEventListener('client:updated', onExternalUpdate as any);
+    window.addEventListener('client:updated', onExternalUpdate);
+    return () => window.removeEventListener('client:updated', onExternalUpdate);
   }, []);
 
   /** --- Update Logic --- */
@@ -95,13 +95,13 @@ export const AsistenciaPage: React.FC = () => {
     }
 
     try {
-      if (typeof (ClientService as any).updateClient === 'function') {
-        await (ClientService as any).updateClient(payload);
+      if (typeof ClientService.updateClient === 'function') {
+        await ClientService.updateClient(payload);
       } else {
         await countryFetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
       return true;
-    } catch (e) {
+    } catch {
       setClients(prevClients); 
       alert("Error al guardar");
       return false;
@@ -132,7 +132,7 @@ export const AsistenciaPage: React.FC = () => {
     if (!resolveModal) return;
     const { client } = resolveModal;
     
-    let updatePayload: Partial<Client> = {
+    const updatePayload: Partial<Client> = {
        row_number: client.row_number,
        categoria_contacto: CAT_GESTIONADA
     };
@@ -192,13 +192,13 @@ export const AsistenciaPage: React.FC = () => {
         normalize(safeText(c.nombre)).includes(q) ||
         normalize(safeText(c.whatsapp)).includes(q) ||
         normalize(safeText(c.modelo)).includes(q) ||
-        safeText((c as any).subscriber_id).includes(q) ||
+        safeText(c.subscriber_id).includes(q) ||
         normalize(safeText(c.last_msg)).includes(q)
       );
     }
 
     return data.sort((a,b) => {
-      const getTs = (v: any) => typeof v === 'number' && v < 10000000000 ? v * 1000 : new Date(v || 0).getTime();
+      const getTs = (v: string | number | null | undefined) => typeof v === 'number' && v < 10000000000 ? v * 1000 : new Date(v || 0).getTime();
       
       if (sortOption === 'created_desc') return getTs(b.created) - getTs(a.created);
       if (sortOption === 'created_asc') return getTs(a.created) - getTs(b.created);
@@ -356,7 +356,6 @@ export const AsistenciaPage: React.FC = () => {
                   const isGestionado = String(client.categoria_contacto).trim().toUpperCase() === CAT_GESTIONADA;
                   const isSaving = savingRow === client.row_number;
 
-                  const lastMsg = client.last_msg;
                   const lastMsgDate = client.created; 
                   
                   return (
@@ -409,14 +408,14 @@ export const AsistenciaPage: React.FC = () => {
                                
                                <div className="flex flex-wrap items-center gap-2 mt-2">
                                   <span className="text-xs font-bold text-slate-400">
-                                     {formatWhatsApp(client.whatsapp as any)}
+                                     {formatWhatsApp(client.whatsapp)}
                                   </span>
                                   
-                                  {((client as any).subscriber_id) && (
+                                  {(client.subscriber_id) && (
                                      <>
                                         <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
                                         <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-slate-400 uppercase">
-                                           <Fingerprint size={10} /> ID: {String((client as any).subscriber_id).substring(0, 12)}...
+                                           <Fingerprint size={10} /> ID: {String(client.subscriber_id).substring(0, 12)}...
                                         </span>
                                      </>
                                   )}
@@ -488,7 +487,7 @@ export const AsistenciaPage: React.FC = () => {
                                   </button>
                                   
                                   <button 
-                                     onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
+                                     onClick={(e) => handleWhatsAppClick(client.whatsapp, e)}
                                      className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
                                   >
                                      <Phone size={12} /> WhatsApp

@@ -27,7 +27,7 @@ export class ClientService {
   }
 
   /** Crear nuevo cliente (usa ApiService → incluye Authorization automáticamente) */
-  static async createClient(client: Partial<Client>): Promise<any> {
-    return ApiService.post<any>('/clientes-nuevo', client);
+  static async createClient(client: Partial<Client>): Promise<Client> {
+    return ApiService.post<Client>('/clientes-nuevo', client);
   }
 }

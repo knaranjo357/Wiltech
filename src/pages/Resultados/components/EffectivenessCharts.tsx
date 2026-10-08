@@ -13,13 +13,13 @@ interface Props {
   colorMap: Record<string, string>;
 }
 
-const EffTooltip = memo(({ active, payload, label, viewMode }: any) => {
+const EffTooltip = memo(({ active, payload, label, viewMode }: import('../../../types/chart').ChartTooltipProps & { viewMode: ViewMode }) => {
   if (!active || !payload || !payload.length) return null;
   return (
     <div className="bg-white p-3 border border-gray-100 shadow-xl rounded-xl min-w-[200px] z-50">
       <p className="font-bold text-gray-800 mb-2 border-b border-gray-100 pb-1 truncate max-w-[180px]">{label}</p>
       <div className="space-y-1">
-        {payload.map((entry: any, i: number) => (
+        {payload.map((entry, i) => (
           <div key={i} className="flex justify-between items-center text-xs">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
@@ -59,7 +59,7 @@ export const EffectivenessCharts: React.FC<Props> = ({ data, colorMap }) => {
       }
     }
 
-    let rows = Array.from(merged.values()).map(r => ({
+    const rows = Array.from(merged.values()).map(r => ({
       ...r,
       effAgenda: r.leads > 0 ? (r.agendas / r.leads) * 100 : 0,
       effEnvio: r.leads > 0 ? (r.envios / r.leads) * 100 : 0,

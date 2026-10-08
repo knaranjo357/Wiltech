@@ -180,6 +180,17 @@ function AdminInner() {
   const [systemMessage, setSystemMessage] = useState('');
   const [rowNumber, setRowNumber] = useState<number | null>(null);
   const [promptCountry, setPromptCountry] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isAgentModalOpen) return;
+    let active = true;
+    void agenteApi.getSystemMessage().then(data => {
+      if (!active) return;
+      setSystemMessage(data.system_message);
+      setRowNumber(data.row_number);
+      setPromptCountry(data.pais_sede);
+    }).catch(error => console.error('Error loading diagnostic prompt:', error));
+    return () => { active = false; };
+  }, [isAgentModalOpen]);
 
   // --- Precios Segunda States ---
   const [isPricesModalOpen, setIsPricesModalOpen] = useState(false);
@@ -266,91 +277,38 @@ function AdminInner() {
     type: 'confirm' | 'alert' | 'custom'
   }>({ isOpen: false, title: '', message: '', onConfirm: () => { }, type: 'confirm' });
 
-  const closeModal = () => setModal(prev => ({ ...prev, isOpen: false }));
-  const openModal = (title: string, message: string, onConfirm: () => void, type: 'confirm' | 'alert' | 'custom' = 'confirm') => {
+  const closeModal = useCallback(() => setModal(prev => ({ ...prev, isOpen: false })), []);
+  const openModal = useCallback((title: string, message: string, onConfirm: () => void, type: 'confirm' | 'alert' | 'custom' = 'confirm') => {
     setModal({ isOpen: true, title, message, onConfirm, type });
-  };
+  }, []);
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId)?.data.step as FlowStep | undefined;
-
-  useEffect(() => {
-    loadFlows();
-  }, []);
 
   useEffect(() => {
     localStorage.setItem('wiltech_diagnosticador_inspector', isInspectorOpen ? 'open' : 'closed');
   }, [isInspectorOpen]);
 
-  const loadFlows = async () => {
-    setLoading(true);
-    try {
-      const data = await flowApi.getAll();
-      const fixedFlows = withEmptyCountryFlows(data, AuthService.getPaisSede());
-      setFlows(fixedFlows);
-      if (fixedFlows.length > 0) {
-        selectFlow(fixedFlows[0]);
+  const handleDeleteRequest = useCallback((id: string) => {
+    openModal(
+      '¿Eliminar Bloque?',
+      'Se borrarán todas las conexiones vinculadas a esta pregunta de forma permanente.',
+      () => {
+        setNodes(nds => nds.filter(n => n.id !== id));
+        setEdges(eds => eds.filter(e => e.source !== id && e.target !== id));
+        setSelectedNodeId(current => current === id ? null : current);
+        closeModal();
       }
-      else setLoading(false);
-    } catch (error) {
-      setFlows([]); setActiveFlow(null); setNodes([]); setEdges([]);
-      setLoading(false);
-      openModal('Error de carga', error instanceof Error ? error.message : 'No se pudieron cargar los diagramas.', closeModal, 'alert');
-    }
-  };
+    );
+  }, [openModal, closeModal, setNodes, setEdges]);
 
-  const createFlow = async () => {
-    const name = window.prompt('Nombre único del nuevo diagrama');
-    if (!name?.trim()) return;
-    const flowName = slugify(name);
-    try {
-      setSaving(true);
-      const created = await flowApi.create(flowName, {
-        name: name.trim(),
-        flow_id: flowName,
-        version: '1.0',
-        start_step: 'inicio',
-        steps: [
-          {
-            id: 'inicio',
-            type: 'form',
-            title: 'Ingreso del equipo',
-            next: 'fin',
-            fields: [{ key: 'observaciones_iniciales', type: 'textarea', label: 'Observaciones iniciales' }],
-          },
-          { id: 'fin', type: 'end', title: 'Diagnóstico completado' },
-        ],
-      });
-      setFlows(prev => [...prev, created]);
-      selectFlow(created);
-    } catch (error) {
-      console.error('Error creating flow:', error);
-      openModal('Error', 'No se pudo crear el diagrama. Verifica el POST con flow_name.', closeModal, 'alert');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const loadSystemMessage = async () => {
-    try {
-      const data = await agenteApi.getSystemMessage();
-      if (data) {
-        setSystemMessage(data.system_message);
-        setRowNumber(data.row_number);
-        setPromptCountry(data.pais_sede);
-      }
-    } catch (error) {
-      console.error('Error loading system message:', error);
-    }
-  };
-
-  const selectFlow = (flow: FlowData) => {
+  const selectFlow = useCallback((flow: FlowData) => {
     setSelectedNodeId(null);
     setActiveFlow(flow);
     const newNodes: Node[] = [];
     const newEdges: Edge[] = [];
 
     flow.configuracion.steps.forEach((step, index) => {
-      const position = (step as any).position || { x: 100 + index * 320, y: 150 + (index % 2) * 100 };
+      const position = step.position || { x: 100 + index * 320, y: 150 + (index % 2) * 100 };
       newNodes.push({
         id: step.id,
         type: 'diagnostic',
@@ -392,36 +350,40 @@ function AdminInner() {
     setNodes(newNodes);
     setEdges(newEdges);
     setLoading(false);
-  };
+  }, [handleDeleteRequest, setNodes, setEdges]);
 
-  const handleDeleteRequest = (id: string) => {
-    openModal(
-      '¿Eliminar Bloque?',
-      'Se borrarán todas las conexiones vinculadas a esta pregunta de forma permanente.',
-      () => {
-        setNodes(nds => nds.filter(n => n.id !== id));
-        setEdges(eds => eds.filter(e => e.source !== id && e.target !== id));
-        if (selectedNodeId === id) setSelectedNodeId(null);
-        closeModal();
-      }
-    );
-  };
+  const loadFlows = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await flowApi.getAll();
+      const fixedFlows = withEmptyCountryFlows(data, AuthService.getPaisSede());
+      setFlows(fixedFlows);
+      if (fixedFlows.length > 0) selectFlow(fixedFlows[0]);
+      else setLoading(false);
+    } catch (error) {
+      setFlows([]); setActiveFlow(null); setNodes([]); setEdges([]);
+      setLoading(false);
+      openModal('Error de carga', error instanceof Error ? error.message : 'No se pudieron cargar los diagramas.', closeModal, 'alert');
+    }
+  }, [selectFlow, openModal, closeModal, setNodes, setEdges]);
 
-  const onConnect = useCallback((params: any) => {
+  useEffect(() => { void loadFlows(); }, [loadFlows]);
+
+  const onConnect = useCallback((params: import('@xyflow/react').Connection) => {
     setEdges((eds) => addEdge({ ...params, animated: true, style: { strokeWidth: 2 } }, eds));
     setNodes(nds => nds.map(n => {
       if (n.id === params.source) {
-        const step = { ...(n.data.step as any) };
+        const step = { ...(n.data.step as FlowStep) };
         if (params.sourceHandle?.startsWith('field-')) {
           const parts = params.sourceHandle.split('-');
           const fIdx = parseInt(parts[1]);
           const oIdx = parseInt(parts[3]);
-          const field = step.fields[fIdx];
-          const option = field.options[oIdx];
+          const field = step.fields?.[fIdx];
+          const option = field?.options?.[oIdx];
 
           if (!step.branches) step.branches = [];
-          const matchValue = option.value;
-          const existingBranchIdx = step.branches.findIndex((b: any) => b.match?.[0]?.value === matchValue);
+          if (!field || !option) return n; const matchValue = option.value;
+          const existingBranchIdx = step.branches.findIndex((b) => b.match?.[0]?.value === matchValue);
 
           if (existingBranchIdx > -1) {
             step.branches[existingBranchIdx].next = params.target;
@@ -441,7 +403,7 @@ function AdminInner() {
     }));
   }, [setNodes, setEdges]);
 
-  const onEdgeClick = (_: any, edge: Edge) => {
+  const onEdgeClick = (_: React.MouseEvent, edge: Edge) => {
     openModal(
       '¿Eliminar Conexión?',
       'La lógica de salto entre estas dos preguntas será eliminada.',
@@ -449,12 +411,12 @@ function AdminInner() {
         setEdges((eds) => eds.filter((e) => e.id !== edge.id));
         setNodes(nds => nds.map(n => {
           if (n.id === edge.source) {
-            const step = { ...(n.data.step as any) };
+            const step = { ...(n.data.step as FlowStep) };
             if (edge.sourceHandle?.startsWith('field-')) {
               const parts = edge.sourceHandle.split('-');
               const oIdx = parseInt(parts[3]);
-              const matchValue = step.fields[parseInt(parts[1])].options[oIdx].value;
-              step.branches = step.branches?.filter((b: any) => b.match?.[0]?.value !== matchValue);
+              const matchValue = step.fields?.[parseInt(parts[1])]?.options?.[oIdx]?.value;
+              step.branches = step.branches?.filter((b) => b.match?.[0]?.value !== matchValue);
             } else {
               delete step.next;
             }
@@ -531,7 +493,7 @@ function AdminInner() {
     setSelectionBox(null);
   };
 
-  const onNodeClick = (_: any, node: Node) => setSelectedNodeId(node.id);
+  const onNodeClick = (_: React.MouseEvent, node: Node) => setSelectedNodeId(node.id);
 
   const addNewStep = () => {
     const newId = `q_${Date.now()}`;
@@ -551,9 +513,9 @@ function AdminInner() {
     if (!selectedNodeId) return;
     setNodes((nds) => nds.map((node) => {
       if (node.id === selectedNodeId) {
-        let updatedStep = { ...(node.data.step as any), ...updates };
+        const updatedStep = { ...(node.data.step as FlowStep), ...updates };
         if (updates.fields) {
-          updatedStep.fields = updatedStep.fields.map((f: any) => ({
+          updatedStep.fields = updatedStep.fields?.map((f) => ({
             ...f,
             key: f.key || slugify(f.label || 'campo')
           }));
@@ -569,17 +531,17 @@ function AdminInner() {
     setSaving(true);
     try {
       const updatedSteps = nodes.map(n => ({
-        ...(n.data.step as any),
+        ...(n.data.step as FlowStep),
         position: n.position
       }));
 
-      let updatedConfig = { ...activeFlow.configuracion, steps: updatedSteps };
+      const updatedConfig = { ...activeFlow.configuracion, steps: updatedSteps };
       const flowName = activeFlow.flow_name || activeFlow.configuracion.flow_id;
       const saved = activeFlow.isNew ? await flowApi.create(flowName, updatedConfig) : await flowApi.update(activeFlow.id, flowName, updatedConfig);
       setFlows(previous => previous.map(flow => flow.id === activeFlow.id ? saved : flow));
       selectFlow(saved);
       openModal('¡Publicado!', 'El diagrama y las posiciones se han guardado con éxito.', () => closeModal(), 'alert');
-    } catch (error) {
+    } catch {
       openModal('Error', 'No se pudieron guardar los cambios.', () => closeModal(), 'alert');
     } finally {
       setSaving(false);
@@ -591,7 +553,7 @@ function AdminInner() {
     const currentConfig = {
       ...activeFlow.configuracion,
       steps: nodes.map(n => ({
-        ...(n.data.step as any),
+        ...(n.data.step as FlowStep),
         position: n.position
       }))
     };
@@ -609,8 +571,8 @@ function AdminInner() {
       });
       setIsTextDiagramModalOpen(false);
       openModal('¡Diagrama Actualizado!', 'El diagrama en formato texto se ha cargado en el editor. Recuerda publicar para guardar los cambios.', () => closeModal(), 'alert');
-    } catch (error: any) {
-      openModal('Error de Formato', `No se pudo procesar el JSON: ${error.message}`, () => {}, 'alert');
+    } catch (error) {
+      openModal('Error de Formato', `No se pudo procesar el JSON: ${error instanceof Error ? error.message : 'Error desconocido'}`, () => {}, 'alert');
     }
   };
 
@@ -621,7 +583,7 @@ function AdminInner() {
       await agenteApi.updateSystemMessage({ row_number: rowNumber, pais_sede: promptCountry, system_message: systemMessage });
       openModal('¡Agente Actualizado!', 'El mensaje del sistema para la IA ha sido guardado.', () => closeModal(), 'alert');
       setIsAgentModalOpen(false);
-    } catch (error) {
+    } catch {
       openModal('Error', 'No se pudo actualizar el agente.', () => closeModal(), 'alert');
     } finally {
       setSaving(false);
@@ -1053,7 +1015,7 @@ function AdminInner() {
                             value={field.type}
                             onChange={(e) => {
                               const newFields = [...(selectedNode.fields || [])];
-                              newFields[fIdx] = { ...field, type: e.target.value as any };
+                              newFields[fIdx] = { ...field, type: e.target.value as NonNullable<FlowStep['fields']>[number]['type'] };
                               updateSelectedNode({ fields: newFields });
                             }}
                             className="w-full p-3 text-[10px] font-bold border-2 border-white rounded-xl bg-white outline-none uppercase shadow-sm text-slate-800"

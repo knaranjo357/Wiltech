@@ -14,7 +14,7 @@ export const CountryService = {
     return rows[0] ?? null;
   },
   async save(record: CountryRecord | null, config: CountryConfig): Promise<void> {
-    if (!AuthService.isRoot()) throw new Error('Solo root puede configurar países.');
+    if (!AuthService.isRoot()) throw new Error('No tienes permiso para configurar países.');
     const country = AuthService.getPaisSede();
     if (record && record.pais_sede !== country) throw new Error('El país cambió. Recarga la configuración.');
     const body = { pais_sede: country, configuracion: parseCountryConfig(config, country), ...(record ? { id_pais: record.id } : {}) };

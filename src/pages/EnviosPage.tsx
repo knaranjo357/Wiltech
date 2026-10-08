@@ -22,12 +22,12 @@ import { useAuth } from '../hooks/useAuth';
 
 // --- VALIDACIÓN DE CAMPOS OBLIGATORIOS PARA RECOGIDA ---
 const checkGuiaDataComplete = (c: Client) => {
-  const required = [
-    'guia_nombre_completo', 'guia_cedula_id', 'guia_telefono', 
+  const required: Array<keyof Client> = [
+    'guia_nombre_completo', 'guia_cedula_id', 'guia_telefono',
     'guia_direccion', 'guia_ciudad', 'guia_departamento_estado', 'guia_email'
   ];
   // Filtramos los que falten usando safeText
-  const missing = required.filter(field => !safeText((c as any)[field]));
+  const missing = required.filter(field => !safeText(c[field]));
   return {
     isComplete: missing.length === 0,
     missingFields: missing
@@ -113,22 +113,22 @@ export const EnviosPage: React.FC = () => {
       });
       setViewClient(v => (v?.row_number === detail.row_number ? ({ ...v, ...detail } as Client) : v));
     };
-    window.addEventListener('client:updated', onExternalUpdate as any);
-    return () => window.removeEventListener('client:updated', onExternalUpdate as any);
+    window.addEventListener('client:updated', onExternalUpdate);
+    return () => window.removeEventListener('client:updated', onExternalUpdate);
   }, []);
 
   const onUpdate = async (payload: Partial<Client>): Promise<boolean> => {
     if (!payload.row_number) return false;
     setSavingRow(payload.row_number);
     try {
-      if (typeof (ClientService as any).updateClient === 'function') {
-        await (ClientService as any).updateClient(payload);
+      if (typeof ClientService.updateClient === 'function') {
+        await ClientService.updateClient(payload);
       } else {
         await countryFetch('/api/clients/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       }
       setClients(prev => prev.map(c => c.row_number === payload.row_number ? ({ ...c, ...payload } as Client) : c));
       return true;
-    } catch (e) {
+    } catch {
       alert("Error al guardar");
       return false;
     } finally {
@@ -167,7 +167,7 @@ export const EnviosPage: React.FC = () => {
       } else {
         throw new Error("Error servidor");
       }
-    } catch (err) {
+    } catch {
       alert("Error al generar la guía.");
     } finally {
       setWebhookLoading(null);
@@ -248,7 +248,7 @@ export const EnviosPage: React.FC = () => {
     }
 
     return data.sort((a,b) => {
-      const getTs = (v: any) => (!v ? 0 : (typeof v === 'number' && v < 10000000000 ? v * 1000 : new Date(v).getTime()));
+      const getTs = (v: string | number | null | undefined) => (!v ? 0 : (typeof v === 'number' && v < 10000000000 ? v * 1000 : new Date(v).getTime()));
       if (sortOption === 'created_desc') return getTs(b.created) - getTs(a.created);
       if (sortOption === 'last_msg_desc') return getTs(b.last_msg) - getTs(a.last_msg);
       
@@ -492,9 +492,9 @@ export const EnviosPage: React.FC = () => {
                                </div>
                                
                                <div className="flex flex-wrap items-center gap-3 text-xs">
-                                  <div className="flex items-center gap-1.5 text-slate-400 font-bold group/val" onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)}>
+                                  <div className="flex items-center gap-1.5 text-slate-400 font-bold group/val" onClick={(e) => handleWhatsAppClick(client.whatsapp, e)}>
                                      <Phone className="w-3 h-3 text-emerald-400 group-hover/val:scale-110 transition-transform" />
-                                     <span className="font-mono tracking-tight group-hover/val:text-emerald-600 transition-colors uppercase leading-none">{formatWhatsApp(client.whatsapp as any)}</span>
+                                     <span className="font-mono tracking-tight group-hover/val:text-emerald-600 transition-colors uppercase leading-none">{formatWhatsApp(client.whatsapp)}</span>
                                   </div>
                                   <div className="h-3 w-[1px] bg-slate-200" />
                                   <div className="flex items-center gap-1.5 text-slate-400 font-bold">
@@ -612,8 +612,8 @@ export const EnviosPage: React.FC = () => {
                                  {botActive ? 'Bot ON' : 'Bot OFF'}
                               </button>
                               
-                              <button 
-                                 onClick={(e) => handleWhatsAppClick(client.whatsapp as any, e)} 
+                              <button
+                                 onClick={(e) => handleWhatsAppClick(client.whatsapp, e)}
                                  className="flex items-center justify-center gap-2 py-2.5 bg-emerald-50 text-emerald-700 hover:bg-white border border-emerald-100 rounded-[18px] text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 shadow-sm"
                               >
                                  <Phone size={12} /> Chat

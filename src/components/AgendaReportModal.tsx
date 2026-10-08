@@ -29,9 +29,9 @@ import {
   getReportPeriod,
   isDateWithinReportRange,
   REPORT_GROUPING_META,
-  ReportDateFilters,
   type ReportGrouping,
-} from './ReportDateFilters';
+} from '../utils/reportDates';
+import { ReportDateFilters } from './ReportDateFilters';
 
 type AgendaPeriod = {
   key: string;

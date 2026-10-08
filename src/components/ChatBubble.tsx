@@ -42,7 +42,6 @@ const formatTime = (date?: string | number | Date) => {
 export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
   // Determinamos roles
   const isAgent = msg.type === 'ai';     // Derecha (Nosotros)
-  const isHuman = msg.type === 'human';  // Izquierda (Cliente)
   const isSystem = msg.type === 'system'; // Centro
 
   const [copied, setCopied] = useState(false);
@@ -61,7 +60,7 @@ export const ChatBubble: React.FC<{ msg: ChatMsg }> = ({ msg }) => {
       await navigator.clipboard.writeText(msg.content || '');
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {}
+    } catch { /* Clipboard access may be denied by the browser. */ }
   };
 
   /* ------------------------------------------------------------

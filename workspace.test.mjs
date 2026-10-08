@@ -6,7 +6,7 @@ import ts from 'typescript';
 // Run the actual TypeScript modules in memory, without a browser or live API.
 function load(path, dependencies = {}) {
   const source = readFileSync(new URL('./' + path, import.meta.url), 'utf8');
-  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } });
+  const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } });
   const exports = {};
   new Function('exports', 'require', outputText)(exports, name => {
     if (!(name in dependencies)) throw new Error(`Unexpected dependency: ${name}`);
@@ -20,6 +20,100 @@ const { splitAgentSections } = load('src/utils/agentSections.ts');
 const agentDocument = load('src/utils/agentDocument.ts');
 const countryConfig = load('src/utils/countryConfig.ts');
 const diagnosticFlow = load('src/utils/diagnosticFlow.ts');
+const conversationIdentity = load('src/utils/conversationIdentity.ts');
+const webConversationRows = load('src/utils/webConversationRows.ts');
+
+test('WhatsApp lines default by country and preserve an explicit selection or no lines', () => {
+  assert.deepEqual(countryConfig.parseCountryConfig(null, 'Colombia').whatsapp_lineas, Array.from({ length: 15 }, (_, index) => index + 1));
+  for (const country of ['Mexico', 'México', ' MEXICO ']) {
+    assert.deepEqual(countryConfig.parseCountryConfig({ modulos: { whatsapp: true } }, country).whatsapp_lineas, [1, 2, 3, 4]);
+  }
+  assert.deepEqual(countryConfig.parseCountryConfig({ whatsapp_lineas: [8, 2, 8, 15] }, 'Mexico').whatsapp_lineas, [2, 8, 15]);
+  assert.deepEqual(countryConfig.parseCountryConfig('{"whatsapp_lineas":[]}', 'Colombia').whatsapp_lineas, []);
+  for (const value of [[0], [16], [1.5], ['1'], '1,2', {}]) {
+    assert.throws(() => countryConfig.parseCountryConfig({ whatsapp_lineas: value }, 'Mexico'));
+  }
+});
+
+test('WhatsApp selection never restores a hidden line or requests a line when none are enabled', () => {
+  const select = countryConfig.selectWhatsappLine;
+  assert.equal(select([1, 2, 3, 4], '15'), 1);
+  assert.equal(select([2, 8, 15], '8'), 8);
+  assert.equal(select([2, 8, 15], '1'), 2);
+  assert.equal(select([2, 8, 15], 'bad', 15), 15);
+  assert.equal(select([], '1'), null);
+});
+
+test('WhatsApp renders only the country lines and skips the QR request for an empty selection', async t => {
+  const previousStorage = globalThis.localStorage;
+  const saved = new Map([['wppqr:selectedSource:Colombia', '15'], ['wppqr:selectedSource:Mexico', '15']]);
+  globalThis.localStorage = { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) };
+  t.after(() => { if (previousStorage === undefined) delete globalThis.localStorage; else globalThis.localStorage = previousStorage; });
+  const element = (type, props) => ({ type, props });
+  const nodes = tree => !tree || typeof tree !== 'object' ? [] : Array.isArray(tree) ? tree.flatMap(nodes) : [tree, ...nodes(tree.props?.children)];
+  for (const [country, lines, expectedRequest] of [['Colombia', [...countryConfig.WHATSAPP_LINE_IDS], 15], ['Mexico', [1, 2, 3, 4], 1], ['Mexico', [4, 8], 4], ['Mexico', [], null]]) {
+    const effects = [];
+    const requests = [];
+    const { WppQrConnect } = load('src/components/WppQrConnect.tsx', {
+      react: { useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}], useRef: current => ({ current }), useEffect: effect => effects.push(effect), useCallback: callback => callback },
+      'react/jsx-runtime': { jsx: element, jsxs: element },
+      'lucide-react': {},
+      './RepairLoader': {},
+      '../utils/countryConfig': countryConfig,
+      '../services/countryRequest': { countryFetch: async url => { requests.push(url); return { ok: true, json: async () => ({ connected: true }) }; } },
+    });
+    const tree = WppQrConnect({ country, availableSources: lines });
+    const buttons = nodes(tree).filter(node => node.type === 'button' && Array.isArray(node.props.children));
+    assert.deepEqual(buttons.map(button => button.props.children[1].props.children), lines);
+    const cleanups = effects.map(effect => effect());
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(requests.map(url => Number(new URL(url).searchParams.get('id_instancia'))), expectedRequest === null ? [] : [expectedRequest]);
+    cleanups.forEach(cleanup => cleanup?.());
+  }
+  assert.equal(saved.get('wppqr:selectedSource:Colombia'), '15');
+  assert.equal(saved.get('wppqr:selectedSource:Mexico'), '4');
+});
+
+test('Mexico web visitor without WhatsApp or subscriber remains listed and opens by its n8n session', () => {
+  const client = {
+    row_number: 123, pais_sede: 'Mexico', source: 'web1', nombre: null,
+    whatsapp: '', subscriber_id: null, asignado_a: 'bce09007-3e39-48de-90ed-8782b22ec470',
+    created: '2026-10-08T01:20:00', last_msg: '2026-10-08T01:28:00',
+  };
+  const rows = webConversationRows.dedupeByAsignadoA([client, { ...client, row_number: 124, source: 'WhatsApp' }]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].row_number, client.row_number);
+  assert.equal(rows[0].asignado_a, client.asignado_a);
+  const fromModal = conversationIdentity.resolveConversationIdentity(client, client.source);
+  const fromWebList = conversationIdentity.resolveConversationIdentity(rows[0], 'web1');
+  assert.deepEqual(fromModal, fromWebList);
+  assert.equal(fromModal.available, true);
+  assert.equal(fromModal.recipient, client.asignado_a);
+  assert.equal(fromModal.source, 'web1');
+  assert.equal(conversationIdentity.resolveConversationIdentity({ ...client, whatsapp: '525555555555', source: ' WEB1 ' }).recipient, client.asignado_a);
+});
+
+test('web rows preserve separate anonymous sessions and never invent a chat recipient', () => {
+  const rows = webConversationRows.dedupeByAsignadoA([
+    { row_number: 1, source: 'web1', asignado_a: 'session-a', created: '2026-10-08T01:20:00' },
+    { row_number: 2, source: 'web1', asignado_a: 'session-b', created: '2026-10-08T01:21:00' },
+    { row_number: 3, source: ' WEB1 ', asignado_a: 'session-a', created: '2026-10-08T01:22:00' },
+    { row_number: 4, source: 'web1' },
+  ]);
+  assert.deepEqual(rows.map(row => row.row_number), [3, 2, 4]);
+  assert.equal(conversationIdentity.resolveConversationIdentity(rows[2]).available, false);
+  const phone = conversationIdentity.resolveConversationIdentity({ source: 'WhatsApp', whatsapp: '573001234567', asignado_a: 'staff-member' });
+  assert.equal(phone.recipient, '573001234567');
+  assert.equal(phone.isWeb, false);
+  assert.equal(conversationIdentity.resolveConversationIdentity({ subscriber_id: '1234567890123456789' }).subscriberId, '1234567890123456789');
+});
+
+test('conversation history cache cannot cross countries or login sessions', () => {
+  const identity = conversationIdentity.resolveConversationIdentity({ source: 'web1', asignado_a: 'same-session' });
+  const key = conversationIdentity.conversationCacheKey;
+  assert.notEqual(key(identity, 'Mexico', 'login-a'), key(identity, 'Colombia', 'login-a'));
+  assert.notEqual(key(identity, 'Mexico', 'login-a'), key(identity, 'Mexico', 'login-b'));
+});
 
 test('hosted chat defaults stay isolated by country and allow overrides or disabling', () => {
   const mexico = 'https://n8n.alliasoft.com/webhook/76edb881-62e9-403d-9b28-dcf419578e1e/chat';
@@ -49,7 +143,7 @@ test('root saves the hosted URL in the active country configuration and preserve
     '../utils/countryConfig': countryConfig,
   });
   const record = { id: 2, pais_sede: 'Mexico' };
-  const config = countryConfig.parseCountryConfig({ chat_webhook_url: 'https://example.com/mexico/chat', ciudades: ['CDMX'], extra: { preserved: true } }, country);
+  const config = countryConfig.parseCountryConfig({ chat_webhook_url: 'https://example.com/mexico/chat', ciudades: ['CDMX'], whatsapp_lineas: [2, 4, 8], extra: { preserved: true } }, country);
   await CountryService.save(record, config);
   assert.deepEqual(writes[0], { method: 'PUT', endpoint: '/paises', body: { id_pais: 2, pais_sede: 'Mexico', configuracion: config } });
   country = 'Colombia';

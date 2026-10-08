@@ -1,5 +1,5 @@
 import { RepairLoader } from './RepairLoader';
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Lock, Mail, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { AuthService } from '../services/authService';

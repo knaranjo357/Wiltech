@@ -24,7 +24,7 @@ export const formatStageLabel = (value: string | null | undefined): string => {
     ?? value.replace(/_/g, ' ').toLowerCase().replace(/^./, (letter) => letter.toUpperCase());
 };
 
-export const getEtapaColor = (etapa: EstadoEtapa): string => {
+export const getEtapaColor = (etapa: Client['estado_etapa']): string => {
   const colors: Record<EstadoEtapa, string> = {
     Nuevo: 'bg-blue-100 text-blue-800 border-blue-200',
     Cotizando: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -39,7 +39,7 @@ export const getEtapaColor = (etapa: EstadoEtapa): string => {
     Fan: 'bg-pink-100 text-pink-800 border-pink-200',
     Espia: 'bg-slate-100 text-indigo-800 border-slate-200',
   };
-  return colors[etapa] || colors.Nuevo;
+  return (etapa ? colors[etapa] : undefined) || colors.Nuevo;
 };
 
 export const getCategoriaColor = (categoria: CategoriaContacto): string => {
@@ -195,9 +195,9 @@ export const deriveEnvioUI = (c: Partial<Client>): {
   if (isEnvioGestionado(c)) {
     return { key: 'envio_gestionado', label: ENVIO_LABELS.envio_gestionado, classes: ENVIO_CLASSES.envio_gestionado, isGreen: true };
   }
-  
-  const flagNoAplica = norm((c as any).estado_envio).toLowerCase() === 'no_aplica';
-  
+
+  const flagNoAplica = norm(c.estado_envio).toLowerCase() === 'no_aplica';
+
   const ida = provided(c.guia_numero_ida);
   const ret = provided(c.guia_numero_retorno);
 
@@ -215,7 +215,7 @@ export const deriveEnvioUI = (c: Partial<Client>): {
     return { key: 'no_aplica', label: ENVIO_LABELS.no_aplica, classes: ENVIO_CLASSES.no_aplica, isGreen: false };
   }
 
-  const tieneTodo = REQUIRED_GUIA_FIELDS.every(k => provided((c as any)[k]));
+  const tieneTodo = REQUIRED_GUIA_FIELDS.every(k => provided(c[k]));
   if (tieneTodo) {
     return { key: 'datos_completos', label: ENVIO_LABELS.datos_completos, classes: ENVIO_CLASSES.datos_completos, isGreen: false };
   }
@@ -227,7 +227,7 @@ export const getEnvioStatus = (
   estado_envio?: string | null,
   guia_ida?: unknown,
   guia_retorno?: unknown
-) => deriveEnvioUI({ estado_envio: estado_envio as any, guia_numero_ida: guia_ida as any, guia_numero_retorno: guia_retorno as any });
+) => deriveEnvioUI({ estado_envio, guia_numero_ida: safeText(guia_ida), guia_numero_retorno: safeText(guia_retorno) });
 
 export const shouldGreenRow = (c: Client): boolean => GREEN_STATES.includes(deriveEnvioUI(c).key);
 

@@ -41,7 +41,7 @@ const getGroupKey = (label: string, g: Granularity): string => {
   tmp.setHours(0, 0, 0, 0);
   tmp.setDate(tmp.getDate() + 4 - (tmp.getDay() || 7));
   const ys = new Date(tmp.getFullYear(), 0, 1);
-  const week = Math.ceil((((tmp as any) - (ys as any)) / 86400000 + 1) / 7);
+  const week = Math.ceil(((tmp.getTime() - ys.getTime()) / 86400000 + 1) / 7);
   return `${tmp.getFullYear()}-W${String(week).padStart(2, '0')}`;
 };
 
@@ -169,14 +169,14 @@ const buildEffectiveness = (
 };
 
 // ── Tooltip ──────────────────────────────────────────────────────────────────
-const SimpleTooltip = ({ active, payload, label }: any) => {
+const SimpleTooltip = ({ active, payload, label }: import('../../types/chart').ChartTooltipProps) => {
   if (!active || !payload?.length) return null;
-  const total = payload.reduce((s: number, e: any) => s + (Number(e.value) || 0), 0);
+  const total = payload.reduce((s, e) => s + (Number(e.value) || 0), 0);
   return (
     <div className="bg-white border border-gray-100 shadow-xl rounded-xl p-3 min-w-[160px] z-50">
       <p className="font-bold text-gray-700 text-xs mb-1 border-b pb-1">{label}</p>
       <p className="text-xs font-bold text-gray-900 mb-1">Total: {total.toLocaleString()}</p>
-      {payload.slice(0, 8).map((e: any, i: number) => (
+      {payload.slice(0, 8).map((e, i) => (
         <div key={i} className="flex justify-between text-[11px] gap-3">
           <span className="flex items-center gap-1 text-gray-500">
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: e.color }} />
@@ -454,8 +454,8 @@ export const Resultados: React.FC = () => {
       const json = await ApiService.get<ApiResponse | ApiResponse[]>('/resultadosdb');
       const payload: ApiResponse = Array.isArray(json) ? json[0] : json;
       setApiData(payload);
-    } catch (e: any) {
-      setError(e?.message || 'Error al cargar datos');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al cargar datos');
     } finally {
       setIsLoading(false);
     }

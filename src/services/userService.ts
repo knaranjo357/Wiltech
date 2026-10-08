@@ -40,7 +40,7 @@ const API_BASE = 'https://n8n.alliasoft.com/webhook/wiltech';
 export class UserService {
   private static async validateRoles(roles: string, existingRoles = '') {
     if (!AuthService.isRoot() && roles.split(',').some(role => role.trim().toLowerCase() === 'root')) {
-      throw new Error('Solo root puede asignar el rol root.');
+      throw new Error('No tienes permiso para asignar este rol.');
     }
     if (AuthService.isRoot()) return;
     const record = await CountryService.get(true);
@@ -87,10 +87,10 @@ export class UserService {
   }
 
   // 2. Crear Usuario (Nuevo)
-  static async createUser(params: CreateUserParams): Promise<any> {
+  static async createUser(params: CreateUserParams): Promise<unknown> {
     await this.validateRoles(params.rol);
     const countries = AuthService.isRoot() ? this.assignedCountries(params.pais_sede ?? AuthService.getPaisSede()) : AuthService.getPaisSede();
-    if (!AuthService.isRoot() && params.pais_sede !== undefined && params.pais_sede !== countries) throw new Error('Solo root puede asignar países.');
+    if (!AuthService.isRoot() && params.pais_sede !== undefined && params.pais_sede !== countries) throw new Error('No tienes permiso para asignar países.');
     const token = AuthService.getToken();
     const formData = new FormData();
     
@@ -114,11 +114,11 @@ export class UserService {
   }
 
   // 3. Modificar Usuario (Sin password)
-  static async modifyUser(params: ModifyUserParams): Promise<any> {
+  static async modifyUser(params: ModifyUserParams): Promise<unknown> {
     const existing = await this.editableUser(params.id);
     await this.validateRoles(params.rol, existing.rol);
     const countries = AuthService.isRoot() ? this.assignedCountries(params.pais_sede ?? existing.pais_sede ?? '') : AuthService.parseCountries(existing.pais_sede).join(',');
-    if (!AuthService.isRoot() && params.pais_sede !== undefined && params.pais_sede !== countries) throw new Error('Solo root puede asignar países.');
+    if (!AuthService.isRoot() && params.pais_sede !== undefined && params.pais_sede !== countries) throw new Error('No tienes permiso para asignar países.');
     const token = AuthService.getToken();
     const formData = new FormData();
 
@@ -142,7 +142,7 @@ export class UserService {
   }
 
   // 4. Cambiar Contraseña (Nuevo Endpoint)
-  static async changePassword(params: ChangePasswordParams): Promise<any> {
+  static async changePassword(params: ChangePasswordParams): Promise<unknown> {
     await this.editableUser(params.id);
     const token = AuthService.getToken();
     const formData = new FormData();

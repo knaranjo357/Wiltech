@@ -2,23 +2,28 @@ import { useEffect, useState } from 'react';
 import { Globe, Save, MapPin, Sliders, ExternalLink, MessageCircle } from 'lucide-react';
 import { useCountryConfig } from '../hooks/useCountryConfig';
 import { CountryService } from '../services/countryService';
-import { COUNTRY_MODULES, cleanCities, normalizeChatWebhookUrl } from '../utils/countryConfig';
+import { COUNTRY_MODULES, WHATSAPP_LINE_IDS, cityKey, cleanCities, normalizeChatWebhookUrl } from '../utils/countryConfig';
 import { AuthService } from '../services/authService';
 
 export default function PaisesPage() {
   const { country, config, record, reload } = useCountryConfig();
+  const countryModules = COUNTRY_MODULES.filter(module =>
+    module.id === 'envios-mexico' ? cityKey(country) === 'mexico' :
+    module.id === 'envios-colombia' ? cityKey(country) !== 'mexico' : true,
+  );
   const [modules, setModules] = useState(config.modulos);
   const [cities, setCities] = useState(config.ciudades.join('\n'));
   const [chatUrl, setChatUrl] = useState(config.chat_webhook_url);
+  const [whatsappLines, setWhatsappLines] = useState(config.whatsapp_lineas);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  useEffect(() => { setModules(config.modulos); setCities(config.ciudades.join('\n')); setChatUrl(config.chat_webhook_url); }, [config]);
+  useEffect(() => { setModules(config.modulos); setCities(config.ciudades.join('\n')); setChatUrl(config.chat_webhook_url); setWhatsappLines(config.whatsapp_lineas); }, [config]);
   let previewUrl = '';
   let chatUrlError = '';
   try { previewUrl = normalizeChatWebhookUrl(chatUrl); }
   catch (error) { chatUrlError = error instanceof Error ? error.message : 'URL inválida.'; }
-  const dirty = JSON.stringify(modules) !== JSON.stringify(config.modulos) || cities !== config.ciudades.join('\n') || chatUrl !== config.chat_webhook_url;
+  const dirty = JSON.stringify(modules) !== JSON.stringify(config.modulos) || cities !== config.ciudades.join('\n') || chatUrl !== config.chat_webhook_url || JSON.stringify(whatsappLines) !== JSON.stringify(config.whatsapp_lineas);
   useEffect(() => {
     if (!dirty) return;
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
@@ -27,13 +32,13 @@ export default function PaisesPage() {
     window.addEventListener('app:before-navigate', beforeNavigate);
     return () => { window.removeEventListener('beforeunload', beforeUnload); window.removeEventListener('app:before-navigate', beforeNavigate); };
   }, [dirty]);
-  if (!AuthService.isRoot()) return <p role="alert">Solo root puede configurar países.</p>;
+  if (!AuthService.isRoot()) return <p role="alert">No tienes permiso para configurar países.</p>;
   const save = async () => {
     setSaving(true); setError(''); setMessage('');
     try {
-      await CountryService.save(record, { ...config, modulos: modules, ciudades: cleanCities(cities.split('\n')), chat_webhook_url: normalizeChatWebhookUrl(chatUrl) });
+      await CountryService.save(record, { ...config, modulos: modules, ciudades: cleanCities(cities.split('\n')), chat_webhook_url: normalizeChatWebhookUrl(chatUrl), whatsapp_lineas: whatsappLines });
       await reload();
-      setMessage('Configuración guardada. Los módulos, ciudades y URL del chat ya se aplican a este país.');
+      setMessage('Configuración guardada. Los módulos, ciudades, chat y líneas de WhatsApp ya se aplican a este país.');
     } catch (error) { setError(error instanceof Error ? error.message : 'No se pudo guardar.'); }
     finally { setSaving(false); }
   };
@@ -53,9 +58,29 @@ export default function PaisesPage() {
       <p id="country-chat-error" role={chatUrlError ? 'alert' : undefined} className="mt-2 text-xs text-red-600">{chatUrlError}</p>
       {previewUrl && <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary mt-2 inline-flex"><ExternalLink className="h-4 w-4" /> Probar chat de {country}</a>}
     </section>
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 font-bold"><MessageCircle className="h-4 w-4" /> Líneas de WhatsApp · {country}</h2>
+        <span role="status" className="rounded-lg bg-slate-100 px-3 py-1 text-sm font-semibold">{whatsappLines.length} de {WHATSAPP_LINE_IDS.length} visibles</span>
+      </div>
+      <p id="country-whatsapp-help" className="mt-2 text-sm text-slate-500">Marca las líneas que se mostrarán en WhatsApp para este país. Ocultar una línea no la desconecta.</p>
+      <fieldset disabled={saving} aria-describedby="country-whatsapp-help" className="mt-4">
+        <legend className="sr-only">Líneas visibles de WhatsApp</legend>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setWhatsappLines([...WHATSAPP_LINE_IDS])} className="btn-secondary">Mostrar todas</button>
+          <button type="button" onClick={() => setWhatsappLines([])} className="btn-secondary">Ocultar todas</button>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">{WHATSAPP_LINE_IDS.map(id => (
+          <label key={id} className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-3 ${whatsappLines.includes(id) ? 'border-slate-300 bg-slate-50' : 'border-slate-100'}`}>
+            <span className="text-sm font-semibold">WhatsApp {id}</span>
+            <input type="checkbox" checked={whatsappLines.includes(id)} onChange={event => setWhatsappLines(previous => event.target.checked ? [...previous, id].sort((a, b) => a - b) : previous.filter(line => line !== id))} className="h-4 w-4 accent-black" />
+          </label>
+        ))}</div>
+      </fieldset>
+    </section>
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(280px,1fr)]">
       <section className="card p-5"><h2 className="flex items-center gap-2 font-bold"><Sliders className="h-4 w-4" /> Módulos del país</h2><p className="mt-2 text-xs leading-relaxed text-slate-500">Desactivar un módulo lo oculta y bloquea para todos, incluidos admin y root. Esta pantalla siempre permanece disponible para root.</p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">{COUNTRY_MODULES.map(module => <label key={module.id} className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-4 ${modules[module.id] ? 'border-slate-300 bg-slate-50' : 'border-slate-100 bg-white'}`}><span className="text-sm font-semibold text-slate-700">{module.label}</span><input type="checkbox" checked={modules[module.id] === true} disabled={saving} onChange={event => setModules(previous => ({ ...previous, [module.id]: event.target.checked }))} className="h-4 w-4 accent-black" /></label>)}</div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">{countryModules.map(module => <label key={module.id} className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border p-4 ${modules[module.id] ? 'border-slate-300 bg-slate-50' : 'border-slate-100 bg-white'}`}><span className="text-sm font-semibold text-slate-700">{module.label}</span><input type="checkbox" checked={modules[module.id] === true} disabled={saving} onChange={event => setModules(previous => ({ ...previous, [module.id]: event.target.checked }))} className="h-4 w-4 accent-black" /></label>)}</div>
       </section>
       <section className="card p-5"><h2 className="flex items-center gap-2 font-bold"><MapPin className="h-4 w-4" /> Ciudades y sedes</h2><label htmlFor="country-cities" className="mt-2 block text-xs leading-relaxed text-slate-500">Una ciudad por línea. Estos nombres se usarán como sugerencias y para normalizar los formularios.</label><textarea id="country-cities" value={cities} onChange={event => setCities(event.target.value)} disabled={saving} rows={10} placeholder="Añade las ciudades de este país" className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-7 focus:outline-none focus:ring-2 focus:ring-slate-300" /><p className="mt-2 text-xs text-slate-400">{cleanCities(cities.split('\n')).length} ciudades · Se eliminan nombres repetidos.</p></section>
     </div>

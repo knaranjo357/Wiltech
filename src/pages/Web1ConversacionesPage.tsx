@@ -11,100 +11,12 @@ import { ConversationDataService } from '../services/conversationDataService';
 import { formatDate } from '../utils/clientHelpers';
 import { ChatPanel } from '../components/ChatPanel';
 import { ClientModal } from '../components/ClientModal';
+import { dedupeByAsignadoA, fmt, normalizeConsent, normalizeText, parseDateToTimestamp, type ChatRow, type ExtendedClient } from '../utils/webConversationRows';
 
 /** ================== Tipos y Normalización ================== */
 
-type ChatRow = {
-  row_number: number;
-  nombre: string;
-  whatsapp: string;
-  asignado_a: string;
-  modelo: string | null;
-  ciudad: string | null;
-  source: string | null;
-  created: number;
-  last_msg: number;
-  consentimiento_contacto: boolean | null;
-  subscriber_id: number | null;
-};
-
-interface ExtendedClient extends Omit<Client, 'created' | 'last_msg' | 'consentimiento_contacto' | 'modelo' | 'ciudad' | 'source' | 'guia_ciudad' | 'asignado_a' | 'subscriber_id'> {
-  modelo?: string | null;
-  ciudad?: string | null;
-  guia_ciudad?: string | null;
-  source?: string | null;
-  asignado_a?: string | null;
-  created?: string | number | Date | null;
-  last_msg?: string | number | Date | null;
-  consentimiento_contacto?: boolean | '' | null;
-  subscriber_id?: number | null;
-}
-
 type SortOrder = 'asc' | 'desc';
 type SortKey = 'created' | 'last_msg';
-
-/** ================== Utilidades ================== */
-const TARGET_SOURCE = 'web1';
-
-const normalizeText = (v: unknown) =>
-  String(v ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
-const parseDateToTimestamp = (v: unknown): number => {
-  if (!v) return 0;
-  if (typeof v === 'number') return v;
-  const str = String(v).trim();
-  if (!str) return 0;
-  
-  const safeStr = str.includes(' ') && !str.includes('T') ? str.replace(' ', 'T') : str;
-  const time = Date.parse(safeStr);
-  return Number.isNaN(time) ? 0 : time;
-};
-
-const normalizeConsent = (val: boolean | '' | null | undefined): boolean | null => {
-  if (val === '' || val === undefined || val === null) return null;
-  return val === true;
-};
-
-const fmt = (v: unknown, placeholder = ''): string => {
-  const s = (v ?? '').toString().trim();
-  return (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') ? placeholder : s;
-};
-
-/** Deduplicación y conversión basada en ASIGNADO_A */
-function dedupeByAsignadoA(clients: ExtendedClient[]): ChatRow[] {
-  const map = new Map<string, ChatRow>();
-  
-  for (const c of clients) {
-    const currentSource = normalizeText(c.source);
-    if (currentSource !== TARGET_SOURCE) continue;
-
-    const rawId = c.asignado_a ? String(c.asignado_a).trim() : '';
-    const uniqueId = rawId || `row_${c.row_number}`;
-
-    const createdTs = parseDateToTimestamp(c.created);
-    const lastMsgTs = parseDateToTimestamp(c.last_msg);
-
-    const candidate: ChatRow = {
-      row_number: c.row_number,
-      nombre: fmt(c.nombre, 'Visitante Web'),
-      whatsapp: c.whatsapp ? String(c.whatsapp).trim() : '', 
-      asignado_a: rawId || uniqueId,
-      modelo: c.modelo || null,
-      ciudad: c.ciudad || c.guia_ciudad || null,
-      source: c.source || TARGET_SOURCE,
-      created: createdTs,
-      last_msg: lastMsgTs,
-      consentimiento_contacto: normalizeConsent(c.consentimiento_contacto),
-      subscriber_id: c.subscriber_id ? Number(c.subscriber_id) : null,
-    };
-
-    const current = map.get(uniqueId);
-    if (!current || candidate.created > current.created) {
-      map.set(uniqueId, candidate);
-    }
-  }
-  return Array.from(map.values()).sort((a, b) => b.created - a.created);
-}
 
 const rowToClient = (r: ChatRow): Client => ({
   ...r,
@@ -242,9 +154,13 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
   const [savingRowId, setSavingRowId] = useState<number | null>(null);
   
   const listRef = useRef<HTMLDivElement | null>(null);
+  const fetchingRef = useRef(false);
+  const lastFetchRef = useRef(0);
 
   // --- Carga de Datos ---
   const fetchList = useCallback(async (restoreScroll = false, force = false) => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
     const scrollTop = listRef.current?.scrollTop ?? 0;
     setLoading(true);
     setError(null);
@@ -254,11 +170,12 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
       const rawClients = Array.isArray(data) ? (data as unknown as ExtendedClient[]) : [];
       const rows = dedupeByAsignadoA(rawClients);
       setAllRows(rows);
-
-      setSelectedRow((current) => current || rows[0] || null);
-    } catch (e: any) {
-      setError(e?.message || 'Error cargando conversaciones web1');
+      setSelectedRow(current => rows.find(row => row.row_number === current?.row_number) ?? rows[0] ?? null);
+      lastFetchRef.current = Date.now();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error cargando conversaciones web1');
     } finally {
+      fetchingRef.current = false;
       setLoading(false);
       if (restoreScroll && listRef.current) {
         requestAnimationFrame(() => {
@@ -268,7 +185,23 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
     }
   }, []);
 
-  useEffect(() => { fetchList(); }, [fetchList]);
+  useEffect(() => { void fetchList(false, true); }, [fetchList]);
+
+  useEffect(() => {
+    const refreshIfStale = () => {
+      if (document.visibilityState === 'visible' && !viewClient && !savingRowId && Date.now() - lastFetchRef.current >= 30_000) {
+        void fetchList(true, true);
+      }
+    };
+    const interval = window.setInterval(refreshIfStale, 30_000);
+    window.addEventListener('focus', refreshIfStale);
+    document.addEventListener('visibilitychange', refreshIfStale);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refreshIfStale);
+      document.removeEventListener('visibilitychange', refreshIfStale);
+    };
+  }, [fetchList, savingRowId, viewClient]);
 
   // --- Event Listeners ---
   useEffect(() => {
@@ -323,12 +256,12 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
         nombre: payload.nombre ?? undefined,
         modelo: payload.modelo || null,
         consentimiento_contacto: payload.consentimiento_contacto !== undefined 
-            ? normalizeConsent(payload.consentimiento_contacto as any) 
+            ? normalizeConsent(payload.consentimiento_contacto)
             : undefined
     };
 
-    Object.keys(internalPayload).forEach(key => {
-        if ((internalPayload as any)[key] === undefined) delete (internalPayload as any)[key];
+    (Object.keys(internalPayload) as Array<keyof ChatRow>).forEach(key => {
+        if (internalPayload[key] === undefined) delete internalPayload[key];
     });
 
     setAllRows(prev => prev.map(r => r.row_number === payload.row_number ? { ...r, ...internalPayload } as ChatRow : r));
@@ -339,8 +272,8 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
     });
     
     try {
-      if (typeof (ClientService as any).updateClient === 'function') {
-        await (ClientService as any).updateClient(payload);
+      if (typeof ClientService.updateClient === 'function') {
+        await ClientService.updateClient(payload);
       } else {
         await countryFetch('/api/clients/update', {
           method: 'POST',
@@ -348,7 +281,7 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
           body: JSON.stringify(payload),
         });
       }
-      ConversationDataService.patchClient(payload);
+      ConversationDataService.patchClient();
       return true;
     } catch {
       fetchList(true); 
@@ -399,12 +332,7 @@ export const Web1ConversacionesPage: React.FC<{ onOpenConversations?: () => void
 
   const chatClient = useMemo(() => {
     if (!selectedRow) return null;
-    const baseClient = rowToClient(selectedRow);
-    return {
-      ...baseClient,
-      whatsapp: selectedRow.asignado_a, 
-      real_whatsapp_display: '' 
-    } as Client;
+    return rowToClient(selectedRow);
   }, [selectedRow]);
 
   return (

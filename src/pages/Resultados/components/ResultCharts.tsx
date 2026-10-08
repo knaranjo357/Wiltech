@@ -6,9 +6,9 @@ import { AlertCircle, PieChart, Calendar, Truck } from 'lucide-react';
 import { SOURCE_EMPTY } from '../utils/dataProcessor';
 
 // Tooltip personalizado
-const CustomTooltip = memo(({ active, payload, label }: any) => {
+const CustomTooltip = memo(({ active, payload, label }: import('../../../types/chart').ChartTooltipProps) => {
   if (!active || !payload || !payload.length) return null;
-  const total = payload.reduce((sum: number, entry: any) => sum + (Number(entry.value) || 0), 0);
+  const total = payload.reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
 
   return (
     <div className="bg-white p-3 border border-gray-100 shadow-xl rounded-xl min-w-[180px] z-50">
@@ -18,7 +18,7 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
         <span className="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded text-xs">{total.toLocaleString()}</span>
       </div>
       <div className="space-y-1">
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry, index) => (
           <div key={index} className="flex justify-between items-center text-xs">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
@@ -33,9 +33,9 @@ const CustomTooltip = memo(({ active, payload, label }: any) => {
 });
 
 interface HeavyChartProps {
-  data: any[];
+  data: Array<{ total: number; [key: string]: unknown }>;
   keys: string[];
-  onBarClick?: (data: any) => void;
+  onBarClick?: (data: unknown) => void;
   colorMap: Record<string, string>;
   title: string;
   subTitle?: string;
@@ -51,7 +51,7 @@ const HeavyChart = memo(({ data, keys, onBarClick, colorMap, title, subTitle, ic
   );
 
   const disableAnimation = data.length > 90;
-  const grandTotal = data.reduce((acc: number, curr: any) => acc + curr.total, 0);
+  const grandTotal = data.reduce((acc, curr) => acc + curr.total, 0);
 
   return (
     <div className="bg-white rounded-2xl p-5 shadow-[var(--wt-shadow-sm)] border border-slate-100 h-[400px] flex flex-col transition-all hover:shadow-[var(--wt-shadow-md)] hover:border-slate-200">
@@ -114,14 +114,14 @@ const HeavyChart = memo(({ data, keys, onBarClick, colorMap, title, subTitle, ic
 ));
 
 interface ResultChartsProps {
-  creadosData: any[];
+  creadosData: Array<{ total: number; [key: string]: unknown }>;
   creadosKeys: string[];
-  agendasData: any[];
+  agendasData: Array<{ total: number; [key: string]: unknown }>;
   agendasKeys: string[];
-  enviosData: any[];
+  enviosData: Array<{ total: number; [key: string]: unknown }>;
   enviosKeys: string[];
   colorMap: Record<string, string>;
-  onBarClick: (data: any, type: 'agendas' | 'created' | 'envios') => void;
+  onBarClick: (data: unknown, type: 'agendas' | 'created' | 'envios') => void;
 }
 
 export const ResultCharts: React.FC<ResultChartsProps> = ({
@@ -139,7 +139,7 @@ export const ResultCharts: React.FC<ResultChartsProps> = ({
         data={creadosData}
         keys={creadosKeys}
         colorMap={colorMap}
-        onBarClick={(d: any) => onBarClick(d, 'created')}
+        onBarClick={(d) => onBarClick(d, 'created')}
         icon={PieChart}
       />
       <HeavyChart
@@ -148,7 +148,7 @@ export const ResultCharts: React.FC<ResultChartsProps> = ({
         data={agendasData}
         keys={agendasKeys}
         colorMap={colorMap}
-        onBarClick={(d: any) => onBarClick(d, 'agendas')}
+        onBarClick={(d) => onBarClick(d, 'agendas')}
         icon={Calendar}
       />
       <HeavyChart
@@ -157,7 +157,7 @@ export const ResultCharts: React.FC<ResultChartsProps> = ({
         data={enviosData}
         keys={enviosKeys}
         colorMap={colorMap}
-        onBarClick={(d: any) => onBarClick(d, 'envios')}
+        onBarClick={(d) => onBarClick(d, 'envios')}
         icon={Truck}
       />
     </div>

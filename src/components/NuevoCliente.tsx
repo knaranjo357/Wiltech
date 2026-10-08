@@ -52,7 +52,7 @@ type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolea
 type FieldDef<K extends keyof Client = keyof Client> = {
   label: string;
   key: K;
-  icon: React.ComponentType<any>;
+  icon: typeof User;
   type?: FieldType;
   required?: boolean;
   placeholder?: string;
@@ -104,9 +104,9 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     guia_email: '',
     guia_numero_ida: '',
     guia_numero_retorno: '',
-    asegurado: false as any,
-    valor_seguro: '' as any,
-    consentimiento_contacto: true as any, 
+    asegurado: false,
+    valor_seguro: '',
+    consentimiento_contacto: true,
   };
 
   const [form, setForm] = useState<Partial<Client>>(initialForm);
@@ -126,11 +126,11 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
     setError(null);
   };
 
-  const setVal = <K extends keyof Client>(key: K, value: any) =>
+  const setVal = (key: keyof Client, value: Client[keyof Client]) =>
     setForm(prev => ({ ...prev, [key]: value }));
 
   // ================= SECCIONES (Estilo Idéntico a ClientModal) =================
-  const sections: Array<{ title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
+  const sections: Array<{ title: string; icon: typeof User; fields: Array<FieldDef>; iconColor: string }> = [
     {
       title: 'Contacto y Agenda',
       icon: User,
@@ -252,16 +252,16 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
         window.dispatchEvent(new CustomEvent<Partial<Client>>('client:created', { detail: payload }));
         // Forzar actualización en listas
         window.dispatchEvent(new CustomEvent<Partial<Client>>('client:updated', { detail: { ...payload, row_number: 999999 } }));
-      } catch {}
+      } catch { /* Creation succeeded even if the browser cannot dispatch an event. */ }
 
       if (onCreated) onCreated(payload);
       
       setForm(initialForm);
       setOpen(false);
 
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      setError(e?.message || 'Error al crear el cliente.');
+      setError(e instanceof Error ? e.message : 'Error al crear el cliente.');
     } finally {
       setSaving(false);
     }
@@ -344,7 +344,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                     <div className="p-5 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4 rounded-b-2xl border-t border-slate-100">
                       {section.fields.map((field, j) => {
                         const isFullWidth = field.type === 'textarea';
-                        const val = (form as any)[field.key];
+                        const val = form[field.key];
 
                         return (
                           <div key={j} className={`flex flex-col gap-1.5 ${isFullWidth ? 'sm:col-span-2' : ''}`}>
@@ -356,11 +356,11 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                {field.key === 'estado_etapa' ? (
                                  <StageAutocomplete
                                    value={val}
-                                   onChange={(nextValue) => setVal('estado_etapa', nextValue as any)}
+                                   onChange={(nextValue) => setVal('estado_etapa', nextValue)}
                                  />
                                ) : field.type === 'textarea' ? (
                                  <textarea aria-label={field.label}
-                                   value={val ?? ''}
+                                   value={String(val ?? '')}
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    rows={3}
                                    className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
@@ -381,14 +381,14 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                ) : field.type === 'datetime' ? (
                                  <input
                                    aria-label={field.label} type="datetime-local"
-                                   value={val ?? ''}
+                                   value={String(val ?? '')}
                                    onChange={(e) => setVal(field.key, e.target.value)}
                                    className="w-full text-sm bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all px-3 py-2.5"
                                  />
                                ) : field.type === 'sede' || field.key === 'ciudad' || field.key === 'guia_ciudad' ? (
                                  <SedeSelect
                                    placeholder={`Selecciona o escribe ${field.label.toLowerCase()}`}
-                                   value={val ?? ''}
+                                   value={String(val ?? '')}
                                    onChange={(v) => setVal(field.key, v)}
                                  />
                                ) : (
@@ -396,7 +396,7 @@ export const NuevoCliente: React.FC<NuevoClienteProps> = ({ onCreated, floating 
                                    aria-label={field.label}
                                    aria-required={field.required}
                                    type={field.key === 'whatsapp' ? 'tel' : field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
-                                   value={val ?? ''}
+                                   value={String(val ?? '')}
                                    onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                    placeholder={field.placeholder || field.label}
                                    className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"

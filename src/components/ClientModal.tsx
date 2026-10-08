@@ -1,5 +1,5 @@
 import { RepairLoader } from './RepairLoader';
-﻿// src/components/ClientModal.tsx
+// src/components/ClientModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -13,7 +13,6 @@ import {
   formatDate,
   formatWhatsApp,
   getEtapaColor,
-  getCategoriaColor,
   deriveEnvioUI,
 } from '../utils/clientHelpers';
 import { ChatPanel } from './ChatPanel';
@@ -38,14 +37,14 @@ type FieldType = 'text' | 'textarea' | 'datetime' | 'email' | 'number' | 'boolea
 type FieldDef<K extends keyof Client = keyof Client> = {
   label: string;
   key: K;
-  icon: React.ComponentType<any>;
+  icon: typeof User;
   type?: FieldType;
 };
 
 // ========= Utils & Helpers =========
 
-const toInputDate = (val: any): string => {
-  if (!val) return '';
+const toInputDate = (val: unknown): string => {
+  if (typeof val !== 'string' && typeof val !== 'number') return '';
   try {
     const date = new Date(val);
     if (isNaN(date.getTime())) return '';
@@ -68,7 +67,7 @@ const parseAgendaDate = (raw?: string | null): Date | null => {
 // ========= Definición de Tabs =========
 type TabID = 'general' | 'comercial' | 'logistica' | 'notas' | 'reparaciones' | 'chat';
 
-const TABS: { id: TabID; label: string; icon: React.ComponentType<any> }[] = [
+const TABS: { id: TabID; label: string; icon: typeof User }[] = [
   { id: 'general', label: 'General', icon: LayoutDashboard },
   { id: 'comercial', label: 'Comercial', icon: DollarSign },
   { id: 'logistica', label: 'Logística', icon: Truck },
@@ -81,7 +80,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   const { config } = useCountryConfig();
   const canRepair = canAccessCountryPage('reparaciones', AuthService.getCurrentUser()?.role, config);
   const shouldRender = Boolean(isOpen && client);
-  const c = (client ?? {}) as Client;
+  const c = useMemo(() => client ?? {} as Client, [client]);
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
   // State
@@ -146,13 +145,13 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     }
   };
 
-  const getVal = <K extends keyof Client>(key: K): any => (editData[key] ?? c[key]) as any;
-  const setVal = <K extends keyof Client>(key: K, value: any) => setEditData(prev => ({ ...prev, [key]: value }));
+  const getVal = <K extends keyof Client>(key: K) => editData[key] ?? c[key];
+  const setVal = (key: keyof Client, value: Client[keyof Client]) => setEditData(prev => ({ ...prev, [key]: value }));
 
-  const handleCopy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch {} };
+  const handleCopy = async (text: string) => { try { await navigator.clipboard.writeText(text); } catch { /* Browser notification or clipboard access is unavailable. */ } };
 
   const notifyGlobalUpdate = (payload: Partial<Client>) => {
-    try { window.dispatchEvent(new CustomEvent<Partial<Client>>('client:updated', { detail: payload })); } catch {}
+    try { window.dispatchEvent(new CustomEvent<Partial<Client>>('client:updated', { detail: payload })); } catch { /* Browser notification or clipboard access is unavailable. */ }
   };
 
   const handleSave = async () => {
@@ -183,7 +182,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   // Bot state uses centralized isBotOn from textUtils
 
   const handleBotToggle = async () => {
-    const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto) as any;
+    const currentRaw = (editData.consentimiento_contacto ?? c.consentimiento_contacto);
     const currentlyOn = isBotOn(currentRaw);
 
     const newValue = !currentlyOn;
@@ -217,9 +216,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
     const prev = editData.asistio_agenda;
     setEditData(p => ({ ...p, asistio_agenda: next }));
     try {
-      const ok = await onUpdate({ row_number: c.row_number, asistio_agenda: next as any });
+      const ok = await onUpdate({ row_number: c.row_number, asistio_agenda: next });
       if (!ok) setEditData(p => ({ ...p, asistio_agenda: prev }));
-      else notifyGlobalUpdate({ row_number: c.row_number, asistio_agenda: next as any });
+      else notifyGlobalUpdate({ row_number: c.row_number, asistio_agenda: next });
     } catch {
       setEditData(p => ({ ...p, asistio_agenda: prev }));
     }
@@ -239,7 +238,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
   // =========================================================
   // CONFIGURACIÓN DE SECCIONES
   // =========================================================
-  const allSections: Array<{ tab: TabID; title: string; icon: React.ComponentType<any>; fields: Array<FieldDef>; iconColor: string }> = [
+  const allSections: Array<{ tab: TabID; title: string; icon: typeof User; fields: Array<FieldDef>; iconColor: string }> = [
     // --- TAB GENERAL ---
     { tab: 'general', title: 'Información Personal', icon: User, iconColor: 'text-blue-600 bg-blue-50', fields: [
       { label: 'Nombre', key: 'nombre', icon: User, type: 'text' },
@@ -464,7 +463,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
             {/* Etiquetas y Toggles */}
             <div className="flex flex-wrap items-center gap-3">
                {c?.estado_etapa && (
-                 <span className={`px-3 py-1 rounded-lg text-xs font-bold border uppercase tracking-wide shadow-sm ${getEtapaColor(c.estado_etapa as any)}`}>
+                 <span className={`px-3 py-1 rounded-lg text-xs font-bold border uppercase tracking-wide shadow-sm ${getEtapaColor(c.estado_etapa)}`}>
                    {String(c.estado_etapa).replace(/_/g, ' ')}
                  </span>
                )}
@@ -553,7 +552,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
           {activeTab === 'chat' ? (
             <ChatPanel
               client={c}
-              source={(editData.source ?? c.source) as any}
+              source={(editData.source ?? c.source)}
             />
           ) : activeTab === 'reparaciones' ? (
             <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 sm:p-8">
@@ -643,13 +642,13 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   {field.key === 'estado_etapa' ? (
                                     <StageAutocomplete
                                       value={value}
-                                      onChange={(nextValue) => setVal('estado_etapa', nextValue as any)}
+                                      onChange={(nextValue) => setVal('estado_etapa', nextValue)}
                                     />
                                   ) : field.key === 'estado_envio' ? (
                                     <div className="relative">
                                         <select
                                             value={String(value ?? '').toLowerCase() === 'envio_gestionado' ? 'envio_gestionado' : String(value ?? '').toLowerCase() === 'no_aplica' ? 'no_aplica' : ''}
-                                            onChange={(e) => setVal('estado_envio', e.target.value as any)}
+                                            onChange={(e) => setVal('estado_envio', e.target.value)}
                                             className="appearance-none pr-10"
                                         >
                                             <option value="">(Seleccionar)</option>
@@ -661,12 +660,12 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   ) : field.type === 'sede' || field.key === 'ciudad' || field.key === 'guia_ciudad' ? (
                                     <SedeSelect
                                       placeholder={`Selecciona o escribe ${field.label.toLowerCase()}`}
-                                      value={value ?? ''}
+                                      value={String(value ?? '')}
                                       onChange={(v) => setVal(field.key, v)}
                                     />
                                   ) : field.type === 'textarea' ? (
                                     <textarea
-                                      value={value ?? ''}
+                                      value={String(value ?? '')}
                                       onChange={(e) => setVal(field.key, e.target.value)}
                                       className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 resize-none placeholder:text-slate-300 min-h-[80px]"
                                     />
@@ -692,7 +691,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({ isOpen, onClose, clien
                                   ) : (
                                     <input
                                       type={field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}
-                                      value={displayValue}
+                                      value={String(displayValue)}
                                       onChange={(e) => setVal(field.key, field.type === 'number' ? Number(e.target.value) : e.target.value)}
                                       placeholder="-"
                                       className="w-full text-sm bg-slate-50 border border-slate-200 text-slate-900 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900/20 focus:border-slate-600 outline-none transition-all px-3 py-2.5 placeholder:text-slate-300"

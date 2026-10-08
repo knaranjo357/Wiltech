@@ -11,7 +11,7 @@ export type CategoryType =
 export interface PrecioItem {
   row_number: number;
   MODELO: string;
-  [key: string]: any; // Para campos dinámicos como precios
+  [key: string]: unknown; // Para campos dinámicos como precios
 }
 
 export interface SystemMessage {

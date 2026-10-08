@@ -15,7 +15,7 @@ export type Granularity = 'day' | 'week' | 'month';
 
 export const SOURCE_EMPTY = 'Directo';
 
-export const parseToTimestamp = (raw: any, offsetHours = 0): number => {
+export const parseToTimestamp = (raw: string | number | null | undefined, offsetHours = 0): number => {
   if (!raw) return 0;
   const d = new Date(raw);
   if (isNaN(d.getTime())) return 0;
@@ -23,7 +23,7 @@ export const parseToTimestamp = (raw: any, offsetHours = 0): number => {
   return d.getTime();
 };
 
-export const hasLogisticsData = (c: any): boolean => {
+export const hasLogisticsData = (c: Client): boolean => {
   return !!(
     safeText(c.guia_direccion) || 
     safeText(c.guia_ciudad) || 
@@ -65,7 +65,7 @@ export const getColor = (str: string) => {
  * Optimiza la lista de clientes crudos agregando propiedades calculadas pre-indexadas
  */
 export const optimizeClients = (list: Client[]): OptimizedClient[] => {
-  return list.map((c: any) => ({
+  return list.map((c: Client) => ({
     ...c,
     _tsAgenda: parseToTimestamp(c.fecha_agenda),
     _tsCreated: parseToTimestamp(c.created, 5),
@@ -87,7 +87,7 @@ export const generateChartData = (
   dateRange: { from: string, to: string }
 ) => {
   const ONE_DAY = 86400000;
-  const groups = new Map<string, any>();
+  const groups = new Map<string, { key: string; label: string; total: number; uniques?: Set<string>; [key: string]: string | number | Set<string> | undefined }>();
   const allKeys = new Set<string>();
   const tsFrom = dateRange.from ? parseToTimestamp(dateRange.from) : 0;
   const tsTo = dateRange.to ? parseToTimestamp(dateRange.to) + ONE_DAY - 1 : Infinity;
@@ -111,19 +111,19 @@ export const generateChartData = (
       groups.set(key, { key, label: key, total: 0, uniques: new Set() });
     }
     
-    const bucket = groups.get(key);
+    const bucket = groups.get(key)!;
     const src = c._normSource;
     allKeys.add(src);
     
-    bucket[src] = (bucket[src] || 0) + 1;
+    bucket[src] = Number(bucket[src] || 0) + 1;
     bucket.total++;
-    bucket.uniques.add(c._uniqueId);
+    bucket.uniques!.add(c._uniqueId);
   }
 
   const result = Array.from(groups.values())
     .sort((a, b) => a.key.localeCompare(b.key))
     .map(b => {
-      const uniqueCount = b.uniques.size;
+      const uniqueCount = b.uniques!.size;
       delete b.uniques;
       return { ...b, uniqueCount };
     });
